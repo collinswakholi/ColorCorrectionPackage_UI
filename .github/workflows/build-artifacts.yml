@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -54,7 +55,18 @@ jobs:
       - name: Build backend with PyInstaller
         working-directory: backend
         run: |
+          echo "Verifying frontend_dist before PyInstaller..."
+          if [ -d "frontend_dist" ]; then
+            echo "✓ frontend_dist exists"
+            ls -lh frontend_dist/
+          else
+            echo "✗ frontend_dist NOT FOUND"
+            exit 1
+          fi
+          echo "Running PyInstaller..."
           pyinstaller -y colorcorrector.spec
+          echo "PyInstaller completed. Checking dist..."
+          ls -lh dist/
 
       - name: Package artifact
         if: success()
