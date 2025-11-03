@@ -21,6 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -50,23 +59,25 @@ jobs:
       - name: Install backend requirements
         run: |
           python -m pip install --upgrade pip wheel setuptools
-          python -m pip install -r backend/requirements.txt
+          python -m pip install -r backend/requirements.txt --no-cache-dir
+
+      - name: Clean pip cache after install
+        run: |
+          python -m pip cache purge
+          df -h
 
       - name: Build backend with PyInstaller
         working-directory: backend
         run: |
-          echo "Verifying frontend_dist before PyInstaller..."
-          if [ -d "frontend_dist" ]; then
-            echo "✓ frontend_dist exists"
-            ls -lh frontend_dist/
-          else
-            echo "✗ frontend_dist NOT FOUND"
-            exit 1
-          fi
-          echo "Running PyInstaller..."
           pyinstaller -y colorcorrector.spec
-          echo "PyInstaller completed. Checking dist..."
+          echo "PyInstaller completed. Checking dist directory:"
           ls -lh dist/
+
+      - name: Clean up build artifacts to save space
+        working-directory: backend
+        run: |
+          rm -rf build/
+          df -h
 
       - name: Package artifact
         if: success()

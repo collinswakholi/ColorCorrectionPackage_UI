@@ -13,6 +13,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Build frontend
+        shell: pwsh
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Copy frontend build into backend
+        shell: pwsh
+        run: |
+          if (Test-Path backend/frontend_dist) { Remove-Item -Recurse -Force backend/frontend_dist }
+          New-Item -ItemType Directory -Force -Path backend | Out-Null
+          if (Test-Path frontend/dist) {
+            Copy-Item -Recurse frontend/dist backend/frontend_dist
+            Write-Host "Frontend built and copied to backend/frontend_dist"
+          } else {
+            Write-Host "Frontend build not found"
+            exit 1
+          }
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -22,12 +47,20 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt --no-cache-dir
+
+      - name: Clean pip cache
+        run: python -m pip cache purge
 
       - name: Run PyInstaller (spec)
         working-directory: backend
         run: |
           pyinstaller -y colorcorrector.spec
+
+      - name: Clean up build artifacts
+        working-directory: backend
+        run: |
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
