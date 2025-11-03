@@ -39,6 +39,9 @@ jobs:
     name: Build and Push Docker image
     runs-on: ubuntu-latest
     needs: [windows-exe]
+    env:
+      # Must set DOCKERHUB_USERNAME in repository secrets for push to succeed
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,15 +60,20 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          IMAGE=collins137/colorcorrector:latest
-          docker build -t $IMAGE -f backend/Dockerfile .
-          docker push $IMAGE
+          if [ -z "${DOCKERHUB_USERNAME}" ]; then
+            echo "ERROR: DOCKERHUB_USERNAME secret is not set. Set it in repository Settings → Secrets → Actions." >&2
+            exit 1
+          fi
+          IMAGE=${DOCKERHUB_USERNAME}/colorcorrector:latest
+          docker build -t "$IMAGE" -f backend/Dockerfile .
+          docker push "$IMAGE"
 
       - name: Upload docker image info
+        run: |
+          echo "${DOCKERHUB_USERNAME}/colorcorrector:latest" > image-tag.txt
+
+      - name: Upload docker image tag artifact
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-tag
-          path: |
-            <<EOF
-            collins137/colorcorrector:latest
-            EOF
+          path: image-tag.txt
