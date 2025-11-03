@@ -58,24 +58,24 @@ jobs:
 
       - name: Package artifact
         if: success()
+        shell: pwsh
         run: |
-          set -e
-          ART_DIR="backend/dist/ColorCorrector"
-          OUT_ZIP="backend/artifact-${{ matrix.os }}.zip"
-          if [ -d "$ART_DIR" ]; then
-            (cd backend && zip -r "artifact-${{ matrix.os }}.zip" "dist/ColorCorrector")
-            echo "Artifact created: $OUT_ZIP"
-          elif [ -f "backend/dist/ColorCorrector.exe" ]; then
-            (cd backend && zip -r "artifact-${{ matrix.os }}.zip" "dist/ColorCorrector.exe")
-            echo "Artifact created: $OUT_ZIP"
-          else
-            if [ -d backend/dist ]; then
-              (cd backend && zip -r "artifact-${{ matrix.os }}.zip" dist)
-              echo "Packaged backend/dist as artifact"
-            else
-              echo "No backend/dist artifact found"; ls -la backend || true; exit 1
-            fi
-          fi
+          $ArtDir = "backend/dist/ColorCorrector"
+          $OutZip = "backend/artifact-${{ matrix.os }}.zip"
+          if (Test-Path $ArtDir) {
+            Compress-Archive -Path $ArtDir -DestinationPath $OutZip -Force
+            Write-Host "Artifact created: $OutZip"
+          } elseif (Test-Path "backend/dist/ColorCorrector.exe") {
+            Compress-Archive -Path "backend/dist/ColorCorrector.exe" -DestinationPath $OutZip -Force
+            Write-Host "Artifact created: $OutZip"
+          } elseif (Test-Path "backend/dist") {
+            Compress-Archive -Path "backend/dist/*" -DestinationPath $OutZip -Force
+            Write-Host "Packaged backend/dist as artifact"
+          } else {
+            Write-Host "No backend/dist artifact found"
+            Get-ChildItem backend -ErrorAction SilentlyContinue
+            exit 1
+          }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
