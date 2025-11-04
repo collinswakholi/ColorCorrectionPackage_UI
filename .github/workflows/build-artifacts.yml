@@ -165,12 +165,15 @@ jobs:
         run: |
           ls -R artifacts
       
-      - name: Generate release tag
+      - name: Generate release tag and date
         id: tag
         run: |
           TAG="v$(date +'%Y.%m.%d')-build.${{ github.run_number }}"
+          BUILD_DATE="$(date +'%Y-%m-%d %H:%M:%S UTC')"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "date=$BUILD_DATE" >> $GITHUB_OUTPUT
           echo "Release tag: $TAG"
+          echo "Build date: $BUILD_DATE"
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -181,7 +184,7 @@ jobs:
             ## Color Correction Package UI - Automated Build
             
             **Built from commit:** ${{ github.sha }}
-            **Build date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
+            **Build date:** ${{ steps.tag.outputs.date }}
             
             ### Downloads
             
