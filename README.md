@@ -6,6 +6,38 @@ A modern web-based user interface for the [ColorCorrectionPackage](https://githu
 
 This application provides an intuitive React frontend paired with a Flask backend to perform color correction on images using the ColorCorrectionPackage pipeline. Upload images, detect color charts, run color correction, and visualize results—all from your browser.
 
+## Screenshot
+
+![Color Correction UI](app_screenshot.jpg)
+*Upload images, detect color charts, and visualize correction results in real-time*
+
+## Download Pre-built Executables
+
+Get the latest release for your operating system - no installation required!
+
+### Latest Release
+
+Visit the [Releases page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/latest) to download:
+
+- **Windows**: Download `ColorCorrector-Windows.zip`
+  - Extract the zip file
+  - Run `ColorCorrector.exe`
+  - Open your browser to `http://localhost:5000`
+
+- **macOS**: Download `ColorCorrector-macOS.zip`
+  - Extract the zip file
+  - Run `ColorCorrector` from the terminal or Finder
+  - Open your browser to `http://localhost:5000`
+  - *Note: You may need to allow the app in System Preferences → Security & Privacy*
+
+- **Linux**: Download `ColorCorrector-Linux.zip`
+  - Extract the zip file
+  - Make executable: `chmod +x ColorCorrector`
+  - Run `./ColorCorrector`
+  - Open your browser to `http://localhost:5000`
+
+All executables are self-contained and include the web interface - just download, extract, and run!
+
 ## Features
 
 - **Eash image upload** with batch processing support

@@ -3,6 +3,14 @@ name: Build cross-platform artifacts
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'backend/**/*.py'
+      - 'backend/requirements*.txt'
+      - 'backend/colorcorrector.spec'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - '.github/workflows/build-artifacts.yml'
   workflow_dispatch:
 
 jobs:
@@ -116,8 +124,88 @@ jobs:
             exit 1
           }
 
+      - name: Rename artifact for release
+        shell: pwsh
+        run: |
+          $OsName = "${{ matrix.os }}"
+          if ($OsName -eq "windows-latest") { $OsLabel = "Windows" }
+          elseif ($OsName -eq "macos-latest") { $OsLabel = "macOS" }
+          elseif ($OsName -eq "ubuntu-latest") { $OsLabel = "Linux" }
+          else { $OsLabel = $OsName }
+          
+          $InZip = "backend/artifact-${{ matrix.os }}.zip"
+          $OutZip = "ColorCorrector-$OsLabel.zip"
+          Move-Item -Path $InZip -Destination $OutZip -Force
+          Write-Host "Renamed to: $OutZip"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ColorCorrector-${{ matrix.os }}
-          path: backend/artifact-${{ matrix.os }}.zip
+          path: ColorCorrector-*.zip
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Display structure
+        run: |
+          ls -R artifacts
+      
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="v$(date +'%Y.%m.%d')-build.${{ github.run_number }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            ## Color Correction Package UI - Automated Build
+            
+            **Built from commit:** ${{ github.sha }}
+            **Build date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
+            
+            ### Downloads
+            
+            Download the appropriate version for your operating system:
+            
+            - **Windows**: `ColorCorrector-Windows.zip`
+            - **macOS**: `ColorCorrector-macOS.zip`
+            - **Linux**: `ColorCorrector-Linux.zip`
+            
+            ### Installation
+            
+            1. Download the appropriate zip file for your OS
+            2. Extract the archive
+            3. Run the `ColorCorrector` executable
+            4. Open your browser to `http://localhost:5000`
+            
+            ### Changes in this build
+            
+            See commit history for details.
+          files: |
+            artifacts/ColorCorrector-windows-latest/ColorCorrector-Windows.zip
+            artifacts/ColorCorrector-macos-latest/ColorCorrector-macOS.zip
+            artifacts/ColorCorrector-ubuntu-latest/ColorCorrector-Linux.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
