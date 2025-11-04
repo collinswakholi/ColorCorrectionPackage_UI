@@ -1,0 +1,42 @@
+# CPU-only requirements for CI builds (Linux/macOS)
+# Install torch CPU-only first, then ColorCorrectionPipeline without deps
+
+# Core Flask dependencies
+Flask>=2.3.0
+flask-cors>=4.0.0
+flask-compress>=1.14
+
+# Computer vision and image processing
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+Pillow>=10.0.0
+
+# Scientific computing
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+matplotlib>=3.7.0
+seaborn>=0.13.2
+
+# Torch CPU-only (no CUDA dependencies)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+
+# Other dependencies
+colour-science>=0.4.0
+plotly>=5.0.0
+psutil>=5.9.0
+
+# PyInstaller
+pyinstaller>=5.12.0
+pyinstaller-hooks-contrib>=2024.2
+
+# YOLO for object detection (used by ColorCorrectionPipeline)
+ultralytics>=8.0.0
+
+# Install ColorCorrectionPipeline last without dependencies
+# (since we've already installed all its deps above)
+# Note: Use --no-deps when installing this package
+# ColorCorrectionPipeline>=1.3.3

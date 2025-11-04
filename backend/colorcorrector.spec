@@ -43,6 +43,15 @@ binaries += collect_dynamic_libs("cv2")
 binaries += collect_dynamic_libs("scipy")
 binaries += collect_dynamic_libs("sklearn")
 
+# Filter out CUDA/NVIDIA binaries (keep CPU-only torch)
+def filter_cuda_binaries(bins):
+    """Remove CUDA/NVIDIA binaries from the list to reduce size"""
+    cuda_patterns = ['nvidia', 'cublas', 'cudnn', 'cufft', 'curand', 'cusolver', 'cusparse', 'nccl', 'nvrtc', 'cupti']
+    return [(dest, src, typ) for (dest, src, typ) in bins 
+            if not any(pattern in dest.lower() or pattern in src.lower() for pattern in cuda_patterns)]
+
+binaries = filter_cuda_binaries(binaries)
+
 # Data files required at runtime
 datas = []
 datas += collect_data_files("sklearn")
@@ -71,7 +80,21 @@ analysis = Analysis(
     hookspath=[os.path.join(backend_dir, "pyinstaller_hooks")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "PySide6", "PyQt5", "statsmodels"],
+    excludes=[
+        "tkinter", 
+        "PySide6", 
+        "PyQt5", 
+        "statsmodels",
+        # Exclude CUDA libraries (not needed for CPU-only builds)
+        "nvidia",
+        "nvidia.cuda",
+        "nvidia.cudnn",
+        "nvidia.cublas",
+        "nvidia.cufft",
+        "nvidia.curand",
+        "nvidia.cusolver",
+        "nvidia.cusparse",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

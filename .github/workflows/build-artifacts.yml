@@ -59,7 +59,14 @@ jobs:
       - name: Install backend requirements
         run: |
           python -m pip install --upgrade pip wheel setuptools
-          python -m pip install -r backend/requirements.txt --no-cache-dir
+          # Use CPU-only requirements for Linux/macOS to avoid CUDA dependencies
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            python -m pip install -r backend/requirements.txt --no-cache-dir
+          else
+            python -m pip install -r backend/requirements-no-torch.txt --no-cache-dir
+            # Install ColorCorrectionPipeline without dependencies (deps already installed above)
+            python -m pip install --no-deps ColorCorrectionPipeline --no-cache-dir
+          fi
 
       - name: Clean pip cache after install
         run: |
