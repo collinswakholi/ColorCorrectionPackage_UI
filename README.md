@@ -8,7 +8,7 @@ This application provides an intuitive React frontend paired with a Flask backen
 
 ## Features
 
-- **Drag-and-drop image upload** with batch processing support
+- **Eash image upload** with batch processing support
 - **Automatic color chart detection** using the ColorCorrectionPipeline
 - **One-click color correction** with visual before/after comparison
 - **Interactive scatter plots** showing correction quality
