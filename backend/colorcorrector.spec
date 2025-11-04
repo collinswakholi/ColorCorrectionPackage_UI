@@ -46,9 +46,23 @@ binaries += collect_dynamic_libs("sklearn")
 # Filter out CUDA/NVIDIA binaries (keep CPU-only torch)
 def filter_cuda_binaries(bins):
     """Remove CUDA/NVIDIA binaries from the list to reduce size"""
+    if not bins:
+        return bins
     cuda_patterns = ['nvidia', 'cublas', 'cudnn', 'cufft', 'curand', 'cusolver', 'cusparse', 'nccl', 'nvrtc', 'cupti']
-    return [(dest, src, typ) for (dest, src, typ) in bins 
-            if not any(pattern in dest.lower() or pattern in src.lower() for pattern in cuda_patterns)]
+    # Binaries can be 2-tuple (src, dest) or 3-tuple (dest, src, type)
+    filtered = []
+    for item in bins:
+        if len(item) == 2:
+            src, dest = item
+            if not any(pattern in dest.lower() or pattern in src.lower() for pattern in cuda_patterns):
+                filtered.append(item)
+        elif len(item) == 3:
+            dest, src, typ = item
+            if not any(pattern in dest.lower() or pattern in src.lower() for pattern in cuda_patterns):
+                filtered.append(item)
+        else:
+            filtered.append(item)  # Keep unknown formats
+    return filtered
 
 binaries = filter_cuda_binaries(binaries)
 
