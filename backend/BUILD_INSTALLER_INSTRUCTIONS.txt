@@ -73,6 +73,25 @@ UNINSTALLING:
 - OR: Start Menu → ColorCorrector → Uninstall
 
 
+SYSTEM DEPENDENCIES (Linux AppImage):
+--------------------------------------
+The Linux AppImage requires the following system libraries to be installed:
+- libgl1 (OpenGL library for OpenCV)
+- libglib2.0-0 (GLib library)
+
+Install on Ubuntu/Debian:
+  sudo apt-get install libgl1 libglib2.0-0
+
+Install on Fedora/RHEL:
+  sudo dnf install mesa-libGL glib2
+
+Install on Arch:
+  sudo pacman -S mesa glib2
+
+Note: Most desktop Linux distributions have these installed by default.
+      Only minimal/server installations may need to install them.
+
+
 TROUBLESHOOTING:
 ----------------
 
@@ -85,11 +104,18 @@ Solution: Run PyInstaller first: pyinstaller -y colorcorrector.spec
 
 Problem: Installer too large
 Solution: This is normal - includes Python runtime and all dependencies
-          Typical size: 150-300 MB
+          Typical size: 150-300 MB (Windows), 320-450 MB (macOS/Linux)
 
 Problem: Windows Defender warning
 Solution: Normal for unsigned executables. Click "More info" → "Run anyway"
           For production: Sign with a code signing certificate
+
+Problem: Linux AppImage error "libGL.so.1: cannot open shared object file"
+Solution: Install OpenGL libraries: sudo apt-get install libgl1 libglib2.0-0
+
+Problem: macOS "App is damaged and can't be opened"
+Solution: Run in Terminal: xattr -cr /Applications/ColorCorrector.app
+          This removes the quarantine flag from unsigned apps
 
 
 CUSTOMIZATION:

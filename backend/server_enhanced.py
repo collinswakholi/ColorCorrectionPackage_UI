@@ -2550,16 +2550,20 @@ def signal_handler(signum, frame):
     logger.info(f"   Thread: {threading.current_thread().name}")
     logger.info("=" * 60)
     
-    # Wait for active batch to complete
+    # Wait for active batch to complete with generous timeout
     if parallel_batch_state.is_active():
         logger.info("⏳ Waiting for active batch to complete...")
-        timeout = 10
+        # Use REQUEST_TIMEOUT (300s) + buffer to ensure processing completes
+        timeout = REQUEST_TIMEOUT + 60  # 6 minutes total
         start = time.time()
         while parallel_batch_state.is_active() and (time.time() - start) < timeout:
-            time.sleep(0.5)
+            time.sleep(1.0)
+            elapsed = int(time.time() - start)
+            if elapsed % 30 == 0:  # Log every 30 seconds
+                logger.info(f"   Still processing... ({elapsed}s elapsed)")
         
         if parallel_batch_state.is_active():
-            logger.warning("⚠ Force terminating active batch")
+            logger.warning("⚠ Force terminating active batch after timeout")
         else:
             logger.info("✓ Active batch completed")
     else:

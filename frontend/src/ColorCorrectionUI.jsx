@@ -166,6 +166,10 @@ export default function ColorCorrectionUI() {
   // New feature states
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [selectedForApply, setSelectedForApply] = useState([]);
+  
+  // Drag and drop states
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const [processAllDialogOpen, setProcessAllDialogOpen] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, status: '' });
   const [batchProcessComplete, setBatchProcessComplete] = useState(false);
@@ -277,8 +281,8 @@ export default function ColorCorrectionUI() {
   }, [logs]);
 
   // Load images - Memoized with useCallback to prevent re-creation
-  const handleLoadImages = useCallback(async (e) => {
-    const files = Array.from(e.target.files || []);
+  // Process files (used by both file input and drag-drop)
+  const processImageFiles = useCallback(async (files) => {
     if (files.length === 0) return;
     
     const mapped = files.map((f) => ({ file: f, url: URL.createObjectURL(f) }));
@@ -310,6 +314,60 @@ export default function ColorCorrectionUI() {
       appendLog(`\n✗ Upload failed: ${err.message}`);
     }
   }, [selectedImage, appendLog]);
+
+  const handleLoadImages = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    await processImageFiles(files);
+  }, [processImageFiles]);
+
+  // Drag and drop handlers
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    const files = [];
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // Convert FileList to Array and filter for images
+      const fileList = Array.from(e.dataTransfer.files);
+      const imageFiles = fileList.filter(file => file.type.startsWith('image/'));
+      
+      if (imageFiles.length === 0) {
+        appendLog('\n⚠ No image files found in dropped items');
+        return;
+      }
+      
+      files.push(...imageFiles);
+    }
+
+    if (files.length > 0) {
+      await processImageFiles(files);
+    }
+  }, [processImageFiles, appendLog]);
 
   // Load white image for FFC
   const handleLoadWhiteImage = useCallback(async (e) => {
@@ -1452,7 +1510,24 @@ Continue?`;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950 p-2 sm:p-4 md:p-6 lg:p-8">
+    <div 
+      className="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950 p-2 sm:p-4 md:p-6 lg:p-8 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag and Drop Overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-indigo-900/90 backdrop-blur-sm pointer-events-none">
+          <div className="bg-white rounded-3xl shadow-2xl p-12 text-center transform scale-110 animate-pulse border-4 border-dashed border-indigo-400">
+            <div className="text-8xl mb-4">📁</div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">Drop Images Here</h2>
+            <p className="text-gray-600 text-lg">Release to upload your images</p>
+          </div>
+        </div>
+      )}
+
       {/* Modern Header with glassmorphism */}
       <div className="max-w-[1600px] mx-auto mb-4 md:mb-6">
         <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-4 md:p-6 shadow-2xl">

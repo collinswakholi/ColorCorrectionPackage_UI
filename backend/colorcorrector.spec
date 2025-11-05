@@ -39,12 +39,24 @@ hiddenimports += _collect_without_tests("scipy")
 hiddenimports += _collect_without_tests("pandas")
 hiddenimports += _collect_without_tests("numpy")
 hiddenimports += _collect_without_tests("PIL")
+hiddenimports += collect_submodules("torch")
+hiddenimports += collect_submodules("torchvision")
 hiddenimports += [
     "flask",
     "flask_cors",
     "flask_compress",
     "ColorCorrectionPipeline",
     "ColorCorrectionPipeline.core",
+    "ColorCorrectionPipeline.flat_field",
+    "ColorCorrectionPipeline.gc",
+    "ColorCorrectionPipeline.wb",
+    "ColorCorrectionPipeline.cc",
+    "ultralytics",
+    "colour",
+    "plotly",
+    "polars",
+    "seaborn",
+    "imageio",
 ]
 
 # Binary dependencies (DLLs / shared libraries)
@@ -52,6 +64,29 @@ binaries = []
 binaries += collect_dynamic_libs("cv2")
 binaries += collect_dynamic_libs("scipy")
 binaries += collect_dynamic_libs("sklearn")
+binaries += collect_dynamic_libs("torch")
+binaries += collect_dynamic_libs("PIL")
+
+# Collect system OpenGL libraries if available (needed for OpenCV)
+# These are typically system dependencies, but we try to bundle them
+import sys
+if sys.platform.startswith('linux'):
+    import glob
+    # Try to find and include OpenGL libraries
+    gl_paths = [
+        '/usr/lib/x86_64-linux-gnu/libGL.so.1',
+        '/usr/lib/x86_64-linux-gnu/libGLX.so.0',
+        '/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0',
+        '/usr/lib/x86_64-linux-gnu/libgomp.so.1',
+    ]
+    for lib_path in gl_paths:
+        if os.path.exists(lib_path):
+            binaries.append((lib_path, '.'))
+        else:
+            # Try glob pattern
+            matches = glob.glob(lib_path.replace('.so.1', '.so*').replace('.so.0', '.so*'))
+            if matches:
+                binaries.append((matches[0], '.'))
 
 # Filter out CUDA/NVIDIA binaries (keep CPU-only torch)
 def filter_cuda_binaries(bins):
@@ -81,6 +116,9 @@ datas = []
 datas += collect_data_files("sklearn")
 datas += collect_data_files("matplotlib")
 datas += collect_data_files("cv2")
+datas += collect_data_files("torch")
+datas += collect_data_files("PIL")
+datas += collect_data_files("ColorCorrectionPipeline")
 
 if os.path.isdir(frontend_dist):
     datas.append((frontend_dist, "frontend_dist"))
