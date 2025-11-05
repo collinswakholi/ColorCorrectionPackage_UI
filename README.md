@@ -55,8 +55,8 @@ All installers are self-contained with the web interface included. No dependenci
 ### Docker (Recommended)
 
 ```bash
-docker pull collinswakholi/colorcorrector:latest
-docker run -p 5000:5000 collinswakholi/colorcorrector:latest
+docker pull collins137/colorcorrector:latest
+docker run -p 5000:5000 collins137/colorcorrector:latest
 ```
 
 Open [http://localhost:5000](http://localhost:5000) in your browser.
