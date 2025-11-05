@@ -1,5 +1,15 @@
 # backend/colorcorrector.spec
 # Build with: pyinstaller -y colorcorrector.spec
+#
+# This creates a STANDALONE executable package that includes:
+# - Python interpreter (no Python installation required)
+# - All dependencies (NumPy, OpenCV, scikit-learn, Flask, etc.)
+# - CPU-only PyTorch (no GPU/CUDA dependencies)
+# - Frontend assets (React web interface)
+# - Color correction models
+#
+# Users can run the executable without installing Python, Node.js, or any dependencies.
+#
 import os
 import importlib.util
 from PyInstaller.utils.hooks import (

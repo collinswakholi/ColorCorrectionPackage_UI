@@ -13,9 +13,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
+    libglib2.0-0 \
     libxrender1 \
     libxext6 \
     libsm6 \
+    libgomp1 \
     libffi-dev \
     wget \
     ca-certificates \
@@ -31,7 +33,12 @@ WORKDIR /app/backend
 
 # Install Python deps
 RUN python -m pip install --upgrade pip setuptools wheel
-RUN if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+# Install CPU-only PyTorch first to avoid CUDA dependencies
+RUN python -m pip install torch==2.5.1+cpu torchvision==0.20.1+cpu --index-url https://download.pytorch.org/whl/cpu --no-cache-dir
+# Install other requirements (excluding torch which we already installed)
+RUN if [ -f requirements-no-torch.txt ]; then python -m pip install -r requirements-no-torch.txt --no-cache-dir; fi
+# Install ColorCorrectionPipeline without dependencies
+RUN python -m pip install --no-deps ColorCorrectionPipeline --no-cache-dir
 
 ENV PORT=5000
 EXPOSE 5000

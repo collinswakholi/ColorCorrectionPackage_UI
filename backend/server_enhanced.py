@@ -496,20 +496,12 @@ def calculate_optimal_workers(num_images: int, has_gpu: bool = False) -> int:
 @lru_cache(maxsize=1)
 def check_gpu_available() -> bool:
     """
-    Check if GPU is available for processing (cached for performance)
+    Check if GPU is available for processing (CPU-only build)
     
-    Performance: LRU cache prevents redundant GPU checks
+    Note: This build uses CPU-only PyTorch and dependencies.
+    GPU support has been disabled to reduce size and dependencies.
     """
-    try:
-        # Check for CUDA availability
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        # No PyTorch, check OpenCV CUDA
-        try:
-            return cv2.cuda.getCudaEnabledDeviceCount() > 0
-        except:
-            return False
+    return False
 
 def generate_batch_id() -> str:
     """Generate unique batch ID"""

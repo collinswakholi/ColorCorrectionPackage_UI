@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'backend/**/*.py'
+      - 'backend/**/*.sh'
+      - 'backend/**/*.bat'
+      - 'backend/**/*.iss'
       - 'backend/requirements*.txt'
       - 'backend/colorcorrector.spec'
       - 'frontend/src/**'

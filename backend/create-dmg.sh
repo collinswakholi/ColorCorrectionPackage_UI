@@ -73,11 +73,18 @@ cat > "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}_launcher.sh" << 'LAUNCHER_EOF'
 cd "$(dirname "$0")"
 
 # Start the ColorCorrector server in background
-./ColorCorrector &
+./ColorCorrector_server &
 SERVER_PID=$!
 
-# Wait a moment for server to start
-sleep 3
+# Wait for server to start
+echo "Starting ColorCorrector server..."
+for i in {1..30}; do
+    if curl -s http://localhost:5000/api/health > /dev/null 2>&1; then
+        echo "Server started successfully"
+        break
+    fi
+    sleep 1
+done
 
 # Open the default browser
 open "http://localhost:5000"

@@ -39,4 +39,4 @@ ultralytics>=8.0.0
 # Install ColorCorrectionPipeline last without dependencies
 # (since we've already installed all its deps above)
 # Note: Use --no-deps when installing this package
-# ColorCorrectionPipeline>=1.3.3
+ColorCorrectionPipeline>=1.3.3
