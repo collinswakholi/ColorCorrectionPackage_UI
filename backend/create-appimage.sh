@@ -107,7 +107,8 @@ if [ ! -f "${APPIMAGETOOL}" ]; then
 fi
 
 echo "[7/7] Building AppImage..."
-ARCH=x86_64 ./"${APPIMAGETOOL}" "${APPDIR}" "${APPIMAGE_NAME}"
+# Use --appimage-extract-and-run to avoid FUSE requirement in CI environments
+ARCH=x86_64 ./"${APPIMAGETOOL}" --appimage-extract-and-run "${APPDIR}" "${APPIMAGE_NAME}"
 
 echo ""
 echo "=========================================="
