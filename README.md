@@ -8,7 +8,7 @@ This application provides an intuitive React frontend paired with a Flask backen
 
 ## Screenshot
 
-![Color Correction UI](app_screenshot.jpg)
+![Color Correction UI](Ui_animation.webp)
 *Upload images, detect color charts, and visualize correction results in real-time*
 
 ## Download Pre-built Executables
