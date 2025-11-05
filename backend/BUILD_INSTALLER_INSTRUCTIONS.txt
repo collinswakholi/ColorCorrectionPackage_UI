@@ -1,0 +1,112 @@
+======================================================================
+  ColorCorrector - Windows Installer Build Instructions
+======================================================================
+
+PREREQUISITES:
+--------------
+1. Inno Setup 6.x (Download: https://jrsoftware.org/isinfo.php)
+   - Use default installation path
+   - Free and open source
+
+2. Completed PyInstaller build
+   - Must have: backend/dist/ColorCorrector/ folder with all files
+
+
+STEP-BY-STEP BUILD PROCESS:
+----------------------------
+
+Step 1: Build the PyInstaller executable (if not already done)
+   Open Command Prompt or PowerShell in the 'backend' folder:
+   
+   cd backend
+   pyinstaller -y colorcorrector.spec
+   
+   This creates: dist/ColorCorrector/ folder with your app
+
+Step 2: Install Inno Setup (if not already installed)
+   - Download from: https://jrsoftware.org/isinfo.php
+   - Run the installer
+   - Use default installation path
+   - No configuration needed
+
+Step 3: Build the Windows installer
+   
+   Option A - Using the batch script (EASIEST):
+   ------------------------------------------
+   Double-click: build-installer.bat
+   
+   OR from command line:
+   cd backend
+   build-installer.bat
+   
+   
+   Option B - Manual build:
+   -----------------------
+   1. Open Inno Setup Compiler
+   2. File → Open → Select installer-windows.iss
+   3. Build → Compile
+   4. Wait for completion
+   
+   
+   Option C - Command line:
+   -----------------------
+   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows.iss
+
+
+Step 4: Find your installer
+   Location: backend/installer_output/ColorCorrector-Setup-Windows.exe
+   Size: ~150-300 MB (includes Python + dependencies)
+
+
+TESTING THE INSTALLER:
+----------------------
+1. Run ColorCorrector-Setup-Windows.exe
+2. Follow the installation wizard
+3. Choose installation directory (default: C:\Program Files\ColorCorrector)
+4. Optionally create desktop shortcut
+5. Launch the application
+6. Browser should open to http://localhost:5000
+
+UNINSTALLING:
+-------------
+- Control Panel → Programs and Features → ColorCorrector → Uninstall
+- OR: Start Menu → ColorCorrector → Uninstall
+
+
+TROUBLESHOOTING:
+----------------
+
+Problem: "Inno Setup not found"
+Solution: Install from https://jrsoftware.org/isinfo.php
+          Or update the path in build-installer.bat
+
+Problem: "dist\ColorCorrector not found"
+Solution: Run PyInstaller first: pyinstaller -y colorcorrector.spec
+
+Problem: Installer too large
+Solution: This is normal - includes Python runtime and all dependencies
+          Typical size: 150-300 MB
+
+Problem: Windows Defender warning
+Solution: Normal for unsigned executables. Click "More info" → "Run anyway"
+          For production: Sign with a code signing certificate
+
+
+CUSTOMIZATION:
+--------------
+Edit installer-windows.iss to customize:
+- App name, version, publisher
+- Installation defaults
+- Desktop icon creation
+- License agreement
+- Post-install actions
+
+
+NEXT STEPS (After local testing):
+----------------------------------
+Once you've verified the installer works locally:
+1. Commit installer-windows.iss to Git
+2. Update GitHub Actions workflow
+3. Automated builds will create installers for each release
+
+======================================================================

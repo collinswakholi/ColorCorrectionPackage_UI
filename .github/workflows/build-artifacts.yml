@@ -103,46 +103,60 @@ jobs:
           rm -rf build/
           df -h
 
-      - name: Package artifact
-        if: success()
-        shell: pwsh
+      - name: Create Windows Installer with Inno Setup
+        if: runner.os == 'Windows'
         run: |
-          $ArtDir = "backend/dist/ColorCorrector"
-          $OutZip = "backend/artifact-${{ matrix.os }}.zip"
-          if (Test-Path $ArtDir) {
-            Compress-Archive -Path $ArtDir -DestinationPath $OutZip -Force
-            Write-Host "Artifact created: $OutZip"
-          } elseif (Test-Path "backend/dist/ColorCorrector.exe") {
-            Compress-Archive -Path "backend/dist/ColorCorrector.exe" -DestinationPath $OutZip -Force
-            Write-Host "Artifact created: $OutZip"
-          } elseif (Test-Path "backend/dist") {
-            Compress-Archive -Path "backend/dist/*" -DestinationPath $OutZip -Force
-            Write-Host "Packaged backend/dist as artifact"
-          } else {
-            Write-Host "No backend/dist artifact found"
-            Get-ChildItem backend -ErrorAction SilentlyContinue
-            exit 1
-          }
-
-      - name: Rename artifact for release
-        shell: pwsh
-        run: |
-          $OsName = "${{ matrix.os }}"
-          if ($OsName -eq "windows-latest") { $OsLabel = "Windows" }
-          elseif ($OsName -eq "macos-latest") { $OsLabel = "macOS" }
-          elseif ($OsName -eq "ubuntu-latest") { $OsLabel = "Linux" }
-          else { $OsLabel = $OsName }
+          echo "Installing Inno Setup..."
+          choco install innosetup -y
           
-          $InZip = "backend/artifact-${{ matrix.os }}.zip"
-          $OutZip = "ColorCorrector-$OsLabel.zip"
-          Move-Item -Path $InZip -Destination $OutZip -Force
-          Write-Host "Renamed to: $OutZip"
+          echo "Building Windows installer..."
+          cd backend
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows.iss
+          
+          echo "Installer created successfully"
+          ls installer_output/
+        shell: pwsh
+
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        run: |
+          echo "Creating macOS .app bundle and DMG..."
+          cd backend
+          chmod +x create-dmg.sh
+          ./create-dmg.sh
+          
+          echo "DMG created successfully"
+          ls -lh *.dmg
+
+      - name: Create Linux AppImage
+        if: runner.os == 'Linux'
+        run: |
+          echo "Creating Linux AppImage..."
+          cd backend
+          chmod +x create-appimage.sh
+          ./create-appimage.sh
+          
+          echo "AppImage created successfully"
+          ls -lh *.AppImage
+
+      - name: Prepare artifacts for upload
+        shell: bash
+        run: |
+          mkdir -p upload
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp backend/installer_output/ColorCorrector-Setup-Windows.exe upload/
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            cp backend/ColorCorrector-macOS.dmg upload/
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            cp backend/ColorCorrector-Linux-x86_64.AppImage upload/
+          fi
+          ls -lh upload/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ColorCorrector-${{ matrix.os }}
-          path: ColorCorrector-*.zip
+          path: upload/*
 
   release:
     name: Create Release
@@ -186,28 +200,50 @@ jobs:
             **Built from commit:** ${{ github.sha }}
             **Build date:** ${{ steps.tag.outputs.date }}
             
-            ### Downloads
+            ### 📦 Downloads
             
-            Download the appropriate version for your operating system:
+            Download the appropriate installer for your operating system:
             
-            - **Windows**: `ColorCorrector-Windows.zip`
-            - **macOS**: `ColorCorrector-macOS.zip`
-            - **Linux**: `ColorCorrector-Linux.zip`
+            #### Windows
+            - **`ColorCorrector-Setup-Windows.exe`** - Professional installer with Start Menu shortcuts
+              - Double-click to install
+              - No manual permissions needed
+              - Creates desktop shortcut (optional)
             
-            ### Installation
+            #### macOS
+            - **`ColorCorrector-macOS.dmg`** - DMG installer with .app bundle
+              - Open DMG and drag to Applications folder
+              - First run: Right-click → Open (unsigned app)
+              - Launches browser automatically
             
-            1. Download the appropriate zip file for your OS
-            2. Extract the archive
-            3. Run the `ColorCorrector` executable
-            4. Open your browser to `http://localhost:5000`
+            #### Linux
+            - **`ColorCorrector-Linux-x86_64.AppImage`** - Universal Linux package
+              - Make executable: `chmod +x ColorCorrector-Linux-x86_64.AppImage`
+              - Run directly: `./ColorCorrector-Linux-x86_64.AppImage`
+              - No installation required
             
-            ### Changes in this build
+            ### 🚀 Quick Start
+            
+            After installation:
+            1. Launch ColorCorrector from your OS (Start Menu/Applications/terminal)
+            2. The server starts automatically
+            3. Browser opens to `http://localhost:5000`
+            4. Upload images and perform color correction!
+            
+            ### 📝 Changes in this build
             
             See commit history for details.
+            
+            ---
+            
+            **Note:** These installers are not code-signed. You may see security warnings on first run:
+            - **Windows**: Click "More info" → "Run anyway"
+            - **macOS**: Right-click → "Open" (first time only)
+            - **Linux**: Make executable with `chmod +x`
           files: |
-            artifacts/ColorCorrector-windows-latest/ColorCorrector-Windows.zip
-            artifacts/ColorCorrector-macos-latest/ColorCorrector-macOS.zip
-            artifacts/ColorCorrector-ubuntu-latest/ColorCorrector-Linux.zip
+            artifacts/ColorCorrector-windows-latest/ColorCorrector-Setup-Windows.exe
+            artifacts/ColorCorrector-macos-latest/ColorCorrector-macOS.dmg
+            artifacts/ColorCorrector-ubuntu-latest/ColorCorrector-Linux-x86_64.AppImage
           draft: false
           prerelease: false
         env:

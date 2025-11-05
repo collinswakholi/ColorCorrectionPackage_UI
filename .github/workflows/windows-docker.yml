@@ -3,6 +3,14 @@ name: Build Windows EXE and Docker image
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'backend/**/*.py'
+      - 'backend/requirements*.txt'
+      - 'backend/colorcorrector.spec'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - '.github/workflows/windows-docker.yml'
   workflow_dispatch:
 
 jobs:

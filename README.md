@@ -13,30 +13,33 @@ This application provides an intuitive React frontend paired with a Flask backen
 
 ## Download Pre-built Executables
 
-Get the latest release for your operating system - no installation required!
+Get the latest release for your operating system.
 
 ### Latest Release
 
 Visit the [Releases page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/latest) to download:
 
-- **Windows**: Download `ColorCorrector-Windows.zip`
-  - Extract the zip file
-  - Run `ColorCorrector.exe`
-  - Open your browser to `http://localhost:5000`
+- **Windows**: Download `ColorCorrector-Setup-Windows.exe`
+  - Double-click the installer
+  - Follow the installation wizard
+  - Launch from Start Menu or Desktop shortcut
+  - Browser opens automatically to `http://localhost:5000`
+  - *Note: May show Windows Defender warning (unsigned app) - click "More info" → "Run anyway"*
 
-- **macOS**: Download `ColorCorrector-macOS.zip`
-  - Extract the zip file
-  - Run `ColorCorrector` from the terminal or Finder
-  - Open your browser to `http://localhost:5000`
-  - *Note: You may need to allow the app in System Preferences → Security & Privacy*
+- **macOS**: Download `ColorCorrector-macOS.dmg`
+  - Open the DMG file
+  - Drag ColorCorrector to Applications folder
+  - Launch from Applications
+  - Browser opens automatically to `http://localhost:5000`
+  - *Note: First run requires right-click → "Open" (unsigned app)*
 
-- **Linux**: Download `ColorCorrector-Linux.zip`
-  - Extract the zip file
-  - Make executable: `chmod +x ColorCorrector`
-  - Run `./ColorCorrector`
-  - Open your browser to `http://localhost:5000`
+- **Linux**: Download `ColorCorrector-Linux-x86_64.AppImage`
+  - Make executable: `chmod +x ColorCorrector-Linux-x86_64.AppImage`
+  - Run: `./ColorCorrector-Linux-x86_64.AppImage`
+  - Browser opens automatically to `http://localhost:5000`
+  - *No installation required - runs directly*
 
-All executables are self-contained and include the web interface - just download, extract, and run!
+All installers are self-contained with the web interface included. No dependencies, no manual setup!
 
 ## Features
 
