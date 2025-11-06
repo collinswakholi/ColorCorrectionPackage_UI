@@ -19,23 +19,28 @@ Get the latest release for your operating system.
 
 Visit the [Releases page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/latest) to download:
 
-- **Windows**: Download `ColorCorrector-Setup-Windows.exe`
-  - Double-click the installer
-  - Follow the installation wizard
+- **Windows**:
+  - `ColorCorrector-Setup-Windows-x64.exe` - For Intel/AMD 64-bit processors
+  - `ColorCorrector-Setup-Windows-arm64.exe` - For ARM64 devices (Surface Pro X, etc.) *[experimental]*
+  - Double-click the installer and follow the wizard
   - Launch from Start Menu or Desktop shortcut
   - Browser opens automatically to `http://localhost:5000`
   - *Note: May show Windows Defender warning (unsigned app) - click "More info" → "Run anyway"*
 
-- **macOS**: Download `ColorCorrector-macOS.dmg`
-  - Open the DMG file
-  - Drag ColorCorrector to Applications folder
+- **macOS**:
+  - `ColorCorrector-macOS-x86_64.dmg` - For Intel Macs
+  - `ColorCorrector-macOS-arm64.dmg` - **For Apple Silicon (M1/M2/M3)** - Native ARM64 build
+  - Open the DMG file and drag ColorCorrector to Applications folder
   - Launch from Applications
   - Browser opens automatically to `http://localhost:5000`
   - *Note: First run requires right-click → "Open" (unsigned app)*
+  - **Apple Silicon users**: Use the arm64 version for best performance (no Rosetta translation)
 
-- **Linux**: Download `ColorCorrector-Linux-x86_64.AppImage`
-  - Make executable: `chmod +x ColorCorrector-Linux-x86_64.AppImage`
-  - Run: `./ColorCorrector-Linux-x86_64.AppImage`
+- **Linux**:
+  - `ColorCorrector-Linux-x86_64.AppImage` - For Intel/AMD 64-bit
+  - `ColorCorrector-Linux-aarch64.AppImage` - For ARM64 (Raspberry Pi, ARM servers) *[when available]*
+  - Make executable: `chmod +x ColorCorrector-Linux-*.AppImage`
+  - Run: `./ColorCorrector-Linux-*.AppImage`
   - Browser opens automatically to `http://localhost:5000`
   - *No installation required - runs directly*
 

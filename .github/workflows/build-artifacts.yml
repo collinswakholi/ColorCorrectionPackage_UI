@@ -24,9 +24,42 @@ jobs:
       run:
         shell: bash
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    name: Build on ${{ matrix.os }}
+        include:
+          # macOS x86_64 (Intel)
+          - os: macos-13
+            arch: x86_64
+            platform: macos
+            runner_arch: x64
+          # macOS ARM64 (M1/M2/M3)
+          - os: macos-14
+            arch: arm64
+            platform: macos
+            runner_arch: arm64
+          # Linux x86_64
+          - os: ubuntu-latest
+            arch: x86_64
+            platform: linux
+            runner_arch: x64
+          # Linux ARM64 (experimental - may need self-hosted runner)
+          # Uncomment when ARM64 runners are available
+          # - os: ubuntu-latest-arm64
+          #   arch: aarch64
+          #   platform: linux
+          #   runner_arch: arm64
+          # Windows x86_64
+          - os: windows-latest
+            arch: x64
+            platform: windows
+            runner_arch: x64
+          # Windows ARM64 (experimental - may need self-hosted runner)
+          # Uncomment when ARM64 runners are available
+          # - os: windows-latest-arm64
+          #   arch: arm64
+          #   platform: windows
+          #   runner_arch: arm64
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
 
     steps:
       - name: Checkout
@@ -93,7 +126,11 @@ jobs:
 
       - name: Build backend with PyInstaller
         working-directory: backend
+        env:
+          # Set target architecture for PyInstaller
+          PYINSTALLER_TARGET_ARCH: ${{ matrix.arch }}
         run: |
+          echo "Building for architecture: ${{ matrix.arch }}"
           pyinstaller -y colorcorrector.spec
           echo "PyInstaller completed. Checking dist directory:"
           ls -lh dist/
@@ -105,14 +142,20 @@ jobs:
           df -h
 
       - name: Create Windows Installer with Inno Setup
-        if: runner.os == 'Windows'
+        if: matrix.platform == 'windows'
         run: |
           echo "Installing Inno Setup..."
           choco install innosetup -y
           
-          echo "Building Windows installer..."
+          echo "Building Windows installer for ${{ matrix.arch }}..."
           cd backend
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer-windows.iss
+          
+          # Build with architecture-specific options
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DARCH_ARM64 /DARCH_SUFFIX=arm64 installer-windows.iss
+          else
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DARCH_SUFFIX=x64 installer-windows.iss
+          fi
           
           echo "Installer created successfully"
           ls installer_output/
@@ -144,19 +187,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p upload
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp backend/installer_output/ColorCorrector-Setup-Windows.exe upload/
-          elif [ "${{ runner.os }}" = "macOS" ]; then
-            cp backend/ColorCorrector-macOS.dmg upload/
-          elif [ "${{ runner.os }}" = "Linux" ]; then
-            cp backend/ColorCorrector-Linux-x86_64.AppImage upload/
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            if [ "${{ matrix.arch }}" = "arm64" ]; then
+              cp backend/installer_output/ColorCorrector-Setup-Windows-arm64.exe upload/
+            else
+              cp backend/installer_output/ColorCorrector-Setup-Windows-x64.exe upload/
+            fi
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
+            cp backend/ColorCorrector-macOS-${{ matrix.arch }}.dmg upload/
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            if [ "${{ matrix.arch }}" = "aarch64" ]; then
+              cp backend/ColorCorrector-Linux-aarch64.AppImage upload/
+            else
+              cp backend/ColorCorrector-Linux-x86_64.AppImage upload/
+            fi
           fi
           ls -lh upload/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ColorCorrector-${{ matrix.os }}
+          name: ColorCorrector-${{ matrix.platform }}-${{ matrix.arch }}
           path: upload/*
 
   release:
@@ -203,25 +254,34 @@ jobs:
             
             ### 📦 Downloads
             
-            Download the appropriate installer for your operating system:
+            Download the appropriate installer for your operating system and architecture:
             
             #### Windows
-            - **`ColorCorrector-Setup-Windows.exe`** - Professional installer with Start Menu shortcuts
+            - **`ColorCorrector-Setup-Windows-x64.exe`** - For Intel/AMD 64-bit processors
               - Double-click to install
               - No manual permissions needed
               - Creates desktop shortcut (optional)
+            - **`ColorCorrector-Setup-Windows-arm64.exe`** - For ARM64/Windows on ARM devices *(experimental)*
+              - For Surface Pro X, Windows Dev Kit 2023, etc.
             
             #### macOS
-            - **`ColorCorrector-macOS.dmg`** - DMG installer with .app bundle
+            - **`ColorCorrector-macOS-x86_64.dmg`** - For Intel Macs
               - Open DMG and drag to Applications folder
               - First run: Right-click → Open (unsigned app)
               - Launches browser automatically
+            - **`ColorCorrector-macOS-arm64.dmg`** - For Apple Silicon (M1/M2/M3)
+              - Native ARM64 build - optimized performance
+              - No Rosetta 2 translation needed
+              - Open DMG and drag to Applications folder
+              - First run: Right-click → Open (unsigned app)
             
             #### Linux
-            - **`ColorCorrector-Linux-x86_64.AppImage`** - Universal Linux package
+            - **`ColorCorrector-Linux-x86_64.AppImage`** - For Intel/AMD 64-bit
               - Make executable: `chmod +x ColorCorrector-Linux-x86_64.AppImage`
               - Run directly: `./ColorCorrector-Linux-x86_64.AppImage`
               - No installation required
+            - **`ColorCorrector-Linux-aarch64.AppImage`** - For ARM64 Linux *(if available)*
+              - For Raspberry Pi 4/5, ARM servers, etc.
             
             ### 🚀 Quick Start
             
@@ -242,9 +302,10 @@ jobs:
             - **macOS**: Right-click → "Open" (first time only)
             - **Linux**: Make executable with `chmod +x`
           files: |
-            artifacts/ColorCorrector-windows-latest/ColorCorrector-Setup-Windows.exe
-            artifacts/ColorCorrector-macos-latest/ColorCorrector-macOS.dmg
-            artifacts/ColorCorrector-ubuntu-latest/ColorCorrector-Linux-x86_64.AppImage
+            artifacts/ColorCorrector-windows-x64/*.exe
+            artifacts/ColorCorrector-macos-x86_64/*.dmg
+            artifacts/ColorCorrector-macos-arm64/*.dmg
+            artifacts/ColorCorrector-linux-x86_64/*.AppImage
           draft: false
           prerelease: false
         env:

@@ -13,7 +13,26 @@ APP_NAME="ColorCorrector"
 APP_VERSION="1.0.0"
 DIST_DIR="dist"
 APPDIR="${APP_NAME}.AppDir"
-APPIMAGE_NAME="${APP_NAME}-Linux-x86_64.AppImage"
+
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)
+        ARCH_NAME="x86_64"
+        APPIMAGETOOL_ARCH="x86_64"
+        ;;
+    aarch64|arm64)
+        ARCH_NAME="aarch64"
+        APPIMAGETOOL_ARCH="aarch64"
+        ;;
+    *)
+        echo "ERROR: Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
+
+APPIMAGE_NAME="${APP_NAME}-Linux-${ARCH_NAME}.AppImage"
+echo "Building for architecture: $ARCH_NAME"
 
 # Check if dist folder exists
 if [ ! -d "${DIST_DIR}/${APP_NAME}" ]; then
@@ -100,15 +119,15 @@ EOF
 cp "${APPDIR}/${APP_NAME}.svg" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.svg"
 
 echo "[6/6] Downloading appimagetool..."
-APPIMAGETOOL="appimagetool-x86_64.AppImage"
+APPIMAGETOOL="appimagetool-${APPIMAGETOOL_ARCH}.AppImage"
 if [ ! -f "${APPIMAGETOOL}" ]; then
-    wget -q --show-progress "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+    wget -q --show-progress "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${APPIMAGETOOL_ARCH}.AppImage"
     chmod +x "${APPIMAGETOOL}"
 fi
 
 echo "[7/7] Building AppImage..."
 # Use --appimage-extract-and-run to avoid FUSE requirement in CI environments
-ARCH=x86_64 ./"${APPIMAGETOOL}" --appimage-extract-and-run "${APPDIR}" "${APPIMAGE_NAME}"
+ARCH=${ARCH_NAME} ./"${APPIMAGETOOL}" --appimage-extract-and-run "${APPDIR}" "${APPIMAGE_NAME}"
 
 echo ""
 echo "=========================================="

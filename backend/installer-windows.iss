@@ -24,7 +24,12 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE.txt
 ; Output configuration
 OutputDir=installer_output
+; Architecture suffix will be added by build script
+#ifdef ARCH_SUFFIX
+OutputBaseFilename=ColorCorrector-Setup-Windows-{#ARCH_SUFFIX}
+#else
 OutputBaseFilename=ColorCorrector-Setup-Windows
+#endif
 ; SetupIconFile=..\frontend\public\icon.ico  ; Uncomment if you have an icon file
 Compression=lzma2/max
 SolidCompression=yes
@@ -38,8 +43,15 @@ PrivilegesRequiredOverridesAllowed=dialog
 ; WizardImageFile=compiler:WizModernImage-IS.bmp
 ; WizardSmallImageFile=compiler:WizModernSmallImage-IS.bmp
 
-; Architecture
+; Architecture - supports both x64 and ARM64
+; For x64 build: ArchitecturesInstallIn64BitMode=x64compatible
+; For ARM64 build: ArchitecturesInstallIn64BitMode=arm64
+#ifdef ARCH_ARM64
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -13,7 +13,24 @@ APP_NAME="ColorCorrector"
 APP_VERSION="1.0.0"
 DIST_DIR="dist"
 APP_BUNDLE="${APP_NAME}.app"
-DMG_NAME="${APP_NAME}-macOS.dmg"
+
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)
+        ARCH_NAME="x86_64"
+        ;;
+    arm64)
+        ARCH_NAME="arm64"
+        ;;
+    *)
+        echo "WARNING: Unknown architecture: $ARCH, using generic name"
+        ARCH_NAME=$ARCH
+        ;;
+esac
+
+DMG_NAME="${APP_NAME}-macOS-${ARCH_NAME}.dmg"
+echo "Building DMG for architecture: $ARCH_NAME"
 
 # Check if dist folder exists
 if [ ! -d "${DIST_DIR}/${APP_NAME}" ]; then
@@ -69,28 +86,92 @@ echo "[4/5] Creating launcher script..."
 cat > "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}_launcher.sh" << 'LAUNCHER_EOF'
 #!/bin/bash
 # ColorCorrector Launcher for macOS
+# Supports both x86_64 and ARM64 (M1/M2/M3) architectures
 
-cd "$(dirname "$0")"
+set -e
 
-# Start the ColorCorrector server in background
-./ColorCorrector_server &
-SERVER_PID=$!
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Wait for server to start
-echo "Starting ColorCorrector server..."
-for i in {1..30}; do
-    if curl -s http://localhost:5000/api/health > /dev/null 2>&1; then
-        echo "Server started successfully"
-        break
+# Detect architecture for debugging
+ARCH=$(uname -m)
+echo "ColorCorrector starting on $ARCH architecture..."
+
+# Log file in user's home directory
+LOG_FILE="$HOME/.colorcorrector/launcher.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+{
+    echo "===== ColorCorrector Launch Log ====="
+    echo "Date: $(date)"
+    echo "Architecture: $ARCH"
+    echo "Script directory: $SCRIPT_DIR"
+    echo "======================================"
+    
+    # Check if server executable exists
+    if [ ! -f "./ColorCorrector_server" ]; then
+        echo "ERROR: ColorCorrector_server executable not found!"
+        echo "Expected location: $SCRIPT_DIR/ColorCorrector_server"
+        osascript -e 'display dialog "ColorCorrector Error: Server executable not found. Please reinstall the application." buttons {"OK"} default button "OK" with icon stop'
+        exit 1
     fi
-    sleep 1
-done
-
-# Open the default browser
-open "http://localhost:5000"
-
-# Keep the app running
-wait $SERVER_PID
+    
+    # Make sure the server is executable
+    chmod +x "./ColorCorrector_server"
+    
+    # Start the ColorCorrector server in background
+    echo "Starting ColorCorrector server..."
+    ./ColorCorrector_server >> "$LOG_FILE" 2>&1 &
+    SERVER_PID=$!
+    
+    echo "Server PID: $SERVER_PID"
+    
+    # Wait for server to start (increased timeout and better checking)
+    MAX_RETRIES=60
+    RETRY_COUNT=0
+    SERVER_READY=false
+    
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        # Check if server process is still running
+        if ! ps -p $SERVER_PID > /dev/null 2>&1; then
+            echo "ERROR: Server process died unexpectedly"
+            echo "Last 20 lines of log:"
+            tail -20 "$LOG_FILE"
+            osascript -e 'display dialog "ColorCorrector Error: Server failed to start. Check log at: '"$LOG_FILE"'" buttons {"OK"} default button "OK" with icon stop'
+            exit 1
+        fi
+        
+        # Check if server is responding
+        if curl -s -f http://localhost:5000/api/health > /dev/null 2>&1; then
+            echo "Server started successfully (attempt $RETRY_COUNT)"
+            SERVER_READY=true
+            break
+        fi
+        
+        sleep 1
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+    done
+    
+    if [ "$SERVER_READY" = false ]; then
+        echo "ERROR: Server did not respond after $MAX_RETRIES seconds"
+        echo "Last 20 lines of log:"
+        tail -20 "$LOG_FILE"
+        osascript -e 'display dialog "ColorCorrector Error: Server timeout. Check log at: '"$LOG_FILE"'" buttons {"OK"} default button "OK" with icon stop'
+        kill $SERVER_PID 2>/dev/null || true
+        exit 1
+    fi
+    
+    # Open the default browser
+    echo "Opening browser..."
+    open "http://localhost:5000"
+    
+    echo "ColorCorrector is now running. Close this window to stop the server."
+    
+    # Keep the app running and monitor the server
+    wait $SERVER_PID
+    
+} >> "$LOG_FILE" 2>&1
 LAUNCHER_EOF
 
 chmod +x "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}_launcher.sh"

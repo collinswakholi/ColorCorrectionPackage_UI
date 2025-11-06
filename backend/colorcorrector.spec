@@ -177,7 +177,10 @@ exe = EXE(
     upx=True,
     console=True,
     disable_windowed_traceback=False,
-    target_arch=None,
+    # target_arch will be set by environment variable or auto-detected
+    # For cross-compilation: set PYINSTALLER_TARGET_ARCH environment variable
+    # Examples: 'x86_64', 'arm64', 'universal2' (macOS only)
+    target_arch=os.environ.get('PYINSTALLER_TARGET_ARCH', None),
     codesign_identity=None,
     entitlements_file=None,
 )
