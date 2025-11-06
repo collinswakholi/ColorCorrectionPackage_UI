@@ -21,7 +21,6 @@ Visit the [Releases page](https://github.com/collinswakholi/ColorCorrectionPacka
 
 - **Windows**:
   - `ColorCorrector-Setup-Windows-x64.exe` - For Intel/AMD 64-bit processors
-  - `ColorCorrector-Setup-Windows-arm64.exe` - For ARM64 devices (Surface Pro X, etc.) *[experimental]*
   - Double-click the installer and follow the wizard
   - Launch from Start Menu or Desktop shortcut
   - Browser opens automatically to `http://localhost:5000`
@@ -38,7 +37,6 @@ Visit the [Releases page](https://github.com/collinswakholi/ColorCorrectionPacka
 
 - **Linux**:
   - `ColorCorrector-Linux-x86_64.AppImage` - For Intel/AMD 64-bit
-  - `ColorCorrector-Linux-aarch64.AppImage` - For ARM64 (Raspberry Pi, ARM servers) *[when available]*
   - Make executable: `chmod +x ColorCorrector-Linux-*.AppImage`
   - Run: `./ColorCorrector-Linux-*.AppImage`
   - Browser opens automatically to `http://localhost:5000`
