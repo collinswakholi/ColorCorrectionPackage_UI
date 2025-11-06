@@ -4,7 +4,7 @@ A modern web-based user interface for the [ColorCorrectionPackage](https://githu
 
 ## Overview
 
-This application provides an intuitive React frontend paired with a Flask backend to perform color correction on images using the ColorCorrectionPackage pipeline. Upload images, detect color charts, run color correction, and visualize results—all from your browser.
+This application provides an intuitive React frontend paired with a Flask backend to perform color correction on images using the ColorCorrectionPackage pipeline. Upload images, detect color charts, run color correction, and visualize results.
 
 ## Screenshot
 
