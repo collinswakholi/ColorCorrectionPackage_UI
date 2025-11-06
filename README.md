@@ -50,7 +50,7 @@ All installers are self-contained with the web interface included. No dependenci
 - **Automatic color chart detection** using the ColorCorrectionPipeline
 - **One-click color correction** with visual before/after comparison
 - **Interactive scatter plots** showing correction quality
-- **Downloadable results** (corrected images and CSV reports)
+- **Downloadable results** (corrected images and Model artefacts)
 - **Cross-platform packaging** (Windows EXE, macOS, Linux, Docker)
 
 ## Quick Start
@@ -114,4 +114,4 @@ See [LICENSE.txt](LICENSE.txt)
 
 ## Credits
 
-This UI implementation wraps the [ColorCorrectionPackage](https://github.com/collinswakholi/ColorCorrectionPackage) by Collins Wakholi.
+This UI implementation wraps the [ColorCorrectionPackage](https://github.com/collinswakholi/ColorCorrectionPackage) by [Collins Wakholi](https://github.com/collinswakholi).
