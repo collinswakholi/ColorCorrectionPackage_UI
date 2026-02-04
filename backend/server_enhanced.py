@@ -683,7 +683,7 @@ def health_check():
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.0.0',
+        'version': '2.1.0',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),
