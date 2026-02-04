@@ -27,11 +27,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS x86_64 (Intel)
-          - os: macos-15-large
-            arch: x86_64
-            platform: macos
-            runner_arch: x64
           # macOS ARM64 (M1/M2/M3)
           - os: macos-14
             arch: arm64
@@ -270,15 +265,12 @@ jobs:
               - First run: Right-click → Open (unsigned app)
               - Launches browser automatically
             - **`ColorCorrector-macOS-arm64.dmg`** - For Apple Silicon (M1/M2/M3)
+              - Native ARM64 build - oarm64.dmg`** - For Apple Silicon (M1/M2/M3)
               - Native ARM64 build - optimized performance
               - No Rosetta 2 translation needed
               - Open DMG and drag to Applications folder
               - First run: Right-click → Open (unsigned app)
-            
-            #### Linux
-            - **`ColorCorrector-Linux-x86_64.AppImage`** - For Intel/AMD 64-bit
-              - Make executable: `chmod +x ColorCorrector-Linux-x86_64.AppImage`
-              - Run directly: `./ColorCorrector-Linux-x86_64.AppImage`
+              - *Note: Intel Mac users can run this via Rosetta 2*.AppImage`
               - No installation required
             - **`ColorCorrector-Linux-aarch64.AppImage`** - For ARM64 Linux *(if available)*
               - For Raspberry Pi 4/5, ARM servers, etc.
@@ -307,6 +299,5 @@ jobs:
             artifacts/ColorCorrector-macos-arm64/*.dmg
             artifacts/ColorCorrector-linux-x86_64/*.AppImage
           draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
