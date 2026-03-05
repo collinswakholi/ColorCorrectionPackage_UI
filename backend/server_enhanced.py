@@ -72,6 +72,16 @@ except ImportError as e:
     logger.warning(f"⚠ ColorCorrectionPipeline not available: {e}")
     logger.warning("  Install with: pip install ColorCorrectionPipeline")
 
+# Import acceleration info (best-effort)
+try:
+    from ColorCorrectionPipeline.core.accel import HAS_NUMBA, HAS_NUMBA_CUDA, backend_info
+    logger.info(f"✓ Acceleration: numba={HAS_NUMBA}, cuda={HAS_NUMBA_CUDA}")
+except ImportError:
+    HAS_NUMBA = False
+    HAS_NUMBA_CUDA = False
+    def backend_info():
+        return {"numba": False, "numba_cuda": False, "torch_cuda": False}
+
 # BASE_DIR setup for frozen and development environments
 def _app_base_dir():
     """Return a writable base dir for user data when frozen"""
@@ -495,13 +505,8 @@ def calculate_optimal_workers(num_images: int, has_gpu: bool = False) -> int:
 
 @lru_cache(maxsize=1)
 def check_gpu_available() -> bool:
-    """
-    Check if GPU is available for processing (CPU-only build)
-    
-    Note: This build uses CPU-only PyTorch and dependencies.
-    GPU support has been disabled to reduce size and dependencies.
-    """
-    return False
+    """Check if GPU (Numba CUDA) is available for accelerated processing."""
+    return HAS_NUMBA_CUDA
 
 def generate_batch_id() -> str:
     """Generate unique batch ID"""
@@ -679,16 +684,20 @@ def spa_fallback(e):
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
+    accel = backend_info()
     return jsonify({
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.1.0',
+        'version': '2.2.0',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),
-            'thread_safe': True
-        }
+            'thread_safe': True,
+            'numba_jit': accel.get('numba', False),
+            'numba_cuda': accel.get('numba_cuda', False),
+        },
+        'acceleration': accel
     }), 200
 
 @app.route('/api/settings/<step>', methods=['GET', 'POST'])
@@ -2053,52 +2062,70 @@ def apply_color_correction():
         
         # Background processing function
         def apply_batch_background():
-            """Background thread for apply-to-others sequential processing"""
+            """Background thread using predict_images() for parallel batch inference."""
             processed_count = 0
             failed_count = 0
-            
+
             try:
-                # Sequential processing loop
+                # Pre-load all images into float64 arrays
+                loaded_images = []
+                idx_map = []  # maps position in loaded_images → validated index
                 for idx in validated_indices:
                     image_data = images_list[idx]
                     image_path = image_data['path']
-                    image_filename = image_data['filename']
-                    
-                    # Update status to processing
                     parallel_batch_state.update_status(idx, 'processing')
-                    
                     try:
-                        # Load and process image
                         with load_image(image_path) as img_bgr:
                             if img_bgr is None:
                                 raise ValueError(f"Failed to load image: {image_path}")
+                            loaded_images.append(to_float64(img_bgr[:, :, ::-1]))
+                            idx_map.append(idx)
+                    except Exception as exc:
+                        parallel_batch_state.update_status(idx, 'failed', str(exc))
+                        failed_count += 1
+                        logger.error(f"✗ Failed to load image {idx} ({image_data['filename']}): {exc}")
 
-                            img_rgb_float = to_float64(img_bgr[:, :, ::-1])
-                            results_dict = cc_instance.predict_image(img_rgb_float, show=False)
+                if not loaded_images:
+                    logger.warning("No images were loaded successfully")
+                    return
 
-                        # Collect corrected images
+                # Progress callback bridges predict_images → batch_state
+                def _on_progress(completed, total, name):
+                    pos = completed - 1
+                    if 0 <= pos < len(idx_map):
+                        parallel_batch_state.update_status(idx_map[pos], 'completed')
+
+                # Use predict_images for parallel thread-pool inference
+                all_results = cc_instance.predict_images(
+                    loaded_images,
+                    on_progress=_on_progress,
+                    max_workers=get_optimal_workers(len(loaded_images)),
+                )
+
+                # Encode results
+                for pos, results_dict in enumerate(all_results):
+                    idx = idx_map[pos]
+                    image_data = images_list[idx]
+                    image_path = image_data['path']
+                    image_filename = image_data['filename']
+                    try:
                         corrected_images = []
                         img_name = os.path.splitext(os.path.basename(image_path))[0]
-
                         for step_name in ['FFC', 'GC', 'WB', 'CC']:
                             step_result = results_dict.get(step_name)
                             if step_result is None:
                                 continue
-
                             step_uint8 = to_uint8(step_result)
                             step_bgr = cv2.cvtColor(step_uint8, cv2.COLOR_RGB2BGR)
                             encoded = encode_image(step_bgr)
-
                             if encoded:
                                 corrected_images.append({
                                     'name': f"{img_name}_{step_name}",
                                     'data': encoded
                                 })
-
                         if not corrected_images:
-                            raise ValueError("No corrected images produced by predict_image")
+                            raise ValueError("No corrected images produced")
 
-                        # Store result
                         session_data.append_to_list('batch_processed_images', {
                             'image_index': idx,
                             'filename': image_filename,
@@ -2106,24 +2133,20 @@ def apply_color_correction():
                             'corrected_images': corrected_images,
                             'metrics': {}
                         })
-
-                        # Update status to completed
                         parallel_batch_state.update_status(idx, 'completed')
                         processed_count += 1
                         logger.info(
                             f"✓ Applied model to image {idx + 1}: {image_filename} "
                             f"({len(corrected_images)} steps)"
                         )
-
                     except Exception as exc:
-                        # Update status to failed
                         parallel_batch_state.update_status(idx, 'failed', str(exc))
                         failed_count += 1
-                        logger.error(f"✗ Failed to apply model to image {idx} ({image_filename}): {exc}")
+                        logger.error(f"✗ Failed to encode image {idx} ({image_filename}): {exc}")
                         logger.error(traceback.format_exc())
-                
+
                 logger.info(f"Apply-to-others complete: {processed_count} succeeded, {failed_count} failed")
-                
+
             except Exception as e:
                 logger.error(f"Apply-to-others processing error: {e}")
                 logger.error(traceback.format_exc())
@@ -2132,6 +2155,7 @@ def apply_color_correction():
                 parallel_batch_state.mark_complete()
                 session_data.set('is_batch_mode', False)
                 # Force garbage collection
+                del loaded_images
                 gc.collect()
         
         # Start processing in background (non-daemon to ensure cleanup)

@@ -1255,99 +1255,76 @@ Continue?`;
     
     setApplyDialogOpen(false);
     setRunning(true);
-    // Set batch progress to indicate batch processing (prevents dialogs from showing)
     setBatchProgress({ current: 0, total: selectedForApply.length, status: 'Initializing...' });
     setLogs((l) => l + "\n" + "=".repeat(70));
     setLogs((l) => l + "\n🎨 APPLY TO OTHERS - Model Application");
     setLogs((l) => l + "\n" + "=".repeat(70));
     setLogs((l) => l + `\n📊 Applying trained model to ${selectedForApply.length} image(s)...`);
-    setLogs((l) => l + "\n💡 Mode: Sequential processing (one image at a time)");
+    setLogs((l) => l + "\n💡 Mode: Parallel batch inference (predict_images)");
     
     try {
-      const selectedMethod = ccSettings.cc_method === 'ours' ? ccSettings.mtd : 'conventional';
-      
-      let processedCount = 0;
-      let failedCount = 0;
-      
-      // Process each selected image sequentially
-      for (let i = 0; i < selectedForApply.length; i++) {
-        const imageIndex = selectedForApply[i];
-        const img = images[imageIndex];
-        
-        setBatchProgress({ 
-          current: i + 1, 
-          total: selectedForApply.length, 
-          status: `Processing ${img.file.name}...` 
-        });
-        
-        setLogs((l) => l + `\n\n${"─".repeat(70)}`);
-        setLogs((l) => l + `\n[${i + 1}/${selectedForApply.length}] ${img.file.name}`);
-        setLogs((l) => l + `\n${"─".repeat(70)}`);
-        setLogs((l) => l + `\n  🔧 Applying trained model...`);
-        
-        try {
-          const applyResp = await fetch("/api/apply-single", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              image_index: imageIndex,
-              method: selectedMethod,
-              ffcEnabled: ffcEnabled,
-              gcEnabled: gcEnabled,
-              wbEnabled: wbEnabled,
-              ccEnabled: ccEnabled,
-              ffcSettings: ffcSettings,
-              gcSettings: gcSettings,
-              ccSettings: ccSettings
-            })
-          });
-          
-          let applyResult;
-          try {
-            applyResult = await applyResp.json();
-          } catch (parseErr) {
-            setLogs((l) => l + `\n  ❌ Failed to parse response: ${parseErr?.message || parseErr}`);
-            failedCount++;
-            continue;
-          }
-          
-          if (applyResp.ok && applyResult.success) {
-            processedCount++;
-            setLogs((l) => l + `\n  ✅ Model applied successfully`);
-            
-            if (applyResult.corrected_images) {
-              const stepCount = applyResult.corrected_images.length;
-              setLogs((l) => l + `\n  📊 Generated ${stepCount} correction step(s)`);
-            }
-          } else {
-            const message = applyResult?.error || `HTTP ${applyResp.status}`;
-            setLogs((l) => l + `\n  ❌ Application error: ${message}`);
-            failedCount++;
-          }
-        } catch (imgErr) {
-          setLogs((l) => l + `\n  ❌ Error: ${imgErr?.message || imgErr}`);
-          failedCount++;
-        }
-      }
-      
-      setBatchProgress({ 
-        current: selectedForApply.length, 
-        total: selectedForApply.length, 
-        status: 'Complete!' 
+      // Send single batch request to /api/apply-cc
+      const resp = await fetch("/api/apply-cc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_indices: selectedForApply })
       });
       
-      setLogs((l) => l + `\n\n${"=".repeat(70)}`);
-      setLogs((l) => l + `\n✅ BATCH APPLICATION COMPLETE`);
-      setLogs((l) => l + `\n${"=".repeat(70)}`);
-      setLogs((l) => l + `\n📊 Summary:`);
-      setLogs((l) => l + `\n   • Total images: ${selectedForApply.length}`);
-      setLogs((l) => l + `\n   • Successfully processed: ${processedCount}`);
-      setLogs((l) => l + `\n   • Failed: ${failedCount}`);
-      setLogs((l) => l + `\n${"=".repeat(70)}`);
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        throw new Error(result?.error || `HTTP ${resp.status}`);
+      }
       
-      if (processedCount > 0) {
-        setBatchProcessComplete(true);
-        setLogs((l) => l + `\n💡 Tip: Click "Save Images" to save all ${processedCount} corrected images`);
+      setLogs((l) => l + `\n🚀 Batch started (ID: ${result.batch_id})`);
+      
+      // Poll /api/batch-progress until complete
+      let done = false;
+      while (!done) {
+        await new Promise((r) => setTimeout(r, 500));
+        
+        const progressResp = await fetch("/api/batch-progress");
+        const progressData = await progressResp.json();
+        if (!progressData.success) continue;
+        
+        const { completed, failed, total, active, progress } = progressData;
+        setBatchProgress({ 
+          current: completed + failed, 
+          total, 
+          status: active 
+            ? `Processing... (${completed}/${total} done${failed ? `, ${failed} failed` : ''})` 
+            : 'Complete!' 
+        });
+        
+        // Log newly completed/failed images
+        if (progress) {
+          for (const p of progress) {
+            if (p.status === 'completed' || p.status === 'failed') {
+              // Only log once — we rely on the log not duplicating by checking the active flag
+            }
+          }
+        }
+        
+        if (!active) {
+          done = true;
+          const processedCount = completed;
+          const failedCount = failed;
+          
+          setBatchProgress({ current: total, total, status: 'Complete!' });
+          
+          setLogs((l) => l + `\n\n${"=".repeat(70)}`);
+          setLogs((l) => l + `\n✅ BATCH APPLICATION COMPLETE`);
+          setLogs((l) => l + `\n${"=".repeat(70)}`);
+          setLogs((l) => l + `\n📊 Summary:`);
+          setLogs((l) => l + `\n   • Total images: ${total}`);
+          setLogs((l) => l + `\n   • Successfully processed: ${processedCount}`);
+          setLogs((l) => l + `\n   • Failed: ${failedCount}`);
+          setLogs((l) => l + `\n${"=".repeat(70)}`);
+          
+          if (processedCount > 0) {
+            setBatchProcessComplete(true);
+            setLogs((l) => l + `\n💡 Tip: Click "Save Images" to save all ${processedCount} corrected images`);
+          }
+        }
       }
       
     } catch (err) {
@@ -1355,7 +1332,6 @@ Continue?`;
       setLogs((l) => l + "\n" + "=".repeat(60));
     } finally {
       setRunning(false);
-      // Clear batch progress after completion
       setTimeout(() => {
         setBatchProgress({ current: 0, total: 0, status: '' });
       }, 3000);
@@ -1385,117 +1361,88 @@ Continue?`;
     setLogs((l) => l + "\n⚡ PROCESS ALL - Train Model for Each Image");
     setLogs((l) => l + "\n" + "=".repeat(70));
     setLogs((l) => l + `\n📋 Processing ${images.length} image(s)...`);
-    setLogs((l) => l + "\n💡 Mode: Sequential processing (one image at a time)");
+    setLogs((l) => l + "\n💡 Mode: Server-side batch processing with progress polling");
     setLogs((l) => l + "\n📝 Starting batch processing...");
     
-  let processedCount = 0;
-  let failedCount = 0;
-    
     try {
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        setBatchProgress({ current: i + 1, total: images.length, status: `Processing ${img.file.name}...` });
-        setLogs((l) => l + `\n\n${"─".repeat(70)}`);
-        setLogs((l) => l + `\n[${i + 1}/${images.length}] ${img.file.name}`);
-        setLogs((l) => l + `\n${"─".repeat(70)}`);
-        
-        setLogs((l) => l + `\n  🔍 Step 1: Detecting color chart (optional)...`);
-
-        let chartDetected = false;
-        try {
-          const detectResp = await fetch("/api/detect-chart", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image_index: i })
-          });
-
-          const detectResult = await detectResp.json();
-          const detection = detectResult?.detection;
-
-          if (detectResp.ok && detectResult.success && detection?.detected) {
-            chartDetected = true;
-            const confidenceLabel = typeof detection?.confidence === 'number'
-              ? ` (${(detection.confidence * 100).toFixed(0)}% confidence)`
-              : '';
-            setLogs((l) => l + `\n  ✅ Color chart detected${confidenceLabel}`);
-          } else {
-            const message = detection?.message || detectResult?.error || 'Chart detection did not confirm a chart.';
-            setLogs((l) => l + `\n  ⚠️ ${message}`);
-          }
-        } catch (detectErr) {
-          setLogs((l) => l + `\n  ⚠️ Chart detection skipped: ${detectErr?.message || detectErr}`);
-        }
-
-        if (!chartDetected) {
-          setLogs((l) => l + `\n  ℹ️ Continuing without chart-guided adjustments.`);
-        }
-
-        setLogs((l) => l + `\n  🔧 Step 2: Running correction pipeline...`);
-
-        // Run full correction pipeline with NEW MODEL for this image
-        const ccResp = await fetch("/api/run-cc", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image_index: i,
-            is_batch_mode: true,
-            computeDeltaE: false,
-            method: ccSettings.cc_method === 'ours' ? ccSettings.mtd : 'conventional',
-            ffcEnabled: ffcEnabled,
-            gcEnabled: gcEnabled,
-            wbEnabled: wbEnabled,
-            ccEnabled: ccEnabled,
-            saveCcModel: saveCcModel,
-            ffcSettings: ffcSettings,
-            gcSettings: gcSettings,
-            ccSettings: ccSettings
-          })
-        });
-
-        let ccResult;
-        try {
-          ccResult = await ccResp.json();
-        } catch (parseErr) {
-          setLogs((l) => l + `\n  ❌ Failed to parse pipeline response: ${parseErr?.message || parseErr}`);
-          failedCount++;
-          continue;
-        }
-
-        if (ccResp.ok && ccResult.success) {
-          processedCount++;
-          setLogs((l) => l + `\n  ✅ Pipeline completed successfully`);
-
-          if (ccResult.delta_e_summary) {
-            setLogs((l) => l + `\n  📊 Quality Metrics:`);
-            const steps = ['FFC', 'GC', 'WB', 'CC'];
-            steps.forEach(step => {
-              if (ccResult.delta_e_summary[step]?.DE_mean !== undefined) {
-                const deMean = ccResult.delta_e_summary[step].DE_mean.toFixed(2);
-                setLogs((l) => l + `\n     • ${step}: ΔE = ${deMean}`);
-              }
-            });
-          }
-        } else {
-          const message = ccResult?.error || `HTTP ${ccResp.status}`;
-          setLogs((l) => l + `\n  ❌ Pipeline error: ${message}`);
-          failedCount++;
-        }
+      const selectedMethod = ccSettings.cc_method === 'ours' ? ccSettings.mtd : 'conventional';
+      const allIndices = images.map((_, i) => i);
+      
+      // Send single batch request to /api/run-cc-parallel
+      const resp = await fetch("/api/run-cc-parallel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_indices: allIndices,
+          method: selectedMethod,
+          ffcEnabled: ffcEnabled,
+          gcEnabled: gcEnabled,
+          wbEnabled: wbEnabled,
+          ccEnabled: ccEnabled,
+          saveCcModel: saveCcModel,
+          ffcSettings: ffcSettings,
+          gcSettings: gcSettings,
+          ccSettings: ccSettings
+        })
+      });
+      
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        throw new Error(result?.error || `HTTP ${resp.status}`);
       }
       
-      setBatchProgress({ current: images.length, total: images.length, status: 'Complete!' });
-      setLogs((l) => l + `\n\n${"=".repeat(70)}`);
-      setLogs((l) => l + `\n✅ BATCH PROCESSING COMPLETE`);
-      setLogs((l) => l + `\n${"=".repeat(70)}`);
-      setLogs((l) => l + `\n📊 Summary:`);
-      setLogs((l) => l + `\n   • Total images: ${images.length}`);
-      setLogs((l) => l + `\n   • Successfully processed: ${processedCount}`);
-      setLogs((l) => l + `\n   • Failed: ${failedCount}`);
-      setLogs((l) => l + `\n${"=".repeat(70)}`);
+      setLogs((l) => l + `\n🚀 Batch started (ID: ${result.batch_id})`);
       
-      // Set batch complete flag if any images were processed
-      if (processedCount > 0) {
-        setBatchProcessComplete(true);
-        setLogs((l) => l + `\n💡 Tip: Click "Save Images" to save all ${processedCount} corrected images`);
+      // Poll /api/batch-progress until complete
+      let done = false;
+      let lastCompleted = 0;
+      while (!done) {
+        await new Promise((r) => setTimeout(r, 600));
+        
+        const progressResp = await fetch("/api/batch-progress");
+        const progressData = await progressResp.json();
+        if (!progressData.success) continue;
+        
+        const { completed, failed, total, active, progress } = progressData;
+        setBatchProgress({ 
+          current: completed + failed, 
+          total, 
+          status: active 
+            ? `Processing... (${completed}/${total} done${failed ? `, ${failed} failed` : ''})` 
+            : 'Complete!' 
+        });
+        
+        // Log newly completed images
+        if (completed > lastCompleted && progress) {
+          const newlyDone = progress.filter(p => p.status === 'completed' || p.status === 'failed');
+          for (const p of newlyDone.slice(lastCompleted)) {
+            if (p.status === 'completed') {
+              setLogs((l) => l + `\n  ✅ ${p.filename} — completed`);
+            } else if (p.status === 'failed') {
+              setLogs((l) => l + `\n  ❌ ${p.filename} — ${p.error || 'failed'}`);
+            }
+          }
+          lastCompleted = completed;
+        }
+        
+        if (!active) {
+          done = true;
+          
+          setBatchProgress({ current: total, total, status: 'Complete!' });
+          setLogs((l) => l + `\n\n${"=".repeat(70)}`);
+          setLogs((l) => l + `\n✅ BATCH PROCESSING COMPLETE`);
+          setLogs((l) => l + `\n${"=".repeat(70)}`);
+          setLogs((l) => l + `\n📊 Summary:`);
+          setLogs((l) => l + `\n   • Total images: ${total}`);
+          setLogs((l) => l + `\n   • Successfully processed: ${completed}`);
+          setLogs((l) => l + `\n   • Failed: ${failed}`);
+          setLogs((l) => l + `\n${"=".repeat(70)}`);
+          
+          if (completed > 0) {
+            setBatchProcessComplete(true);
+            setLogs((l) => l + `\n💡 Tip: Click "Save Images" to save all ${completed} corrected images`);
+          }
+        }
       }
       
     } catch (err) {

@@ -39,6 +39,7 @@ hiddenimports += _collect_without_tests("scipy")
 hiddenimports += _collect_without_tests("pandas")
 hiddenimports += _collect_without_tests("numpy")
 hiddenimports += _collect_without_tests("PIL")
+hiddenimports += _collect_without_tests("numba")
 hiddenimports += collect_submodules("torch")
 hiddenimports += collect_submodules("torchvision")
 hiddenimports += [
@@ -47,6 +48,7 @@ hiddenimports += [
     "flask_compress",
     "ColorCorrectionPipeline",
     "ColorCorrectionPipeline.core",
+    "ColorCorrectionPipeline.core.accel",
     "ColorCorrectionPipeline.flat_field",
     "ColorCorrectionPipeline.gc",
     "ColorCorrectionPipeline.wb",
@@ -66,6 +68,7 @@ binaries += collect_dynamic_libs("scipy")
 binaries += collect_dynamic_libs("sklearn")
 binaries += collect_dynamic_libs("torch")
 binaries += collect_dynamic_libs("PIL")
+binaries += collect_dynamic_libs("numba")
 
 # Collect system OpenGL libraries if available (needed for OpenCV)
 # These are typically system dependencies, but we try to bundle them
@@ -118,6 +121,7 @@ datas += collect_data_files("matplotlib")
 datas += collect_data_files("cv2")
 datas += collect_data_files("torch")
 datas += collect_data_files("PIL")
+datas += collect_data_files("numba")
 datas += collect_data_files("ColorCorrectionPipeline")
 
 if os.path.isdir(frontend_dist):

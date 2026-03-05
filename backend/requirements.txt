@@ -1,7 +1,8 @@
 Flask>=2.3.0
 flask-cors>=4.0.0
 flask-compress>=1.14
-ColorCorrectionPipeline
+ColorCorrectionPipeline>=1.4.1
+numba>=0.55.0
 opencv-python>=4.8.0
 opencv-contrib-python>=4.8.0
 numpy>=1.24.0

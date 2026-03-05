@@ -111,8 +111,10 @@ jobs:
           fi
           # Install other requirements (without torch)
           python -m pip install -r backend/requirements-no-torch.txt --no-cache-dir
+          # Install numba for JIT acceleration
+          python -m pip install numba --no-cache-dir
           # Install ColorCorrectionPipeline without dependencies (deps already installed above)
-          python -m pip install --no-deps ColorCorrectionPipeline --no-cache-dir
+          python -m pip install --no-deps ColorCorrectionPipeline>=1.4.1 --no-cache-dir
 
       - name: Clean pip cache after install
         run: |
