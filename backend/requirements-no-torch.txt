@@ -7,7 +7,6 @@ flask-cors>=4.0.0
 flask-compress>=1.14
 
 # Computer vision and image processing
-opencv-python>=4.8.0
 opencv-contrib-python>=4.8.0
 Pillow>=10.0.0
 
@@ -40,4 +39,4 @@ ultralytics>=8.0.0
 # (since we've already installed all its deps above)
 # Note: Use --no-deps when installing this package
 numba>=0.55.0
-ColorCorrectionPipeline>=1.4.1
+ColorCorrectionPipeline>=1.4.3

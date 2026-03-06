@@ -114,7 +114,7 @@ jobs:
           # Install numba for JIT acceleration
           python -m pip install numba --no-cache-dir
           # Install ColorCorrectionPipeline without dependencies (deps already installed above)
-          python -m pip install --no-deps ColorCorrectionPipeline>=1.4.1 --no-cache-dir
+          python -m pip install --no-deps ColorCorrectionPipeline>=1.4.3 --no-cache-dir
 
       - name: Clean pip cache after install
         run: |
@@ -267,12 +267,14 @@ jobs:
               - First run: Right-click → Open (unsigned app)
               - Launches browser automatically
             - **`ColorCorrector-macOS-arm64.dmg`** - For Apple Silicon (M1/M2/M3)
-              - Native ARM64 build - oarm64.dmg`** - For Apple Silicon (M1/M2/M3)
               - Native ARM64 build - optimized performance
               - No Rosetta 2 translation needed
               - Open DMG and drag to Applications folder
               - First run: Right-click → Open (unsigned app)
-              - *Note: Intel Mac users can run this via Rosetta 2*.AppImage`
+            
+            #### Linux
+            - **`ColorCorrector-Linux-x86_64.AppImage`** - For Intel/AMD 64-bit
+              - Make executable: `chmod +x ColorCorrector-Linux-*.AppImage`
               - No installation required
             - **`ColorCorrector-Linux-aarch64.AppImage`** - For ARM64 Linux *(if available)*
               - For Raspberry Pi 4/5, ARM servers, etc.

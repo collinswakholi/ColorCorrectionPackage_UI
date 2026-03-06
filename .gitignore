@@ -2,7 +2,10 @@ node_modules/
 frontend/node_modules/
 .env
 dist/
+frontend/dist/
+backend/frontend_dist/
 .DS_Store
 *.pyc
 __pycache__/
 backend/dist/
+backend/build/

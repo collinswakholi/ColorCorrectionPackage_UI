@@ -1,7 +1,7 @@
 """
 Enhanced Color Correction Backend - REFACTORED with Thread Safety & Resource Management
-Version: 2.0.0
-Date: October 13, 2025
+Version: 2.3.0
+Date: March 5, 2026
 
 CRITICAL FIXES IMPLEMENTED:
 1. Thread-safe parallel processing with proper locking
@@ -26,7 +26,6 @@ import json
 from pathlib import Path
 import traceback
 from datetime import datetime
-import sys
 import signal
 import psutil
 import atexit
@@ -34,7 +33,6 @@ import shutil
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 import threading
-from queue import Queue
 import time
 import logging
 import warnings
@@ -42,9 +40,16 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 import gc
-import hashlib
 import uuid
+import pickle
 from functools import lru_cache
+
+# Pre-import matplotlib with thread-safe Agg backend (avoids per-request import overhead)
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+plt.rcParams['figure.max_open_warning'] = 0
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +70,7 @@ warnings.filterwarnings(
 try:
     from ColorCorrectionPipeline import ColorCorrection, Config, MyModels
     from ColorCorrectionPipeline.core import to_float64, to_uint8
+    from ColorCorrectionPipeline.core.accel import apply_ffc_float
     CC_AVAILABLE = True
     logger.info("✓ ColorCorrectionPipeline imported successfully")
 except ImportError as e:
@@ -81,6 +87,18 @@ except ImportError:
     HAS_NUMBA_CUDA = False
     def backend_info():
         return {"numba": False, "numba_cuda": False, "torch_cuda": False}
+
+# Import MCC availability flag (best-effort)
+try:
+    from ColorCorrectionPipeline.core import HAS_MCC
+    if not HAS_MCC:
+        logger.warning("⚠ cv2.mcc module NOT available — color chart detection will fail")
+        logger.warning("  Fix: pip install opencv-contrib-python")
+    else:
+        logger.info("✓ cv2.mcc module available")
+except ImportError:
+    HAS_MCC = False
+    logger.warning("⚠ Could not check MCC availability (CCP not installed)")
 
 # BASE_DIR setup for frozen and development environments
 def _app_base_dir():
@@ -127,6 +145,9 @@ logger.info(f"FRONTEND_DIR: {FRONTEND_DIR}")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 CORS(app)
+
+# Limit upload size to 500 MB to prevent memory exhaustion
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 
 # Optional: Enable response compression for better network performance
 # Install with: pip install flask-compress
@@ -186,19 +207,28 @@ class BatchState:
             self.results = []
     
     def update_status(self, image_index: int, status: str, error: Optional[str] = None):
-        """Atomically update status for an image"""
+        """Atomically update status for an image (idempotent — safe to call twice)"""
         with self._lock:
+            old_status = None
             for p in self.progress:
                 if p['image_index'] == image_index:
+                    old_status = p['status']
+                    if old_status == status:
+                        return  # Already in this state — no-op
                     p['status'] = status
                     if error:
                         p['error'] = error
                     break
-            
-            if status == 'completed':
+            else:
+                return  # Image not found
+
+            # Only count genuine state transitions
+            if status == 'completed' and old_status != 'completed':
                 self.completed += 1
-            elif status == 'failed':
+            elif status == 'failed' and old_status != 'failed':
                 self.failed += 1
+                if old_status == 'completed':
+                    self.completed = max(0, self.completed - 1)
     
     def add_result(self, result: Dict):
         """Atomically add a result"""
@@ -477,9 +507,7 @@ def load_image(path: str):
             raise ValueError(f"Failed to load image: {path}")
         yield img
     finally:
-        # Explicit cleanup for large images
         del img
-        gc.collect()
 
 def calculate_optimal_workers(num_images: int, has_gpu: bool = False) -> int:
     """
@@ -490,7 +518,6 @@ def calculate_optimal_workers(num_images: int, has_gpu: bool = False) -> int:
     
     Formula: n = 0.6 * available_cpus (capped by num_images)
     """
-    import multiprocessing
     cpu_count = multiprocessing.cpu_count()
     
     if has_gpu:
@@ -512,24 +539,96 @@ def generate_batch_id() -> str:
     """Generate unique batch ID"""
     return f"batch_{uuid.uuid4().hex[:12]}"
 
+# ---------------------------------------------------------------------------
+# Safe model loading — restricted unpickler to prevent arbitrary code execution
+# ---------------------------------------------------------------------------
+_PICKLE_SAFE_MODULES: Dict[str, set] = {
+    'builtins':           {'True', 'False', 'None', 'dict', 'list', 'tuple', 'set',
+                           'frozenset', 'int', 'float', 'complex', 'str', 'bytes',
+                           'bytearray', 'slice', 'range', 'type'},
+    'collections':        {'OrderedDict', 'defaultdict'},
+    'numpy':              {'ndarray', 'dtype', 'array', 'float64', 'float32',
+                           'int64', 'int32', 'uint8', 'bool_', 'nan', 'inf'},
+    'numpy.core.multiarray': {'scalar', '_reconstruct'},
+    'numpy.core.numeric':    set(),  # allow module but verify class on access
+    'numpy._core.multiarray': {'scalar', '_reconstruct'},
+    'pandas.core.frame':  {'DataFrame'},
+    'pandas.core.series': {'Series'},
+    'sklearn.linear_model._base': {'LinearRegression'},
+    'sklearn.cross_decomposition._pls': {'PLSRegression'},
+    'ColorCorrectionPipeline.pipeline': {'ColorCorrection'},
+    'ColorCorrectionPipeline.models':   {'MyModels'},
+}
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler that only allows known-safe classes."""
+
+    def find_class(self, module: str, name: str):
+        allowed = _PICKLE_SAFE_MODULES.get(module)
+        if allowed is not None:
+            if len(allowed) == 0 or name in allowed:
+                return super().find_class(module, name)
+        # Check sub-module patterns (e.g. numpy.*)
+        top = module.split('.')[0]
+        if top in ('numpy', 'pandas', 'sklearn', 'ColorCorrectionPipeline'):
+            # Allow attribute access within trusted top-level packages
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Blocked unsafe pickle class: {module}.{name}"
+        )
+
+def _safe_load_model(path: str):
+    """Load a .pkl model file using the restricted unpickler."""
+    with open(path, 'rb') as fh:
+        return _RestrictedUnpickler(fh).load()
+
+# Module-level helper for parallel saving (avoids duplicate nested defs)
+def _save_single_image(task: Dict) -> Dict:
+    """Save a single base64-encoded image to disk (thread-safe)."""
+    try:
+        img_base64 = task['data']
+        save_path = task['path']
+        if ',' in img_base64:
+            img_base64 = img_base64.split(',')[1]
+        img_bytes = base64.b64decode(img_base64)
+        with open(save_path, 'wb') as f:
+            f.write(img_bytes)
+        return {'success': True, 'path': save_path}
+    except Exception as e:
+        return {'success': False, 'name': task.get('name', '?'), 'error': str(e)}
+
 def process_single_image_with_timeout(
     image_index: int,
     image_path: str,
     image_filename: str,
     config_dict: Dict,
     white_bgr: Optional[Union[str, np.ndarray]],
-    timeout: int = REQUEST_TIMEOUT
+    timeout: int = REQUEST_TIMEOUT,
+    cc_instance=None,
+    ffc_multiplier: Optional[np.ndarray] = None,
 ) -> Dict:
     """
-    Process a single image with timeout protection
+    Process a single image with timeout protection.
+    
+    If *cc_instance* is provided (a pre-trained ColorCorrection object), the
+    function uses ``predict_image()`` (fast inference only).  Otherwise it
+    creates a new pipeline and calls ``cc.run()`` (full training) — which is
+    much slower and should only be done for the first/calibration image.
+    
+    If *ffc_multiplier* is provided (a 2-D ndarray), the FFC correction is
+    applied to the raw image **before** the pipeline runs, and ``do_ffc``
+    is forced off so the pipeline skips re-fitting FFC.  This avoids
+    redundant FFC work when the white reference image is the same for all.
     
     Args:
         image_index: Index of the image
         image_path: Path to image file
         image_filename: Name of image file
         config_dict: Configuration dictionary
-    white_bgr: Optional white reference (file path or numpy array)
+        white_bgr: Optional white reference (file path or numpy array)
         timeout: Timeout in seconds
+        cc_instance: Pre-trained ColorCorrection instance for inference-only mode
+        ffc_multiplier: Pre-fitted FFC multiplier surface (2-D ndarray)
         
     Returns:
         dict: Result containing success status, images, metrics, or error
@@ -547,7 +646,8 @@ def process_single_image_with_timeout(
             else:
                 logger.warning(f"White reference path not found: {white_bgr}")
         elif white_bgr is not None:
-            white_bgr_local = white_bgr.copy()
+            # numpy arrays are thread-safe for reads; avoid expensive .copy()
+            white_bgr_local = white_bgr
         
         # Load image with context manager
         with load_image(image_path) as img_bgr:
@@ -601,31 +701,64 @@ def process_single_image_with_timeout(
             
             config.CC_kwargs['mtd'] = method
             
-            # Create new ColorCorrection instance (thread-safe)
-            cc = ColorCorrection()
             img_name = os.path.splitext(os.path.basename(image_path))[0]
             
             # Convert to pipeline format
             img_rgb_float = to_float64(img_bgr[:, :, ::-1])
             
-            # Run pipeline with timeout
-            try:
-                metrics, images, error = cc.run(
-                    Image=img_rgb_float,
-                    White_Image=white_bgr_local,
-                    name_=img_name,
-                    config=config
-                )
-            except Exception as pipeline_error:
-                return {
-                    'success': False,
-                    'image_index': image_index,
-                    'filename': image_filename,
-                    'error': f"Pipeline error: {str(pipeline_error)}"
-                }
+            # ── Pre-apply FFC if a cached multiplier was provided ──
+            img_ffc_preapplied = None
+            if ffc_multiplier is not None and cc_instance is None:
+                try:
+                    img_ffc_preapplied = apply_ffc_float(img_rgb_float, ffc_multiplier)
+                    img_rgb_float = img_ffc_preapplied  # pipeline sees already-corrected image
+                    config.do_ffc = False                # skip FFC re-fitting
+                    logger.info(f"[{thread_name}] Applied cached FFC multiplier to {image_filename}")
+                except Exception as ffc_err:
+                    logger.warning(f"[{thread_name}] Cached FFC failed ({ffc_err}), falling back to full FFC")
+                    img_ffc_preapplied = None
+            
+            # ── Inference-only path (fast) vs full-training path ──
+            if cc_instance is not None:
+                # Use pre-trained model — predict_image() is orders of magnitude faster
+                try:
+                    images = cc_instance.predict_image(img_rgb_float, show=False)
+                    metrics = {}
+                    error = False
+                except Exception as pipeline_error:
+                    return {
+                        'success': False,
+                        'image_index': image_index,
+                        'filename': image_filename,
+                        'error': f"Predict error: {str(pipeline_error)}"
+                    }
+            else:
+                # No pre-trained model — full training run
+                cc = ColorCorrection()
+                try:
+                    metrics, images, error = cc.run(
+                        Image=img_rgb_float,
+                        White_Image=white_bgr_local,
+                        name_=img_name,
+                        config=config
+                    )
+                    # Store trained cc instance so Apply-to-Others / batch can reuse
+                    if hasattr(cc, 'models') and cc.models.has_models():
+                        session_data.set('cc_instance', cc)
+                except Exception as pipeline_error:
+                    return {
+                        'success': False,
+                        'image_index': image_index,
+                        'filename': image_filename,
+                        'error': f"Pipeline error: {str(pipeline_error)}"
+                    }
             
             if error:
                 logger.warning(f"[{thread_name}] Warning for {image_filename}: {error}")
+            
+            # If FFC was pre-applied, inject the FFC step into the images dict
+            if img_ffc_preapplied is not None:
+                images[f"{img_name}_FFC"] = img_ffc_preapplied
             
             # Encode results - BATCH MODE: No visualizations, only final images
             result_images = []
@@ -689,7 +822,7 @@ def health_check():
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.2.0',
+        'version': '2.3.0',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),
@@ -897,11 +1030,9 @@ def upload_model():
         file.save(sanitized_path)
         logger.info(f"Saved model file: {safe_filename}")
         
-        # Load the model using pickle
+        # Load the model using RESTRICTED unpickler (prevents arbitrary code execution)
         try:
-            import pickle
-            with open(sanitized_path, 'rb') as f:
-                loaded_model = pickle.load(f)
+            loaded_model = _safe_load_model(sanitized_path)
             
             # Verify it's a valid ColorCorrection model
             if not hasattr(loaded_model, 'models') or not hasattr(loaded_model, 'predict_image'):
@@ -1279,115 +1410,16 @@ def run_color_correction_single():
             
             logger.info(f"Final corrected image from step: {final_step_name if final_step_name else 'None'}")
             
-            # Create difference image if any correction was performed (SKIP IN BATCH MODE)
-            diff_image_base64 = None
+            # ── Store data for lazy diff/scatter endpoints (no blocking plots) ──
             if final_corrected is not None and not is_batch_mode:
-                try:
-                    # Configure matplotlib for optimal thread-safe performance
-                    import matplotlib
-                    matplotlib.use('Agg')  # Non-GUI backend
-                    import matplotlib.pyplot as plt
-                    from matplotlib.colors import Normalize
-                    import io as io_module
-                    import base64 as b64_module
-                    
-                    # Set matplotlib to use less memory
-                    plt.rcParams['figure.max_open_warning'] = 0
-                    
-                    corrected_bgr = cv2.cvtColor(to_uint8(final_corrected), cv2.COLOR_RGB2BGR)
-                    diff = cv2.absdiff(img_bgr, corrected_bgr)
-                    # Enhance difference visibility - convert to grayscale for better colormap
-                    diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-                    
-                    # Create a figure with colorbar using matplotlib
-                    fig, ax = plt.subplots(figsize=(12, 8))
-                    
-                    # Apply JET colormap with matplotlib for better colorbar control
-                    norm = Normalize(vmin=0, vmax=255)
-                    im = ax.imshow(diff_gray, cmap='jet', norm=norm)
-                    ax.axis('off')
-                    
-                    # Add colorbar with visible labels
-                    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                    cbar.set_label('Pixel Difference (0-255)', rotation=270, labelpad=20, fontsize=12)
-                    cbar.ax.tick_params(labelsize=10)
-                    
-                    buf = io_module.BytesIO()
-                    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
-                    buf.seek(0)
-                    img_bytes = buf.read()
-                    diff_image_base64 = f"data:image/png;base64,{b64_module.b64encode(img_bytes).decode('utf-8')}"
-                    plt.close(fig)
-                    
-                    if diff_image_base64:
-                        logger.info(f"✓ Created difference image with colorbar (comparing to {final_step_name}) for {image_filename}")
-                    else:
-                        logger.warning(f"⚠ Difference image encoding failed for {image_filename}")
-                except Exception as e:
-                    logger.error(f"✗ Failed to create difference image: {e}")
-                    logger.error(traceback.format_exc())
-                    diff_image_base64 = None
+                final_bgr = cv2.cvtColor(to_uint8(final_corrected), cv2.COLOR_RGB2BGR)
+                session_data.set('_lazy_original_bgr', img_bgr)
+                session_data.set('_lazy_corrected_bgr', final_bgr)
+                session_data.set('_lazy_final_step', final_step_name)
             elif is_batch_mode:
-                logger.info(f"⏭️ Skipping difference image (batch mode) for {image_filename}")
+                logger.info(f"⏭️ Skipping visualizations (batch mode) for {image_filename}")
             else:
                 logger.warning(f"⚠ No corrected image available - all correction steps disabled or failed")
-            
-            # Create scatter plot using scatter_RGB with color checker patches (SKIP IN BATCH MODE)
-            scatter_plot_base64 = None
-            if final_corrected is not None and not is_batch_mode:
-                try:
-                    # Try to extract patches from both original and corrected images
-                    from ColorCorrectionPipeline.core import extract_color_chart
-                    import io
-                    import base64
-                    from scatter_plot_utils import scatter_RGB
-                    import matplotlib.pyplot as plt
-                    
-                    # Extract patches from original image
-                    orig_patches, _, _ = extract_color_chart(img_bgr, get_patch_size=False)
-                    
-                    # Extract patches from corrected image (use final_corrected instead of just CC)
-                    corrected_bgr = cv2.cvtColor(to_uint8(final_corrected), cv2.COLOR_RGB2BGR)
-                    corr_patches, _, _ = extract_color_chart(corrected_bgr, get_patch_size=False)
-                    
-                    if orig_patches is not None and corr_patches is not None:
-                        
-                        # Create the scatter plot comparing original to corrected patches
-                        mats = {'Corrected': corr_patches/255.0,
-                                'Original': orig_patches/255.0}
-
-                        ref_pd = cc.get_reference_values()
-                        ref_values = np.array(ref_pd.values)
-
-                        scatter_RGB(
-                            reference=ref_values,
-                            mats=mats,
-                            point_lw=1.5,
-                            maker_size=100,
-                            best_fit=True,
-                            font_size=14,
-                            save_=None
-                        )
-                        
-                        # Convert to base64
-                        buf = io.BytesIO()
-                        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-                        buf.seek(0)
-                        plt.close()
-                        
-                        scatter_plot_base64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
-                        logger.info(f"✓ Created scatter plot using scatter_RGB with color checker patches (comparing to {final_step_name}) for {image_filename}")
-                    else:
-                        logger.warning(f"⚠ Scatter plot not created - color chart not detected in original or corrected image")
-                        scatter_plot_base64 = None
-                except Exception as e:
-                    logger.error(f"✗ Failed to create scatter plot: {e}")
-                    logger.error(traceback.format_exc())
-                    scatter_plot_base64 = None
-            elif is_batch_mode:
-                logger.info(f"⏭️ Skipping scatter plot (batch mode) for {image_filename}")
-            else:
-                logger.warning(f"⚠ No corrected image available for scatter plot - all correction steps disabled or failed")
             
             # Format metrics for response - ONLY include enabled steps
             delta_e_summary = {}
@@ -1475,16 +1507,15 @@ def run_color_correction_single():
                 logger.info(f"  • Batch mode: Visualizations skipped for performance")
             else:
                 logger.info(f"  • Delta E metrics: {len(delta_e_summary)} step(s)")
-                logger.info(f"  • Difference image: {'✓ Created' if diff_image_base64 else '✗ Not created'}")
-                logger.info(f"  • Scatter plot: {'✓ Created' if scatter_plot_base64 else '✗ Not created'}")
+                logger.info(f"  • Diff/scatter plots: deferred (lazy endpoints)")
             
             return jsonify({
                 'success': True,
                 'message': f'Color correction completed for {image_filename}',
                 'images': result_images,
                 'original_image': original_base64,
-                'diff_image': diff_image_base64,
-                'scatter_plot': scatter_plot_base64,
+                'diff_image': None,
+                'scatter_plot': None,
                 'delta_e_summary': delta_e_summary,
                 'metrics': metrics,
                 'log': '\n'.join(log_messages) if log_messages else 'Color correction completed successfully'
@@ -1497,6 +1528,115 @@ def run_color_correction_single():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# ──────────────────────────────────────────────────────────
+# Lazy visualisation endpoints (generated on-demand, not during run-cc)
+# ──────────────────────────────────────────────────────────
+
+@app.route('/api/get-diff-image', methods=['GET'])
+def get_diff_image():
+    """Generate difference-image heatmap on demand from session-cached data."""
+    try:
+        img_bgr = session_data.get('_lazy_original_bgr')
+        corrected_bgr = session_data.get('_lazy_corrected_bgr')
+        step_name = session_data.get('_lazy_final_step', 'CC')
+
+        if img_bgr is None or corrected_bgr is None:
+            return jsonify({'success': False, 'error': 'No original/corrected data cached – run CC first'}), 404
+
+        # Compute absolute difference
+        diff = cv2.absdiff(img_bgr, corrected_bgr)
+        diff_gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+        fig = None
+        try:
+            fig, ax = plt.subplots(figsize=(12, 8))
+            norm = Normalize(vmin=0, vmax=255)
+            im = ax.imshow(diff_gray, cmap='jet', norm=norm)
+            ax.axis('off')
+            cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            cbar.set_label('Pixel Difference (0-255)', rotation=270, labelpad=20, fontsize=12)
+            cbar.ax.tick_params(labelsize=10)
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+            buf.seek(0)
+            diff_b64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+        logger.info(f"✓ Lazy diff image generated (step: {step_name})")
+        return jsonify({'success': True, 'diff_image': diff_b64}), 200
+
+    except Exception as e:
+        logger.error(f"get-diff-image error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/get-scatter-plot', methods=['GET'])
+def get_scatter_plot():
+    """Generate scatter-plot on demand from session-cached data."""
+    try:
+        img_bgr = session_data.get('_lazy_original_bgr')
+        corrected_bgr = session_data.get('_lazy_corrected_bgr')
+        cc_instance = session_data.get('cc_instance')
+
+        if img_bgr is None or corrected_bgr is None:
+            return jsonify({'success': False, 'error': 'No original/corrected data cached – run CC first'}), 404
+
+        from ColorCorrectionPipeline.core import extract_color_chart
+        from scatter_plot_utils import scatter_RGB
+
+        orig_patches, _, _ = extract_color_chart(img_bgr, get_patch_size=False)
+        corr_patches, _, _ = extract_color_chart(corrected_bgr, get_patch_size=False)
+
+        if orig_patches is None or corr_patches is None:
+            return jsonify({'success': False, 'error': 'Color chart not detected in original or corrected image'}), 404
+
+        mats = {'Corrected': corr_patches / 255.0, 'Original': orig_patches / 255.0}
+
+        # Get reference values if cc_instance available
+        ref_values = None
+        if cc_instance is not None:
+            try:
+                ref_pd = cc_instance.get_reference_values()
+                ref_values = np.array(ref_pd.values)
+            except Exception:
+                pass
+
+        if ref_values is None:
+            # Fall back to standard reference
+            from ColorCorrectionPipeline.core import get_reference
+            ref_pd = get_reference()
+            ref_values = np.array(ref_pd.values)
+
+        scatter_RGB(
+            reference=ref_values,
+            mats=mats,
+            point_lw=1.5,
+            maker_size=100,
+            best_fit=True,
+            font_size=14,
+            save_=None
+        )
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        buf.seek(0)
+        plt.close()
+
+        scatter_b64 = f"data:image/png;base64,{base64.b64encode(buf.read()).decode('utf-8')}"
+        logger.info("✓ Lazy scatter plot generated")
+        return jsonify({'success': True, 'scatter_plot': scatter_b64}), 200
+
+    except Exception as e:
+        logger.error(f"get-scatter-plot error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/run-cc-parallel', methods=['POST'])
 def run_color_correction_parallel():
@@ -1601,10 +1741,17 @@ def run_color_correction_parallel():
         
         # Background processing function
         def process_batch_background():
-            """Background thread for sequential batch processing"""
+            """Background thread: run full pipeline independently for every image.
+            
+            FFC optimisation: the flat-field multiplier depends only on the
+            white reference image, so we fit it once on the first image and
+            reuse the cached multiplier for every subsequent image.
+            """
+            cached_ffc_mult = None
+            ffc_enabled = config_dict.get('ffc_enabled', False)
+            
             try:
-                # Process images sequentially (no parallel execution)
-                for idx in validated_indices:
+                for i, idx in enumerate(validated_indices):
                     image_data = images_list[idx]
                     image_path = image_data['path']
                     image_filename = image_data['filename']
@@ -1612,19 +1759,25 @@ def run_color_correction_parallel():
                     # Update status to processing
                     parallel_batch_state.update_status(idx, 'processing')
                     
-                    # Process image
                     try:
+                        # First image (or if cache failed): full pipeline inc. FFC
+                        # Subsequent images: reuse cached FFC, train GC/WB/CC fresh
                         result = process_single_image_with_timeout(
-                            idx,
-                            image_path,
-                            image_filename,
-                            config_dict,
-                            white_reference
+                            idx, image_path, image_filename,
+                            config_dict, white_reference,
+                            ffc_multiplier=cached_ffc_mult,
                         )
                         
                         if result['success']:
                             parallel_batch_state.update_status(idx, 'completed')
                             parallel_batch_state.add_result(result)
+                            
+                            # Cache FFC multiplier after first successful image
+                            if ffc_enabled and cached_ffc_mult is None:
+                                cc_inst = session_data.get('cc_instance')
+                                if cc_inst and getattr(cc_inst.models, 'model_ffc', None) is not None:
+                                    cached_ffc_mult = cc_inst.models.model_ffc
+                                    logger.info(f"✓ Cached FFC multiplier from image {idx} — reusing for remaining {len(validated_indices) - i - 1} images")
                             
                             # Add to batch processed images
                             session_data.append_to_list('batch_processed_images', {
@@ -1757,22 +1910,19 @@ def shutdown_server():
             logger.info("⏳ Shutdown thread started, waiting 0.5s for response to be sent...")
             time.sleep(0.5)
             logger.info("=" * 60)
-            logger.info("� Initiating graceful shutdown...")
+            logger.info("🛑 Initiating graceful shutdown...")
             logger.info(f"   Target PID: {os.getpid()}")
             logger.info("=" * 60)
             
-            # Call signal handler directly for clean shutdown
             try:
-                logger.info("✓ Triggering shutdown handler...")
-                signal_handler(signal.SIGINT, None)
-            except Exception as shutdown_err:
-                logger.error(f"❌ Shutdown error: {shutdown_err}")
-                # Fallback to direct exit
-                logger.info("⚠ Using fallback exit method...")
+                logger.info("✓ Triggering shutdown...")
                 logging.shutdown()
                 sys.stdout.flush()
                 sys.stderr.flush()
-                sys.exit(0)
+            except Exception:
+                pass
+            # Hard-kill to guarantee the process dies (Flask threads can keep it alive)
+            os._exit(0)
         
         # Start shutdown in background thread
         shutdown_thread = threading.Thread(target=do_shutdown, daemon=True, name="ShutdownThread")
@@ -1795,16 +1945,31 @@ def shutdown_server():
 
 @app.route('/api/restart', methods=['POST'])
 def restart_server():
-    """Restart the backend server"""
+    """Restart the backend server (Windows-safe via subprocess)"""
     try:
         logger.info("🔄 RESTART INITIATED")
         pid = os.getpid()
         
+        import subprocess
+        
         def do_restart():
             time.sleep(1)
-            logger.info("Restarting process...")
+            logger.info("Spawning new server process...")
             python = sys.executable
-            os.execl(python, python, *sys.argv)
+            # Spawn a fully detached child, then exit the current process
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            DETACHED_PROCESS = 0x00000008
+            subprocess.Popen(
+                [python] + sys.argv,
+                creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
+                close_fds=True,
+                cwd=os.getcwd(),
+            )
+            logger.info("New process spawned, shutting down old process...")
+            logging.shutdown()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(0)
         
         threading.Thread(target=do_restart, daemon=True).start()
         
@@ -1823,23 +1988,39 @@ def restart_server():
 
 @app.route('/api/available-images', methods=['GET'])
 def get_available_images():
-    """Get list of available processed images"""
+    """Get list of available processed images, grouped by base image name.
+    
+    Returns unique base images (without step suffixes) with their available steps.
+    E.g. 'photo1_FFC', 'photo1_CC' → {base_name: 'photo1', available_steps: ['FFC', 'CC']}
+    """
     try:
-        # Get corrected images from session
         corrected = session_data.get('corrected_images', [])
         
-        available = []
+        # Group by base image name (strip step suffix)
+        STEP_SUFFIXES = ('_FFC', '_GC', '_WB', '_CC')
+        images_by_base = {}  # ordered dict (Python 3.7+)
+        
         for img_data in corrected:
-            if 'name' in img_data and 'data' in img_data:
-                available.append({
-                    'name': img_data['name'],
-                    'filename': img_data['name'],
-                    'preview': img_data['data'][:100] + '...'  # Truncated preview
-                })
+            name = img_data.get('name', '')
+            if not name or 'data' not in img_data:
+                continue
+            
+            base_name = name
+            step = None
+            for suffix in STEP_SUFFIXES:
+                if name.endswith(suffix):
+                    base_name = name[:-len(suffix)]
+                    step = suffix[1:]  # e.g. 'FFC'
+                    break
+            
+            if base_name not in images_by_base:
+                images_by_base[base_name] = {'base_name': base_name, 'available_steps': []}
+            if step and step not in images_by_base[base_name]['available_steps']:
+                images_by_base[base_name]['available_steps'].append(step)
         
         return jsonify({
             'success': True,
-            'images': available
+            'images': list(images_by_base.values())
         }), 200
         
     except Exception as e:
@@ -2065,85 +2246,108 @@ def apply_color_correction():
             """Background thread using predict_images() for parallel batch inference."""
             processed_count = 0
             failed_count = 0
+            loaded_images = []
+            all_results = None
 
             try:
-                # Pre-load all images into float64 arrays
-                loaded_images = []
+                # Pre-load all images in parallel using ThreadPoolExecutor
                 idx_map = []  # maps position in loaded_images → validated index
-                for idx in validated_indices:
+
+                def _load_one(idx):
                     image_data = images_list[idx]
                     image_path = image_data['path']
                     parallel_batch_state.update_status(idx, 'processing')
-                    try:
-                        with load_image(image_path) as img_bgr:
-                            if img_bgr is None:
-                                raise ValueError(f"Failed to load image: {image_path}")
-                            loaded_images.append(to_float64(img_bgr[:, :, ::-1]))
+                    with load_image(image_path) as img_bgr:
+                        if img_bgr is None:
+                            raise ValueError(f"Failed to load image: {image_path}")
+                        return idx, to_float64(img_bgr[:, :, ::-1])
+
+                max_w = calculate_optimal_workers(len(validated_indices), check_gpu_available())
+                with ThreadPoolExecutor(max_workers=max_w) as pool:
+                    futures = {pool.submit(_load_one, idx): idx for idx in validated_indices}
+                    for fut in as_completed(futures):
+                        idx = futures[fut]
+                        try:
+                            _, arr = fut.result()
+                            loaded_images.append(arr)
                             idx_map.append(idx)
-                    except Exception as exc:
-                        parallel_batch_state.update_status(idx, 'failed', str(exc))
-                        failed_count += 1
-                        logger.error(f"✗ Failed to load image {idx} ({image_data['filename']}): {exc}")
+                        except Exception as exc:
+                            parallel_batch_state.update_status(idx, 'failed', str(exc))
+                            failed_count += 1
+                            logger.error(f"✗ Failed to load image {idx} ({images_list[idx]['filename']}): {exc}")
 
                 if not loaded_images:
                     logger.warning("No images were loaded successfully")
                     return
 
-                # Progress callback bridges predict_images → batch_state
+                # Name-based progress callback bridges predict_images → batch_state
+                name_to_idx = {f"image_{i}": idx_map[i] for i in range(len(idx_map))}
+
                 def _on_progress(completed, total, name):
-                    pos = completed - 1
-                    if 0 <= pos < len(idx_map):
-                        parallel_batch_state.update_status(idx_map[pos], 'completed')
+                    mapped_idx = name_to_idx.get(name)
+                    if mapped_idx is not None:
+                        parallel_batch_state.update_status(mapped_idx, 'completed')
 
                 # Use predict_images for parallel thread-pool inference
                 all_results = cc_instance.predict_images(
                     loaded_images,
                     on_progress=_on_progress,
-                    max_workers=get_optimal_workers(len(loaded_images)),
+                    max_workers=max_w,
                 )
 
-                # Encode results
-                for pos, results_dict in enumerate(all_results):
+                # Encode all correction steps — parallel encoding
+                def _encode_one(pos):
                     idx = idx_map[pos]
                     image_data = images_list[idx]
                     image_path = image_data['path']
                     image_filename = image_data['filename']
-                    try:
-                        corrected_images = []
-                        img_name = os.path.splitext(os.path.basename(image_path))[0]
-                        for step_name in ['FFC', 'GC', 'WB', 'CC']:
-                            step_result = results_dict.get(step_name)
-                            if step_result is None:
-                                continue
-                            step_uint8 = to_uint8(step_result)
-                            step_bgr = cv2.cvtColor(step_uint8, cv2.COLOR_RGB2BGR)
-                            encoded = encode_image(step_bgr)
-                            if encoded:
-                                corrected_images.append({
-                                    'name': f"{img_name}_{step_name}",
-                                    'data': encoded
-                                })
-                        if not corrected_images:
-                            raise ValueError("No corrected images produced")
+                    results_dict = all_results[pos]
+                    img_name = os.path.splitext(os.path.basename(image_path))[0]
 
-                        session_data.append_to_list('batch_processed_images', {
-                            'image_index': idx,
-                            'filename': image_filename,
-                            'original_path': image_path,
-                            'corrected_images': corrected_images,
-                            'metrics': {}
-                        })
-                        parallel_batch_state.update_status(idx, 'completed')
-                        processed_count += 1
-                        logger.info(
-                            f"✓ Applied model to image {idx + 1}: {image_filename} "
-                            f"({len(corrected_images)} steps)"
-                        )
-                    except Exception as exc:
-                        parallel_batch_state.update_status(idx, 'failed', str(exc))
-                        failed_count += 1
-                        logger.error(f"✗ Failed to encode image {idx} ({image_filename}): {exc}")
-                        logger.error(traceback.format_exc())
+                    corrected_images = []
+                    for step_name in ['FFC', 'GC', 'WB', 'CC']:
+                        step_result = results_dict.get(step_name)
+                        if step_result is None:
+                            continue
+                        step_uint8 = to_uint8(step_result)
+                        step_bgr = cv2.cvtColor(step_uint8, cv2.COLOR_RGB2BGR)
+                        encoded = encode_image(step_bgr)
+                        if encoded:
+                            corrected_images.append({
+                                'name': f"{img_name}_{step_name}",
+                                'data': encoded
+                            })
+
+                    if not corrected_images:
+                        raise ValueError("No corrected images produced")
+
+                    return idx, image_filename, image_path, corrected_images
+
+                with ThreadPoolExecutor(max_workers=max_w) as pool:
+                    encode_futures = {pool.submit(_encode_one, p): p for p in range(len(all_results))}
+                    for fut in as_completed(encode_futures):
+                        try:
+                            idx, image_filename, image_path, corrected_images = fut.result()
+                            session_data.append_to_list('batch_processed_images', {
+                                'image_index': idx,
+                                'filename': image_filename,
+                                'original_path': image_path,
+                                'corrected_images': corrected_images,
+                                'metrics': {}
+                            })
+                            parallel_batch_state.update_status(idx, 'completed')
+                            processed_count += 1
+                            logger.info(
+                                f"✓ Applied model to image {idx + 1}: {image_filename} "
+                                f"({len(corrected_images)} steps)"
+                            )
+                        except Exception as exc:
+                            pos = encode_futures[fut]
+                            idx = idx_map[pos]
+                            parallel_batch_state.update_status(idx, 'failed', str(exc))
+                            failed_count += 1
+                            logger.error(f"✗ Failed to encode image {idx} ({images_list[idx]['filename']}): {exc}")
+                            logger.error(traceback.format_exc())
 
                 logger.info(f"Apply-to-others complete: {processed_count} succeeded, {failed_count} failed")
 
@@ -2151,12 +2355,11 @@ def apply_color_correction():
                 logger.error(f"Apply-to-others processing error: {e}")
                 logger.error(traceback.format_exc())
             finally:
-                # Mark batch as complete
                 parallel_batch_state.mark_complete()
                 session_data.set('is_batch_mode', False)
-                # Force garbage collection
                 del loaded_images
-                gc.collect()
+                if all_results is not None:
+                    del all_results
         
         # Start processing in background (non-daemon to ensure cleanup)
         session_data.set('is_batch_mode', True)
@@ -2210,17 +2413,27 @@ def save_images():
             }), 400
         
         # Build save tasks buffer
+        # Parse compound names (e.g. 'photo1_CC') into base + step for precise filtering
+        STEP_SUFFIXES = ('_FFC', '_GC', '_WB', '_CC')
         save_tasks = []
         for img_data in corrected:
             img_name = img_data.get('name', '')
             
+            # Parse base name and step from compound name
+            base_name = img_name
+            step = None
+            for suffix in STEP_SUFFIXES:
+                if img_name.endswith(suffix):
+                    base_name = img_name[:-len(suffix)]
+                    step = suffix[1:]  # e.g. 'FFC'
+                    break
+            
             # Check if this step is selected
-            step_match = any(step in img_name for step in selected_steps)
-            if not step_match:
+            if step and step not in selected_steps:
                 continue
             
-            # Check if this image is selected (if specific images provided)
-            if selected_images and not any(sel in img_name for sel in selected_images):
+            # Check if this base image is selected (selected_images contains base names)
+            if selected_images and base_name not in selected_images:
                 continue
             
             # Add to save buffer
@@ -2245,34 +2458,13 @@ def save_images():
         failed_count = 0
         failed_files = []
         
-        def save_single_image(task):
-            """Save a single image (for parallel execution)"""
-            try:
-                img_base64 = task['data']
-                save_path = task['path']
-                
-                # Remove data URI prefix if present
-                if ',' in img_base64:
-                    img_base64 = img_base64.split(',')[1]
-                
-                img_bytes = base64.b64decode(img_base64)
-                
-                # Save to file
-                with open(save_path, 'wb') as f:
-                    f.write(img_bytes)
-                
-                return {'success': True, 'path': save_path}
-            except Exception as e:
-                return {'success': False, 'name': task['name'], 'error': str(e)}
-        
         # Use optimal number of workers for I/O operations (80% of CPUs for I/O bound)
-        import multiprocessing
         num_workers = min(max(2, int(0.8 * multiprocessing.cpu_count())), len(save_tasks))
         
         logger.info(f"Saving {len(save_tasks)} images with {num_workers} parallel workers")
         
         with ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix='SaveImage') as executor:
-            futures = {executor.submit(save_single_image, task): task for task in save_tasks}
+            futures = {executor.submit(_save_single_image, task): task for task in save_tasks}
             
             for future in as_completed(futures):
                 result = future.result()
@@ -2412,13 +2604,23 @@ def get_batch_images_list():
     try:
         batch_images = session_data.get('batch_processed_images', [])
         
-        # Format for frontend
+        # Format for frontend — extract actual available steps from stored data
+        STEP_SUFFIXES = ('_FFC', '_GC', '_WB', '_CC')
         formatted = []
         for img in batch_images:
+            available_steps = []
+            for ci in img.get('corrected_images', []):
+                name = ci.get('name', '')
+                for suffix in STEP_SUFFIXES:
+                    if name.endswith(suffix):
+                        step = suffix[1:]
+                        if step not in available_steps:
+                            available_steps.append(step)
+                        break
             formatted.append({
                 'image_index': img.get('image_index', 0),
                 'filename': img.get('filename', 'unknown'),
-                'available_steps': ['FFC', 'GC', 'WB', 'CC']  # Assume all steps
+                'available_steps': available_steps or ['CC']  # Fallback
             })
         
         return jsonify({
@@ -2472,13 +2674,18 @@ def save_batch_images():
             filename = img_data.get('filename', 'unknown')
             corrected_images = img_data.get('corrected_images', [])
             
+            STEP_SUFFIXES = ('_FFC', '_GC', '_WB', '_CC')
             for img_item in corrected_images:
                 img_name = img_item.get('name', '')
                 img_base64 = img_item.get('data', '')
                 
-                # Check if this step is selected
-                step_match = any(step in img_name for step in selected_steps)
-                if not step_match:
+                # Parse step from compound name for precise matching
+                step = None
+                for suffix in STEP_SUFFIXES:
+                    if img_name.endswith(suffix):
+                        step = suffix[1:]
+                        break
+                if step and step not in selected_steps:
                     continue
                 
                 if img_base64:
@@ -2501,34 +2708,13 @@ def save_batch_images():
         failed_count = 0
         failed_files = []
         
-        def save_single_image(task):
-            """Save a single image (for parallel execution)"""
-            try:
-                img_base64 = task['data']
-                save_path = task['path']
-                
-                # Remove data URI prefix if present
-                if ',' in img_base64:
-                    img_base64 = img_base64.split(',')[1]
-                
-                img_bytes = base64.b64decode(img_base64)
-                
-                # Save to file
-                with open(save_path, 'wb') as f:
-                    f.write(img_bytes)
-                
-                return {'success': True, 'path': save_path}
-            except Exception as e:
-                return {'success': False, 'name': task['name'], 'error': str(e)}
-        
         # Use optimal number of workers for I/O operations
-        import multiprocessing
         num_workers = min(max(2, int(0.8 * multiprocessing.cpu_count())), len(save_tasks))
         
         logger.info(f"Saving with {num_workers} parallel workers")
         
         with ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix='SaveImage') as executor:
-            futures = {executor.submit(save_single_image, task): task for task in save_tasks}
+            futures = {executor.submit(_save_single_image, task): task for task in save_tasks}
             
             for future in as_completed(futures):
                 result = future.result()
@@ -2638,9 +2824,10 @@ if __name__ == '__main__':
     logger.info(f"   ✓ SIGTERM handler registered (original: {original_sigterm})")
     
     logger.info("=" * 60)
-    logger.info("🎨 Color Correction Backend Server v2.0.0")
+    logger.info("🎨 Color Correction Backend Server v2.2.1")
     logger.info("=" * 60)
     logger.info(f"ColorCorrectionPipeline: {'✓ Available' if CC_AVAILABLE else '✗ Not Available'}")
+    logger.info(f"MCC Module: {'✓ Available' if HAS_MCC else '✗ NOT Available — color correction will fail'}")
     logger.info(f"GPU Support: {'✓ Available' if check_gpu_available() else '✗ Not Available'}")
     logger.info(f"Server: http://localhost:{PORT}")
     logger.info(f"Max Workers: {MAX_WORKERS_DEFAULT}")
