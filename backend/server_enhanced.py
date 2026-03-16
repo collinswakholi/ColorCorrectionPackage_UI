@@ -1,7 +1,7 @@
 """
 Enhanced Color Correction Backend - REFACTORED with Thread Safety & Resource Management
-Version: 2.3.0
-Date: March 5, 2026
+Version: 2.4.0
+Date: March 16, 2026
 
 CRITICAL FIXES IMPLEMENTED:
 1. Thread-safe parallel processing with proper locking
@@ -36,6 +36,8 @@ import threading
 import time
 import logging
 import warnings
+import webbrowser
+import urllib.request
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from contextlib import contextmanager
@@ -374,6 +376,11 @@ class ThreadSafeSession:
             self._data['last_metrics'] = None
             self._data['batch_processed_images'] = []
             self._data['is_batch_mode'] = False
+            self._data['cc_instance'] = None
+            # Clear lazy visualization data
+            self._data.pop('_lazy_original_bgr', None)
+            self._data.pop('_lazy_corrected_bgr', None)
+            self._data.pop('_lazy_final_step', None)
 
 # Global thread-safe session
 session_data = ThreadSafeSession()
@@ -458,6 +465,38 @@ def cleanup_upload_folder():
             logger.error(f"⚠ Failed to cleanup {folder_name} folder: {e}")
 
 atexit.register(cleanup_upload_folder)
+
+
+def _sanitize_cc_settings(settings: dict) -> dict:
+    """Ensure CC settings have correct Python types (frontend may send strings)."""
+    import json as _json
+    s = settings.copy()
+    # hidden_layers: must be a list of ints, frontend sends JSON string like "[64,32,16]"
+    hl = s.get('hidden_layers')
+    if isinstance(hl, str):
+        try:
+            hl = _json.loads(hl)
+        except (ValueError, TypeError):
+            hl = [64, 32, 16]
+    if isinstance(hl, list):
+        s['hidden_layers'] = [int(x) for x in hl]
+    # Numeric fields that must be int
+    for key in ('max_iterations', 'degree', 'random_state', 'n_samples', 'ncomp',
+                'nlayers', 'batch_size', 'patience'):
+        if key in s and s[key] is not None:
+            try:
+                s[key] = int(s[key])
+            except (ValueError, TypeError):
+                pass
+    # Numeric fields that must be float
+    for key in ('tol', 'learning_rate', 'dropout_rate'):
+        if key in s and s[key] is not None:
+            try:
+                s[key] = float(s[key])
+            except (ValueError, TypeError):
+                pass
+    return s
+
 
 # Image encoding/decoding with error handling
 def decode_image(base64_str: str) -> Optional[np.ndarray]:
@@ -669,6 +708,7 @@ def process_single_image_with_timeout(
             gc_settings = config_dict.get('gc_settings', {}).copy()
             wb_settings = config_dict.get('wb_settings', {}).copy()
             cc_settings = config_dict.get('cc_settings', {}).copy()
+            cc_settings = _sanitize_cc_settings(cc_settings)
             
             # CRITICAL: Disable ALL visualizations and metrics for batch performance
             # No deltaE computation
@@ -822,7 +862,7 @@ def health_check():
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.3.0',
+        'version': '2.4.0',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),
@@ -1255,6 +1295,7 @@ def run_color_correction_single():
         gc_settings = data.get('gcSettings', settings.get('gc', {})).copy()
         wb_settings = settings.get('wb', {}).copy()
         cc_settings = data.get('ccSettings', settings.get('cc', {})).copy()
+        cc_settings = _sanitize_cc_settings(cc_settings)
         
         # Enable deltaE based on user preference and batch mode (FORCE DISABLE in batch mode)
         if is_batch_mode:
@@ -1732,7 +1773,7 @@ def run_color_correction_parallel():
             'ffc_settings': data.get('ffcSettings', settings.get('ffc', {})),
             'gc_settings': data.get('gcSettings', settings.get('gc', {})),
             'wb_settings': settings.get('wb', {}),
-            'cc_settings': data.get('ccSettings', settings.get('cc', {}))
+            'cc_settings': _sanitize_cc_settings(data.get('ccSettings', settings.get('cc', {})))
         }
         
         # Initialize batch state atomically
@@ -1856,10 +1897,15 @@ def get_batch_progress():
 
 @app.route('/api/clear-session', methods=['POST'])
 def clear_session():
-    """Clear session data (thread-safe)"""
+    """Clear session data and uploaded files (thread-safe)"""
     try:
         session_data.reset()
-        logger.info("Session cleared")
+        # Clean physical files from uploads/results/models folders
+        cleanup_upload_folder()
+        # Recreate empty directories
+        for folder in [UPLOAD_FOLDER, RESULTS_FOLDER, MODELS_FOLDER]:
+            os.makedirs(folder, exist_ok=True)
+        logger.info("Session and files cleared")
         return jsonify({
             'success': True,
             'message': 'Session cleared successfully'
@@ -1955,15 +2001,26 @@ def restart_server():
         def do_restart():
             time.sleep(1)
             logger.info("Spawning new server process...")
-            python = sys.executable
+            # Build the restart command
+            if getattr(sys, 'frozen', False):
+                # PyInstaller exe: sys.executable IS the exe, argv[0] is also the exe
+                cmd = [sys.executable] + sys.argv[1:]
+            else:
+                # Regular Python: need interpreter + script
+                cmd = [sys.executable] + sys.argv
+            logger.info(f"Restart command: {cmd}")
             # Spawn a fully detached child, then exit the current process
             CREATE_NEW_PROCESS_GROUP = 0x00000200
             DETACHED_PROCESS = 0x00000008
+            # Tell the child to skip auto-browser-launch; the frontend
+            # already polls /api/health and reconnects in the same tab.
+            child_env = {**os.environ, 'NO_BROWSER': '1'}
             subprocess.Popen(
-                [python] + sys.argv,
+                cmd,
                 creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS,
                 close_fds=True,
-                cwd=os.getcwd(),
+                cwd=os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd(),
+                env=child_env,
             )
             logger.info("New process spawned, shutting down old process...")
             logging.shutdown()
@@ -2635,6 +2692,56 @@ def get_batch_images_list():
             'error': str(e)
         }), 500
 
+@app.route('/api/batch-preview-image', methods=['GET'])
+def get_batch_preview_image():
+    """Get a single corrected image from batch results for preview"""
+    try:
+        image_index = request.args.get('image_index', type=int)
+        step = request.args.get('step', 'CC')
+
+        if image_index is None:
+            return jsonify({'success': False, 'error': 'image_index required'}), 400
+
+        batch_images = session_data.get('batch_processed_images', [])
+
+        # Find the matching batch result
+        target = None
+        for img in batch_images:
+            if img.get('image_index') == image_index:
+                target = img
+                break
+
+        if not target:
+            return jsonify({'success': False, 'error': f'No batch result for image_index {image_index}'}), 404
+
+        # Find the corrected image for the requested step
+        suffix = f'_{step}'
+        for ci in target.get('corrected_images', []):
+            if ci.get('name', '').endswith(suffix):
+                return jsonify({
+                    'success': True,
+                    'image_data': ci.get('data'),
+                    'name': ci.get('name'),
+                    'filename': target.get('filename', 'unknown')
+                }), 200
+
+        # Fallback: return the last corrected image
+        corrected = target.get('corrected_images', [])
+        if corrected:
+            last = corrected[-1]
+            return jsonify({
+                'success': True,
+                'image_data': last.get('data'),
+                'name': last.get('name'),
+                'filename': target.get('filename', 'unknown')
+            }), 200
+
+        return jsonify({'success': False, 'error': 'No corrected images found'}), 404
+
+    except Exception as e:
+        logger.error(f"Batch preview image error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/save-batch-images', methods=['POST'])
 def save_batch_images():
     """Save batch processed images with parallel processing"""
@@ -2841,6 +2948,32 @@ if __name__ == '__main__':
         logger.warning("  Install with: pip install ColorCorrectionPipeline")
         logger.info("=" * 60)
     
+    # Auto-launch browser once backend is ready
+    def _auto_open_browser(port: int, max_retries: int = 30, interval: float = 1.0):
+        """Poll health endpoint in background, then open the default browser."""
+        url = f"http://127.0.0.1:{port}"
+        health = f"{url}/api/health"
+        for attempt in range(1, max_retries + 1):
+            try:
+                with urllib.request.urlopen(health, timeout=2) as resp:
+                    if resp.status == 200:
+                        logger.info(f"🌐 Backend ready — opening browser at {url}")
+                        webbrowser.open(url)
+                        return
+            except Exception:
+                pass
+            time.sleep(interval)
+        logger.warning("⚠ Backend did not respond in time — skipping auto browser launch")
+
+    # Skip auto-open if NO_BROWSER env var is set (useful for dev launchers / CI)
+    if not os.getenv('NO_BROWSER'):
+        _browser_thread = threading.Thread(
+            target=_auto_open_browser, args=(PORT,), daemon=True
+        )
+        _browser_thread.start()
+    else:
+        logger.info("ℹ NO_BROWSER set — skipping auto browser launch")
+
     try:
         logger.info("🚀 Starting Flask application...")
         app.run(

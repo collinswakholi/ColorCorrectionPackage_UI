@@ -99,7 +99,8 @@ function startBackend() {
     backendProcess = spawn(pythonCmd, ['server_enhanced.py'], {
       cwd: BACKEND_DIR,
       stdio: 'inherit',
-      shell: true
+      shell: true,
+      env: { ...process.env, NO_BROWSER: '1' }
     });
     
     backendProcess.on('error', (err) => {

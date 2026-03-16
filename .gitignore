@@ -6,6 +6,21 @@ frontend/dist/
 backend/frontend_dist/
 .DS_Store
 *.pyc
-__pycache__/
+**/__pycache__/
 backend/dist/
 backend/build/
+
+# Secrets / certs
+*.pfx
+
+# Build artifacts
+backend/build.log
+backend/installer_output/
+
+# Runtime data
+backend/uploads/
+backend/results/
+backend/models/
+
+# OS junk
+Thumbs.db

@@ -267,27 +267,6 @@ chmod +x ColorCorrector-Linux-aarch64.AppImage
 - All installers are self-contained with no external dependencies
 - The executable includes Python interpreter, all dependencies, and the frontend
 
-## Docker image
-
-We provide a Dockerfile at `backend/Dockerfile` that builds the frontend, copies it into the backend, installs Python runtime dependencies and runs the Flask app.
-
-Build and run locally:
-
-```bash
-# Build the image (from repo root)
-docker build -t collins137/colorcorrector:local -f backend/Dockerfile .
-
-# Run the container (maps host 5000 -> container 5000)
-docker run --rm -p 5000:5000 collins137/colorcorrector:local
-```
-
-Notes about pushing to Docker Hub
-- The supplied GitHub Actions workflow (`.github/workflows/windows-docker.yml`) will build a Docker image and push to Docker Hub when the repository has the following repository secrets configured:
-   - `DOCKERHUB_USERNAME` — your Docker Hub username (e.g., `collins137`)
-   - `DOCKERHUB_TOKEN` — a Docker Hub access token or password
-
-Once secrets are set, pushing to `main` (or manually triggering the workflow) will build and push the image `collins137/colorcorrector:latest`.
-
 ## GitHub Actions CI
 
 The project uses GitHub Actions for automated multi-architecture builds:

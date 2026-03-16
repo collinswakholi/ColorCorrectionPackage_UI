@@ -85,6 +85,7 @@ echo ======================================================================
 echo   Color Correction Studio
 echo ======================================================================
 echo Starting backend server...
+set "NO_BROWSER=1"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "& { $exe = Resolve-Path '%EXE_PATH%'; $proc = Start-Process -FilePath $exe -PassThru; Write-Host ('Backend started (PID {0})' -f $proc.Id); $healthUri = 'http://127.0.0.1:5000/api/health'; Write-Host 'Waiting for backend to be ready...'; for ($i = 0; $i -lt 30; $i++) { try { Invoke-WebRequest -UseBasicParsing -Uri $healthUri | Out-Null; Write-Host 'Backend is ready.'; break } catch { Start-Sleep -Seconds 1 } }; Write-Host ''; Write-Host '======================================================================'; Write-Host '  Opening application in browser...'; Write-Host '======================================================================'; Write-Host '  URL: http://localhost:5000'; Write-Host ''; Write-Host '  Close the browser to stop the application'; Write-Host '======================================================================'; Write-Host ''; Start-Process 'http://127.0.0.1:5000'; Write-Host 'Application is running. Press Ctrl+C to stop.'; Write-Host ''; try { Wait-Process -Id $proc.Id } finally { if (-not $proc.HasExited) { Write-Host 'Shutting down backend...'; Stop-Process -Id $proc.Id -Force } } }"

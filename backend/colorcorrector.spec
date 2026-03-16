@@ -19,6 +19,10 @@ from PyInstaller.utils.hooks import (
 )
 
 block_cipher = None
+
+# Prevent ultralytics from auto-installing CLIP and other deps during collect_submodules
+os.environ["YOLO_AUTOINSTALL"] = "0"
+
 backend_dir = os.path.dirname(os.path.abspath(SPEC))
 frontend_dist = os.path.join(backend_dir, "frontend_dist")
 models_dir = os.path.join(backend_dir, "models")
@@ -40,26 +44,37 @@ hiddenimports += _collect_without_tests("pandas")
 hiddenimports += _collect_without_tests("numpy")
 hiddenimports += _collect_without_tests("PIL")
 hiddenimports += _collect_without_tests("numba")
-hiddenimports += collect_submodules("torch")
-hiddenimports += collect_submodules("torchvision")
-hiddenimports += [
-    "flask",
-    "flask_cors",
-    "flask_compress",
-    "ColorCorrectionPipeline",
-    "ColorCorrectionPipeline.core",
-    "ColorCorrectionPipeline.core.accel",
-    "ColorCorrectionPipeline.flat_field",
-    "ColorCorrectionPipeline.gc",
-    "ColorCorrectionPipeline.wb",
-    "ColorCorrectionPipeline.cc",
-    "ultralytics",
-    "colour",
-    "plotly",
-    "polars",
-    "seaborn",
-    "imageio",
+# Collect torch/torchvision but aggressively filter unused modules
+_torch_exclude_patterns = [
+    "torch.testing._internal", "torch.distributed", "torch.onnx",
+    "torch.quantization", "torch.nn.quantized", "torch.nn.quantizable",
+    "torch.profiler", "torch.package", "torch.xpu",
+    "torch.ao", "torch.export", "torch.compiler",
+    "torch.contrib", "torch.fx", "torch.masked",
+    "torch.monitor", "torch.multiprocessing",
+    "torch._dynamo", "torch._functorch", "torch._inductor",
+    "torch._lazy", "torch._subclasses",
+    "torch.utils.tensorboard", "torch.utils.benchmark",
 ]
+_torch_subs = collect_submodules("torch")
+_torch_subs = [m for m in _torch_subs if not any(x in m for x in _torch_exclude_patterns)]
+hiddenimports += _torch_subs
+# Only collect torchvision modules actually used (models, transforms, ops, io)
+hiddenimports += collect_submodules("torchvision")
+hiddenimports += _collect_without_tests("colour")
+hiddenimports += collect_submodules("colour_checker_detection")
+hiddenimports += _collect_without_tests("ultralytics")
+# plotly: only collect core + graph_objs, skip massive validators tree (loaded lazily)
+_plotly_subs = _collect_without_tests("plotly")
+_plotly_subs = [m for m in _plotly_subs if "plotly.validators" not in m]
+hiddenimports += _plotly_subs
+hiddenimports += _collect_without_tests("seaborn")
+hiddenimports += collect_submodules("flask")
+hiddenimports += collect_submodules("flask_cors")
+hiddenimports += collect_submodules("flask_compress")
+hiddenimports += collect_submodules("psutil")
+# CCP: auto-discover all 20 submodules instead of incomplete manual list
+hiddenimports += collect_submodules("ColorCorrectionPipeline")
 
 # Binary dependencies (DLLs / shared libraries)
 binaries = []
@@ -74,20 +89,21 @@ binaries += collect_dynamic_libs("numba")
 # These are typically system dependencies, but we try to bundle them
 import sys
 if sys.platform.startswith('linux'):
+    import sysconfig
     import glob
+    # Detect the multiarch tuple (e.g., x86_64-linux-gnu, aarch64-linux-gnu)
+    _multiarch = sysconfig.get_config_var('MULTIARCH') or 'x86_64-linux-gnu'
+    _lib_dir = f'/usr/lib/{_multiarch}'
     # Try to find and include OpenGL libraries
-    gl_paths = [
-        '/usr/lib/x86_64-linux-gnu/libGL.so.1',
-        '/usr/lib/x86_64-linux-gnu/libGLX.so.0',
-        '/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0',
-        '/usr/lib/x86_64-linux-gnu/libgomp.so.1',
-    ]
-    for lib_path in gl_paths:
-        if os.path.exists(lib_path):
-            binaries.append((lib_path, '.'))
+    _gl_lib_names = ['libGL.so.1', 'libGLX.so.0', 'libglib-2.0.so.0', 'libgomp.so.1']
+    for _lib_name in _gl_lib_names:
+        _full_path = os.path.join(_lib_dir, _lib_name)
+        if os.path.exists(_full_path):
+            binaries.append((_full_path, '.'))
         else:
-            # Try glob pattern
-            matches = glob.glob(lib_path.replace('.so.1', '.so*').replace('.so.0', '.so*'))
+            # Try glob pattern for versioned .so files
+            _stem = _lib_name.split('.so')[0]
+            matches = glob.glob(os.path.join(_lib_dir, _stem + '.so*'))
             if matches:
                 binaries.append((matches[0], '.'))
 
@@ -114,6 +130,9 @@ def filter_cuda_binaries(bins):
 
 binaries = filter_cuda_binaries(binaries)
 
+# Filter out .lib static library files (not needed at runtime, only for linking)
+binaries = [b for b in binaries if not b[0].lower().endswith('.lib')]
+
 # Data files required at runtime
 datas = []
 datas += collect_data_files("sklearn")
@@ -123,6 +142,12 @@ datas += collect_data_files("torch")
 datas += collect_data_files("PIL")
 datas += collect_data_files("numba")
 datas += collect_data_files("ColorCorrectionPipeline")
+datas += collect_data_files("colour")
+datas += collect_data_files("colour_checker_detection")
+datas += collect_data_files("ultralytics")
+datas += collect_data_files("plotly")
+datas += collect_data_files("seaborn")
+datas += collect_data_files("scipy")
 
 if os.path.isdir(frontend_dist):
     datas.append((frontend_dist, "frontend_dist"))
@@ -138,7 +163,7 @@ if cc_spec and cc_spec.origin:
         datas.append((yolo_model, os.path.join("ColorCorrectionPipeline", "flat_field", "models")))
 
 analysis = Analysis(
-    ["server_enhanced.py"],
+    ["server_enhanced.py", "scatter_plot_utils.py"],
     pathex=[backend_dir],
     binaries=binaries,
     datas=datas,
@@ -147,19 +172,20 @@ analysis = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "tkinter", 
-        "PySide6", 
-        "PyQt5", 
-        "statsmodels",
-        # Exclude CUDA libraries (not needed for CPU-only builds)
-        "nvidia",
-        "nvidia.cuda",
-        "nvidia.cudnn",
-        "nvidia.cublas",
-        "nvidia.cufft",
-        "nvidia.curand",
-        "nvidia.cusolver",
-        "nvidia.cusparse",
+        "tkinter", "PySide6", "PyQt5", "statsmodels",
+        # CUDA / NVIDIA
+        "nvidia", "nvidia.cuda", "nvidia.cudnn", "nvidia.cublas",
+        "nvidia.cufft", "nvidia.curand", "nvidia.cusolver", "nvidia.cusparse",
+        # CLIP and its deps
+        "clip", "ftfy", "regex",
+        # Heavy torch internals
+        "torchaudio",
+        "torch.utils.tensorboard", "torch.utils.benchmark",
+        # Dev tools pulled in transitively
+        "IPython", "jupyter", "notebook", "nbformat", "nbconvert",
+        "pytest", "_pytest", "py", "pluggy",
+        "lxml", "docutils", "sphinx",
+        "pygame", "pygments",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -167,13 +193,16 @@ analysis = Analysis(
     noarchive=False,
 )
 
+# Filter torch data files: remove .lib files and test data that are not needed at runtime
+datas = [d for d in datas if not d[0].lower().endswith('.lib')]
+
 pyz = PYZ(analysis.pure, analysis.zipped_data, cipher=block_cipher)
 
+# --- onedir mode: faster startup (no multi-GB extraction), same total size ---
 exe = EXE(
     pyz,
     analysis.scripts,
-    [],
-    exclude_binaries=True,
+    [],          # no binaries/datas in EXE for onedir
     name="ColorCorrector",
     debug=False,
     bootloader_ignore_signals=False,
@@ -181,9 +210,6 @@ exe = EXE(
     upx=True,
     console=True,
     disable_windowed_traceback=False,
-    # target_arch will be set by environment variable or auto-detected
-    # For cross-compilation: set PYINSTALLER_TARGET_ARCH environment variable
-    # Examples: 'x86_64', 'arm64', 'universal2' (macOS only)
     target_arch=os.environ.get('PYINSTALLER_TARGET_ARCH', None),
     codesign_identity=None,
     entitlements_file=None,
@@ -192,7 +218,6 @@ exe = EXE(
 coll = COLLECT(
     exe,
     analysis.binaries,
-    analysis.zipfiles,
     analysis.datas,
     strip=False,
     upx=True,

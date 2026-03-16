@@ -28,6 +28,9 @@ chmod +x "$EXE_PATH"
 
 echo "Starting backend server..."
 
+# Prevent server from also opening browser (this script handles it)
+export NO_BROWSER=1
+
 # Start backend in background
 "$EXE_PATH" &
 BACKEND_PID=$!

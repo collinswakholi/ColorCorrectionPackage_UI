@@ -115,6 +115,7 @@ export default function ColorCorrectionUI() {
   const whiteInputRef = useRef();
   const whiteDragCounter = useRef(0);
   const pollIntervalRef = useRef(null);
+  const batchResetRef = useRef(null);
 
   // White image drop zone drag state
   const [isWhiteDragging, setIsWhiteDragging] = useState(false);
@@ -268,6 +269,19 @@ export default function ColorCorrectionUI() {
     setDeltaEValues({});
     setDeltaEDialogOpen(false);
 
+    // Clear batch state
+    setBatchProcessComplete(false);
+    setBatchProgress({ current: 0, total: 0, status: '' });
+    setBatchImagesList([]);
+    setSelectedForApply([]);
+    setSelectedForProcess([]);
+
+    // Clear comparison / analysis data
+    setComparisonData({ original: null, corrected: null });
+    setDifferenceDialogOpen(false);
+    setBeforeAfterDialogOpen(false);
+    setScatterDialogOpen(false);
+
     // Reset running state
     setRunning(false);
 
@@ -276,7 +290,7 @@ export default function ColorCorrectionUI() {
     if (whiteInputRef.current) whiteInputRef.current.value = '';
     if (ccmInputRef.current) ccmInputRef.current.value = '';
 
-    // Clear backend session
+    // Clear backend session (resets cc_instance, uploaded files, etc.)
     apiPost("/api/clear-session").catch(err => console.error("Failed to clear backend:", err));
 
     appendLog("\n✓ Cleared all images and reset application");
@@ -426,8 +440,6 @@ export default function ColorCorrectionUI() {
         }
 
         // Display DeltaE metrics using the summary from backend
-        console.log('DEBUG: result.delta_e_summary =', result.delta_e_summary);
-
         if (result.delta_e_summary && Object.keys(result.delta_e_summary).length > 0) {
           const deltaESteps = ['FFC', 'GC', 'WB', 'CC'];
           deltaESteps.forEach(step => {
@@ -455,7 +467,6 @@ export default function ColorCorrectionUI() {
             }, 100);
           }
         } else {
-          console.log('DEBUG: No delta_e_summary in response');
           appendLog(`\n  ℹ️ No ΔE metrics available (may not be enabled for all steps)`);
         }
 
@@ -1092,6 +1103,23 @@ export default function ColorCorrectionUI() {
           if (completed > 0) {
             setBatchProcessComplete(true);
             appendLog(`\n💡 Tip: Click "Save Images" to save all ${completed} corrected images`);
+
+            // Show the last corrected image in the preview
+            try {
+              const listResp = await fetch("/api/batch-images-list");
+              const listData = await listResp.json();
+              if (listData.success && listData.images && listData.images.length > 0) {
+                const lastImg = listData.images[listData.images.length - 1];
+                const previewResp = await fetch(`/api/batch-preview-image?image_index=${lastImg.image_index}&step=CC`);
+                const previewData = await previewResp.json();
+                if (previewData.success && previewData.image_data) {
+                  setSelectedImage(previewData.image_data);
+                  setPreviewLabel(`Batch Result: ${lastImg.filename} (CC)`);
+                }
+              }
+            } catch (previewErr) {
+              // Non-critical — preview just won't update
+            }
           }
         }
       }
@@ -1101,8 +1129,12 @@ export default function ColorCorrectionUI() {
       appendLog(`\n${"=".repeat(70)}`);
     } finally {
       setRunning(false);
+      const resetBatchId = Date.now();
+      batchResetRef.current = resetBatchId;
       setTimeout(() => {
-        setBatchProgress({ current: 0, total: 0, status: '' });
+        if (batchResetRef.current === resetBatchId) {
+          setBatchProgress({ current: 0, total: 0, status: '' });
+        }
       }, 3000);
     }
   }
@@ -1236,7 +1268,7 @@ export default function ColorCorrectionUI() {
                       <img src={whiteImage.url} alt="White ref" className="w-10 h-10 object-cover rounded border border-slate-200" />
                       <span className="text-xs text-slate-600 truncate flex-1 text-left">{whiteImage.file.name}</span>
                       <button
-                        onClick={(ev) => { ev.stopPropagation(); setWhiteImage(null); if (whiteInputRef.current) whiteInputRef.current.value = ''; appendLog('\n✓ White image removed'); }}
+                        onClick={(ev) => { ev.stopPropagation(); if (whiteImage) URL.revokeObjectURL(whiteImage.url); setWhiteImage(null); if (whiteInputRef.current) whiteInputRef.current.value = ''; appendLog('\n✓ White image removed'); }}
                         className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors"
                         title="Remove white image"
                       >

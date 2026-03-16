@@ -25,6 +25,7 @@ seaborn>=0.13.2
 
 # Other dependencies
 colour-science>=0.4.0
+colour-checker-detection>=0.1.4
 plotly>=5.0.0
 psutil>=5.9.0
 
