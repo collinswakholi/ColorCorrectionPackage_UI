@@ -203,6 +203,7 @@ exe = EXE(
     pyz,
     analysis.scripts,
     [],          # no binaries/datas in EXE for onedir
+    exclude_binaries=True,  # REQUIRED for onedir: keeps binaries out of EXE so COLLECT can place them
     name="ColorCorrector",
     debug=False,
     bootloader_ignore_signals=False,
