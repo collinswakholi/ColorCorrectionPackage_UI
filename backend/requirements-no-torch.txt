@@ -40,4 +40,4 @@ ultralytics>=8.0.0
 # (since we've already installed all its deps above)
 # Note: Use --no-deps when installing this package
 numba>=0.55.0
-ColorCorrectionPipeline>=1.4.3
+ColorCorrectionPipeline>=1.4.4

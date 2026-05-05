@@ -38,9 +38,9 @@ RUN python -m pip install torch==2.5.1+cpu torchvision==0.20.1+cpu --index-url h
 # Install other requirements (excluding torch which we already installed)
 RUN if [ -f requirements-no-torch.txt ]; then python -m pip install -r requirements-no-torch.txt --no-cache-dir; fi
 # Install numba for JIT acceleration (before ColorCorrectionPipeline)
-RUN python -m pip install numba>=0.55.0 --no-cache-dir
+RUN python -m pip install "numba>=0.55.0" --no-cache-dir
 # Install ColorCorrectionPipeline without dependencies
-RUN python -m pip install --no-deps ColorCorrectionPipeline>=1.4.3 --no-cache-dir
+RUN python -m pip install --no-deps "ColorCorrectionPipeline>=1.4.4" --no-cache-dir
 
 ENV PORT=5000
 EXPOSE 5000
