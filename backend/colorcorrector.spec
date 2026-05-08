@@ -11,7 +11,6 @@
 # Users can run the executable without installing Python, Node.js, or any dependencies.
 #
 import os
-import importlib.util
 from PyInstaller.utils.hooks import (
     collect_submodules,
     collect_dynamic_libs,
@@ -19,9 +18,6 @@ from PyInstaller.utils.hooks import (
 )
 
 block_cipher = None
-
-# Prevent ultralytics from auto-installing CLIP and other deps during collect_submodules
-os.environ["YOLO_AUTOINSTALL"] = "0"
 
 backend_dir = os.path.dirname(os.path.abspath(SPEC))
 frontend_dist = os.path.join(backend_dir, "frontend_dist")
@@ -63,7 +59,6 @@ hiddenimports += _torch_subs
 hiddenimports += collect_submodules("torchvision")
 hiddenimports += _collect_without_tests("colour")
 hiddenimports += collect_submodules("colour_checker_detection")
-hiddenimports += _collect_without_tests("ultralytics")
 # plotly: only collect core + graph_objs, skip massive validators tree (loaded lazily)
 _plotly_subs = _collect_without_tests("plotly")
 _plotly_subs = [m for m in _plotly_subs if "plotly.validators" not in m]
@@ -144,7 +139,6 @@ datas += collect_data_files("numba")
 datas += collect_data_files("ColorCorrectionPipeline")
 datas += collect_data_files("colour")
 datas += collect_data_files("colour_checker_detection")
-datas += collect_data_files("ultralytics")
 datas += collect_data_files("plotly")
 datas += collect_data_files("seaborn")
 datas += collect_data_files("scipy")
@@ -153,14 +147,6 @@ if os.path.isdir(frontend_dist):
     datas.append((frontend_dist, "frontend_dist"))
 if os.path.isdir(models_dir):
     datas.append((models_dir, "models"))
-
-# Ensure packaged ColorCorrectionPipeline model assets are bundled
-cc_spec = importlib.util.find_spec("ColorCorrectionPipeline")
-if cc_spec and cc_spec.origin:
-    cc_root = os.path.dirname(cc_spec.origin)
-    yolo_model = os.path.join(cc_root, "flat_field", "models", "plane_det_model_YOLO_512_n.pt")
-    if os.path.isfile(yolo_model):
-        datas.append((yolo_model, os.path.join("ColorCorrectionPipeline", "flat_field", "models")))
 
 analysis = Analysis(
     ["server_enhanced.py", "scatter_plot_utils.py"],

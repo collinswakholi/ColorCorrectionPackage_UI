@@ -110,14 +110,14 @@ docker run -p 5000:5000 colorcorrector
 |-------|-------|---------|
 | **Frontend** | React 18 + Vite 6 + Tailwind CSS 3 | Modular component design with lazy-loaded modals |
 | **Backend** | Flask 2.x REST API | Thread-safe processing, parallel batch inference, lazy analysis endpoints |
-| **Core** | [ColorCorrectionPipeline](https://pypi.org/project/ColorCorrectionPipeline/) ≥1.4.4 | Numba/CUDA acceleration, 3D LUT prediction, batch APIs |
+| **Core** | [ColorCorrectionPipeline](https://pypi.org/project/ColorCorrectionPipeline/) 1.4.5 | OpenCV DNN ONNX FFC detection, Numba/CUDA acceleration, lazy 3D LUT prediction, batch APIs |
 | **Packaging** | PyInstaller + Inno Setup / DMG / AppImage | Cross-platform CI via GitHub Actions |
 
 ## Dependencies
 
 Core backend requirements (see [requirements.txt](backend/requirements.txt)):
 
-- `ColorCorrectionPipeline>=1.4.4` — the underlying correction engine
+- `ColorCorrectionPipeline==1.4.5` — the underlying correction engine
 - `Flask>=2.3.0`, `flask-cors`, `flask-compress` — web server
 - `numba>=0.55.0` — JIT/CUDA acceleration
 - `opencv-contrib-python>=4.8.0` — image I/O and chart detection

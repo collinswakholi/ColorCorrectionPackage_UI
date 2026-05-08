@@ -1,6 +1,6 @@
 """
 Enhanced Color Correction Backend - REFACTORED with Thread Safety & Resource Management
-Version: 2.4.0
+Version: 2.5.0
 Date: March 16, 2026
 
 CRITICAL FIXES IMPLEMENTED:
@@ -862,7 +862,7 @@ def health_check():
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.4.0',
+        'version': '2.5.0',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),

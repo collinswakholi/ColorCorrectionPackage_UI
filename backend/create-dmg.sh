@@ -10,7 +10,7 @@ echo "=========================================="
 echo ""
 
 APP_NAME="ColorCorrector"
-APP_VERSION="2.4.0"
+APP_VERSION="2.5.0"
 DIST_DIR="dist"
 APP_BUNDLE="${APP_NAME}.app"
 

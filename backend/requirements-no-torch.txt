@@ -33,11 +33,8 @@ psutil>=5.9.0
 pyinstaller>=5.12.0
 pyinstaller-hooks-contrib>=2024.2
 
-# YOLO for object detection (used by ColorCorrectionPipeline)
-ultralytics>=8.0.0
-
 # Install ColorCorrectionPipeline last without dependencies
 # (since we've already installed all its deps above)
 # Note: Use --no-deps when installing this package
 numba>=0.55.0
-ColorCorrectionPipeline>=1.4.4
+ColorCorrectionPipeline==1.4.5
