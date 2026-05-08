@@ -10,7 +10,7 @@ echo "=========================================="
 echo ""
 
 APP_NAME="ColorCorrector"
-APP_VERSION="2.5.0"
+APP_VERSION="2.5.1"
 DIST_DIR="dist"
 APPDIR="${APP_NAME}.AppDir"
 

@@ -1,6 +1,6 @@
 """
 Enhanced Color Correction Backend - REFACTORED with Thread Safety & Resource Management
-Version: 2.5.0
+Version: 2.5.1
 Date: March 16, 2026
 
 CRITICAL FIXES IMPLEMENTED:
@@ -310,7 +310,7 @@ class ThreadSafeSession:
                     'n_samples': 50,
                     'ncomp': 1,
                     'nlayers': 100,
-                    'hidden_layers': [64, 32, 16],
+                    'hidden_layers': [64],
                     'learning_rate': 0.001,
                     'batch_size': 16,
                     'patience': 10,
@@ -471,15 +471,28 @@ def _sanitize_cc_settings(settings: dict) -> dict:
     """Ensure CC settings have correct Python types (frontend may send strings)."""
     import json as _json
     s = settings.copy()
-    # hidden_layers: must be a list of ints, frontend sends JSON string like "[64,32,16]"
+    # hidden_layers must become a list of ints; accept UI text such as "64" or "[64,32]".
     hl = s.get('hidden_layers')
     if isinstance(hl, str):
+        text = hl.strip()
         try:
-            hl = _json.loads(hl)
+            hl = _json.loads(text)
         except (ValueError, TypeError):
-            hl = [64, 32, 16]
+            hl = [part.strip() for part in text.split(',') if part.strip()]
+    if isinstance(hl, (int, float)):
+        hl = [hl]
+    if isinstance(hl, tuple):
+        hl = list(hl)
     if isinstance(hl, list):
-        s['hidden_layers'] = [int(x) for x in hl]
+        parsed = []
+        for x in hl:
+            try:
+                value = int(x)
+            except (ValueError, TypeError):
+                continue
+            if value > 0:
+                parsed.append(value)
+        s['hidden_layers'] = parsed or [64]
     # Numeric fields that must be int
     for key in ('max_iterations', 'degree', 'random_state', 'n_samples', 'ncomp',
                 'nlayers', 'batch_size', 'patience'):
@@ -862,7 +875,7 @@ def health_check():
         'status': 'ok',
         'message': 'Backend is running',
         'cc_available': CC_AVAILABLE,
-        'version': '2.5.0',
+        'version': '2.5.1',
         'features': {
             'parallel_processing': True,
             'gpu_support': check_gpu_available(),

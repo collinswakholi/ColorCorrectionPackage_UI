@@ -3,7 +3,7 @@
 ; Requires: Inno Setup 6.x (https://jrsoftware.org/isinfo.php)
 
 #define MyAppName "ColorCorrector"
-#define MyAppVersion "2.5.0"
+#define MyAppVersion "2.5.1"
 #define MyAppPublisher "Collins Wakholi"
 #define MyAppURL "https://github.com/collinswakholi/ColorCorrectionPackage_UI"
 #define MyAppExeName "ColorCorrector.exe"

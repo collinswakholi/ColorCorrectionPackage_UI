@@ -204,7 +204,7 @@ export function CCSettingsModal({ isOpen, onClose, settings, setSettings, saveCc
               <input type="text" className={inputCls}
                      value={typeof settings.hidden_layers === 'string' ? settings.hidden_layers : JSON.stringify(settings.hidden_layers)}
                      onChange={(e) => setSettings({ ...settings, hidden_layers: e.target.value })} />
-              <p className="text-xs text-slate-500 mt-1">JSON array, e.g. [64, 32, 16]</p>
+              <p className="text-xs text-slate-500 mt-1">Layer sizes, e.g. 64 or [64, 32]</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {[

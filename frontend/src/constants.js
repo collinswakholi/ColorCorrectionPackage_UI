@@ -30,7 +30,7 @@ export const DEFAULT_CC_SETTINGS = {
   verbose: false,
   n_samples: 50,
   ncomp: 1,
-  hidden_layers: [64, 32, 16],
+  hidden_layers: [64],
   learning_rate: 0.001,
   batch_size: 16,
   patience: 10,
