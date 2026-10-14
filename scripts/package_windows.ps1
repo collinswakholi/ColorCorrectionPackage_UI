@@ -16,7 +16,7 @@ $libtorch = (Get-Content -LiteralPath $sdkDescriptor -Raw | ConvertFrom-Json).pa
 if (-not (Test-Path -LiteralPath (Join-Path $libtorch 'include\torch\csrc\api\include\torch\torch.h'))) { throw 'Build SDK lacks headers.' }
 
 $savedEnvironment = @{}
-foreach ($name in @('LIBTORCH','LIBTORCH_PATH','KMP_DUPLICATE_LIB_OK','LIBTORCH_BYPASS_VERSION_CHECK','PATH','RUSTFLAGS')) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+foreach ($name in @('LIBTORCH','LIBTORCH_PATH','KMP_DUPLICATE_LIB_OK','LIBTORCH_BYPASS_VERSION_CHECK','PATH','RUSTFLAGS','CXXFLAGS','CFLAGS')) { $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
 $env:LIBTORCH = $libtorch
 $env:LIBTORCH_PATH = $libtorch
@@ -24,6 +24,9 @@ $env:KMP_DUPLICATE_LIB_OK = "TRUE"
 $env:LIBTORCH_BYPASS_VERSION_CHECK = "1"
 $env:PATH = (Join-Path $libtorch "lib") + ";" + $env:PATH
 $env:RUSTFLAGS = ($env:RUSTFLAGS + ' --remap-path-prefix=' + $env:USERPROFILE + '=/build').Trim()
+# MSVC's prefix trimming also removes __FILE__ paths from torch-sys C++ headers.
+$env:CXXFLAGS = ($env:CXXFLAGS + ' /d1trimfile:' + $env:USERPROFILE).Trim()
+$env:CFLAGS = ($env:CFLAGS + ' /d1trimfile:' + $env:USERPROFILE).Trim()
 
 Push-Location (Join-Path $root "engine")
 try {
@@ -134,6 +137,12 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 
 & "$PSScriptRoot\write_build_info.ps1" -Dest $dist
 & "$PSScriptRoot\stage_licenses.ps1" -Dest $dist
+
+# Do not hash/package upstream debug symbols that Inno intentionally excludes.
+Get-ChildItem -LiteralPath $dist -Recurse -File -Filter '*.pdb' | ForEach-Object {
+    if (-not $_.FullName.StartsWith($expectedDist + [IO.Path]::DirectorySeparatorChar)) { throw 'Unexpected symbol path.' }
+    Remove-Item -LiteralPath $_.FullName -Force
+}
 
 $manifest = Get-ChildItem $dist -Recurse -File |
     Where-Object { $_.Name -ne "SHA256SUMS.txt" } |

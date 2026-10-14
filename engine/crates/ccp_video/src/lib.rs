@@ -132,8 +132,12 @@ pub fn find_ffmpeg() -> Option<PathBuf> {
             }
         }
     }
-    if let Some(found) = walk_installer_ffmpeg(Path::new(env!("CARGO_MANIFEST_DIR"))) {
-        return Some(found);
+    // Release binaries must never retain or probe the build machine's checkout.
+    #[cfg(debug_assertions)]
+    {
+        if let Some(found) = walk_installer_ffmpeg(Path::new(env!("CARGO_MANIFEST_DIR"))) {
+            return Some(found);
+        }
     }
     on_path(ffmpeg_basename()).or_else(|| on_path("ffmpeg"))
 }

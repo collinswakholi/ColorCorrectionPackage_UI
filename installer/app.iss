@@ -47,6 +47,7 @@ Source: "{#Dist}\test_images\*"; DestDir: "{app}\test_images"; Flags: ignorevers
 Source: "{#Dist}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs
 Source: "{#Dist}\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\SHA256SUMS.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Dist}\ffmpeg-sha256.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\build-info.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

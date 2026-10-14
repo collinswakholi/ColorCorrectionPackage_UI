@@ -1239,7 +1239,17 @@ pub fn embedded_neutrals_table() -> HashMap<String, Vec<String>> {
 }
 
 pub fn neutrals_json_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../refs/neutrals.json")
+    if let Ok(root) = std::env::var("CCP_NEW_UI_ROOT") {
+        return PathBuf::from(root).join("refs/neutrals.json");
+    }
+    #[cfg(debug_assertions)]
+    {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../refs/neutrals.json")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        PathBuf::from("refs/neutrals.json")
+    }
 }
 
 pub fn load_neutrals_table(path: Option<&Path>) -> Result<HashMap<String, Vec<String>>> {
