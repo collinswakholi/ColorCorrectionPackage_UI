@@ -1,4 +1,10 @@
-# Headless API verification — 14 September 2026
+# Historical headless API verification — 14 September 2026
+
+These measurements predate the still-image-only native preview. They document
+the listed source behavior, not validation of the latest installer. Current
+migration/release evidence belongs in [migration validation](../migration-validation.md)
+and the migration PR. The current API rejects former video commands explicitly;
+run `python api/tests/integration_no_video.py` against the final packaged worker.
 
 These are observed results on the Windows development machine using the rebuilt native worker and CPU policy. They are smoke measurements, not a controlled performance comparison: some QA ran concurrently, and cache state differs between calls. No claim is made that these timings generalize to other hardware or captures.
 
@@ -6,7 +12,9 @@ These are observed results on the Windows development machine using the rebuilt 
 
 `python -m unittest discover -s api/tests -v`: **11 passed**. Real subprocess pipes (a deterministic fixture worker) verify Unicode/space paths, progress, draining over 1 MB of stderr without deadlock, bounded diagnostic history, timeout termination and restart without a stale reply, invalid JSON/crash recovery, partial-batch errors, graceful shutdown with deferred artifact completion, callback failure recovery, all convenience methods, FFC white requirement and strict NN input validation.
 
-Native regression coverage also verifies that explicit `export_cube` model paths override prior fit state, that video LUTs honor stage switches, and that incompatible video model colorimetry is rejected.
+Native still-image regression coverage also verifies that explicit `export_cube`
+model paths override prior fit state. Cube export remains supported and excludes
+spatial FFC.
 
 ## Real still-image workflow
 
@@ -23,8 +31,6 @@ Native regression coverage also verifies that explicit `export_cube` model paths
 Fitted-chart mean CIEDE2000 was **7.0467 → 1.3967**; held-out CC validation mean was **2.5759** (24 patches, five folds). Held-out validation uses the preprocessed chart and is not an independent end-to-end capture validation. Applied scene images intentionally have no invented DeltaE values.
 
 ## Executed notebooks
-
-`python api/tests/integration_video.py`: **passed**. Generated a one-second 8-bit SDR Rec.709 chart clip and tested automatic keyframe detection/fitting/grading, saved-model grading with all stages disabled (verified all 35,937 LUT entries were identity), and per-frame FFC using Blank.JPG. This is a functional smoke test, not a long-video or codec compatibility benchmark.
 
 Both shipped notebooks were schema-validated, compiled, and executed top-to-bottom in separate fresh Jupyter kernels using an isolated QA environment (Python 3.12, nbformat 5.11.1, nbclient 0.11.0, ipykernel 7.3.0, Pillow 12.3.0). The final rerun included compact real-image thumbnails and verified that graceful shutdown completed every deferred preview PNG. Executed copies and image artifacts were written to temporary folders; delivered notebooks remain clean, without machine-specific output paths or stale execution state.
 

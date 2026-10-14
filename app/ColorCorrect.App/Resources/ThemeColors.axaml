@@ -194,9 +194,7 @@
             <StreamGeometry x:Key="TrashIconGeometry">M6,19A2,2 0,0,0,8,21H16A2,2 0,0,0,18,19V7H6M8,9H16V19H8M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4Z</StreamGeometry>
             <StreamGeometry x:Key="ClearIconGeometry">M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12Z</StreamGeometry>
             <StreamGeometry x:Key="RemoveIconGeometry">M19,13H5V11H19Z</StreamGeometry>
-            <StreamGeometry x:Key="PlayIconGeometry">M8,5.14V19.14L19,12.14L8,5.14Z</StreamGeometry>
             <StreamGeometry x:Key="SpinnerGeometry">M12,2 A10,10 0 1 1 2,12</StreamGeometry>
-            <StreamGeometry x:Key="PauseIconGeometry">M6,5H10V19H6V5M14,5H18V19H14V5Z</StreamGeometry>
             <SolidColorBrush x:Key="BrandMarkOuterBrush" Color="#2F6F62" />
             <SolidColorBrush x:Key="BrandMarkInnerBrush" Color="#D4A574" />
         </ResourceDictionary>

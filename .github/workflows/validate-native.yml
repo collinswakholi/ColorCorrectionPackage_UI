@@ -34,11 +34,10 @@ jobs:
           rustup set auto-self-update disable
           rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
           if ($LASTEXITCODE -ne 0) { throw 'Rust setup' }
-      - name: Full build SDK and immutable media tools
+      - name: Full build SDK and immutable native runtimes
         shell: pwsh
         run: |
           ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
-          ./scripts/fetch_ffmpeg.ps1
           ./scripts/fetch_onnxruntime.ps1 -Dest .build-cache/test-runtime
       - name: Rust gates
         shell: pwsh
@@ -49,8 +48,6 @@ jobs:
           $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
           $env:ORT_DYLIB_PATH = (Resolve-Path .build-cache/test-runtime/onnxruntime.dll).Path
           $env:PATH = "$(Resolve-Path .build-cache/test-runtime);$env:PATH"
-          $env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
-          $env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
           cargo fmt --manifest-path engine/Cargo.toml --all -- --check
           if ($LASTEXITCODE -ne 0) { throw 'Rust format' }
           cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked -- -D warnings
@@ -82,8 +79,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'workflow integration' }
           python api/tests/integration_all_methods.py --root $env:CCP_NEW_UI_ROOT
           if ($LASTEXITCODE -ne 0) { throw 'six fit methods' }
-          python api/tests/integration_video.py --root $env:CCP_NEW_UI_ROOT
-          if ($LASTEXITCODE -ne 0) { throw 'video integration' }
+          python api/tests/integration_no_video.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'still-image-only contract' }
           python -m pip install -r notebooks/requirements-qa.txt
           if ($LASTEXITCODE -ne 0) { throw 'notebook dependencies' }
           python api/tests/execute_notebooks.py --root $env:CCP_NEW_UI_ROOT

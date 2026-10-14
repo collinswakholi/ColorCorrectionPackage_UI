@@ -9,7 +9,6 @@ Provision tools before building; do not substitute whatever happens to be on PAT
 ```powershell
 pwsh ./scripts/link_samples.ps1 # validates tracked samples; creates no junctions
 pwsh ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
-pwsh ./scripts/fetch_ffmpeg.ps1
 pwsh ./scripts/fetch_onnxruntime.ps1 -Dest .build-cache/test-runtime
 pwsh ./scripts/start_desktop.ps1
 ```
@@ -32,8 +31,6 @@ $env:LIBTORCH_PATH = $env:LIBTORCH
 $env:LIBTORCH_BYPASS_VERSION_CHECK = '1'
 $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
 $env:ORT_DYLIB_PATH = (Resolve-Path .build-cache/test-runtime/onnxruntime.dll).Path
-$env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
-$env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
 cargo fmt --manifest-path engine/Cargo.toml --all -- --check
 cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked
@@ -49,7 +46,7 @@ $env:CCP_NEW_UI_ROOT = $env:COLORCORRECT_ROOT
 $env:CCP_ENGINE_EXE = "$env:COLORCORRECT_ROOT/ccp-engine.exe"
 $env:CCP_LIBTORCH_ROOT = "$env:COLORCORRECT_ROOT/libtorch"
 python api/tests/integration_workflow.py --root $env:COLORCORRECT_ROOT
-python api/tests/integration_video.py --root $env:COLORCORRECT_ROOT
+python api/tests/integration_no_video.py --root $env:COLORCORRECT_ROOT
 python api/tests/integration_all_methods.py --root $env:COLORCORRECT_ROOT
 python -m pip install -r notebooks/requirements-qa.txt
 python api/tests/execute_notebooks.py --root $env:COLORCORRECT_ROOT
@@ -64,13 +61,17 @@ redirects native session/settings and preview-cache storage; the default remains
 the existing `CCP-New` data folder. It does not relocate installed CUDA add-ons.
 Do not use your real session as a destructive test fixture.
 
-Packaging fetches checksum-verified FFmpeg 9.0 full, ORT DirectML 1.22.1 and
-DirectML 1.15.4. VC runtime DLLs come from the licensed Visual Studio redistributable
+Packaging fetches checksum-verified ORT DirectML 1.22.1 and DirectML 1.15.4.
+The worker builds with `tch,ort-plane`; there is no video feature or media-sidecar
+download. `integration_no_video.py` verifies that former video API operations
+fail explicitly while supported still-image operations remain available.
+VC runtime DLLs come from the licensed Visual Studio redistributable
 directory, never arbitrary System32 copies. A source commit and dependency inventory
 are recorded in `build-info.json`; `SHA256SUMS.txt` covers payload files.
 Reproducibility means locked inputs and auditable provenance, not a promise that
 Inno/.NET builds are byte-identical across machines or build times.
 
 Linux/macOS scripts require their native target host and the pinned toolchains.
-They retain CPU LibTorch 2.9.1 / ORT 1.22.0, use isolated build SDKs, and depend on
-host FFmpeg for video. Only Windows has a v0.1.0 preview release workflow.
+They retain CPU LibTorch 2.9.1 / ORT 1.22.0 and use isolated build SDKs.
+They also build a still-image-only worker and do not depend on host FFmpeg.
+Only Windows has a v0.1.0 preview release workflow.

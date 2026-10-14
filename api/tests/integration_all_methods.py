@@ -35,9 +35,12 @@ with Engine(args.engine, root=args.root, policy='cpu') as engine:
         # Actual native rejection, not just Python pre-validation.
         try:
             engine.request('apply', check=True, model=model, images=[str(samples/'Sample_3572.JPG')],
-                out_dir=out/'invalid', do_ffc=True, white=out/'missing-white.jpg')
-        except EngineError:
-            pass
+                output_dir=out/'invalid', do_ffc=True, white=out/'missing-white.jpg')
+        except EngineError as error:
+            assert error.reply['ok'] is False
+            row = error.reply['results'][0]
+            assert row['ok'] is False and 'FFC reference could not be loaded or fitted' in row['error'], error.reply
+            assert not list((out/'invalid').glob('*_corrected.*')), 'failed FFC must not export an uncorrected fallback'
         else:
             raise AssertionError('Missing FFC reference silently accepted')
         rows.append({'method':method,'seconds':round(time.perf_counter()-start,3),

@@ -1,6 +1,6 @@
 # ColorCorrect Studio
 
-Native, chart-based color calibration for still images and 8-bit SDR video. An
+Native, chart-based color calibration for still images. An
 Avalonia desktop workbench and a local Rust worker share the same correction
 pipeline. No browser server, Python ML installation, or internet connection is
 needed for the bundled CPU sample workflow.
@@ -58,7 +58,9 @@ FFC/GC/WB require encoded sRGB/D65. Exported wide-gamut/linear bytes do not acqu
 a matching ICC profile automatically; interpret their declared encoding downstream.
 Held-out chart scores evaluate CC conditional on fitted GC/WB, not an independent
 validation of the whole imaging pipeline. Use a separately photographed validation
-chart. Video is 8-bit SDR only; HDR/high-bit-depth/wide-gamut video is rejected.
+chart. Video processing is not included in the native preview; FFmpeg/ffprobe are
+not downloaded, bundled, or used. Model cube export remains available as a global
+color transform, without spatial FFC.
 
 CUDA can accelerate chart inference and explicit LUT image application; DirectML
 can accelerate plane detection/LUT application where available. NN training,
@@ -68,7 +70,7 @@ or installed runtime is not proof that a request ran on GPU: inspect telemetry.
 ## Source and development
 
 The native source is at repository root: `app/` (Avalonia and .NET integration),
-`engine/` (Rust color math/detection/video/NDJSON), `api/`, `models/`, `refs/`,
+`engine/` (Rust color math/detection/NDJSON), `api/`, `models/`, `refs/`,
 `notebooks/`, and `test_images/`. No junctions or sibling projects are required.
 Toolchains are pinned to **.NET SDK 10.0.402** and **Rust 1.95.0**.
 See [build and test instructions](docs/building.md) and [CONTRIBUTING](CONTRIBUTING.md).

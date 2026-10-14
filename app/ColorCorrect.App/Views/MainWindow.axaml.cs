@@ -796,35 +796,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.Space && vm.IsVideoActive)
-        {
-            vm.ToggleVideoPlayCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (vm.IsVideoActive && e.Source is not Slider)
-        {
-            if (e.Key == Key.Left || e.Key == Key.OemComma)
-            {
-                vm.StepVideoFrame(-1);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Right || e.Key == Key.OemPeriod)
-            {
-                vm.StepVideoFrame(1);
-                e.Handled = true;
-            }
-        }
-    }
-
-    private void OnVideoSurfaceReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm && e.InitialPressMouseButton == MouseButton.Left)
-        {
-            vm.ToggleVideoPlayCommand.Execute(null);
-            e.Handled = true;
-        }
     }
 
     private void OnDragEnter(object? sender, DragEventArgs e)
@@ -982,7 +953,9 @@ public partial class MainWindow : Window
         e.DataTransfer.TryGetText() is { } text && text.StartsWith("ccp-files", StringComparison.Ordinal);
 
     private static bool CanAcceptPaths(DragEventArgs e) =>
-        e.DataTransfer.Contains(DataFormat.File) || IsInternalPaths(e) || _internalPathDrag;
+        IsInternalPaths(e) || _internalPathDrag
+        || (e.DataTransfer.Contains(DataFormat.File)
+            && ReadDropPaths(e).Any(SupportedStillImage.IsSupportedFile));
 
     private static List<string> ReadDropPaths(DragEventArgs e)
     {

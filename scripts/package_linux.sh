@@ -81,7 +81,7 @@ fi
 
 export LIBTORCH="$LIBTORCH" LIBTORCH_PATH="$LIBTORCH" KMP_DUPLICATE_LIB_OK=TRUE LIBTORCH_BYPASS_VERSION_CHECK=1
 export LD_LIBRARY_PATH="$LIBTORCH/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-(cd "$ROOT/engine" && cargo build --locked -p ccp_bridge --release --features tch,ort-plane,video)
+(cd "$ROOT/engine" && cargo build --locked -p ccp_bridge --release --features tch,ort-plane)
 file "$ROOT/engine/target/release/ccp-engine" | grep -q 'ELF 64-bit.*x86-64' || die "worker is not a Linux x64 executable"
 
 safe_clean "$PUBLISH"
@@ -103,6 +103,7 @@ cp "$ROOT/models/opt2/"* "$PACKAGE/models/opt2/"
 cp "$ROOT/models/plane/plane_det_model_YOLO_512_n.onnx" "$PACKAGE/models/plane/"
 cp "$ROOT/models/apply/"* "$PACKAGE/models/apply/"
 cp "$ROOT/models/manifest.json" "$PACKAGE/models/"
+cp "$ROOT/models/NOTICE.md" "$ROOT/models/LICENSE-AGPL-3.0.txt" "$PACKAGE/models/"
 chmod +x "$PACKAGE/ccp-engine" "$PACKAGE/app/ColorCorrect.App"
 
 cat > "$PACKAGE/run.sh" <<'EOF'
@@ -112,11 +113,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 export CCP_NEW_UI_ROOT="$HERE" CCP_ENGINE_EXE="$HERE/ccp-engine"
 export CCP_LIBTORCH_ROOT="$HERE/libtorch" LIBTORCH="$HERE/libtorch" LIBTORCH_PATH="$HERE/libtorch"
 export KMP_DUPLICATE_LIB_OK=TRUE
-if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
-  export CCP_FFMPEG="$(command -v ffmpeg)"
-else
-  printf 'warning: install ffmpeg and ffprobe to enable video support\n' >&2
-fi
 export LD_LIBRARY_PATH="$HERE:$HERE/libtorch/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$HERE/app/ColorCorrect.App" "$@"
 EOF
@@ -124,8 +120,7 @@ chmod +x "$PACKAGE/run.sh"
 cat > "$PACKAGE/README.txt" <<'EOF'
 ColorCorrect Studio for Linux x64
 
-1. Install FFmpeg with your distribution package manager (both ffmpeg and ffprobe are required).
-2. Run ./run.sh
+Run ./run.sh to process still images. Video capabilities are not included.
 
 The .NET runtime, ColorCorrect worker, ONNX Runtime, models, references, and CPU LibTorch are bundled.
 The package targets glibc-based x86_64 desktop Linux.

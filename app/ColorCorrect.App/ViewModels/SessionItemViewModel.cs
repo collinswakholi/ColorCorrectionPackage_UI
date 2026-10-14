@@ -21,41 +21,31 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _detectLabel = "";
     [ObservableProperty] private Bitmap? _thumb;
 
-    public SessionItemViewModel(string path, bool isVideo = false)
+    public SessionItemViewModel(string path)
     {
         Path = path;
         Name = System.IO.Path.GetFileName(path);
-        IsVideo = isVideo;
-        if (isVideo)
+        // Outputs written by ColorCorrect use this suffix. Keep them available for
+        // comparison, but do not feed them back through correction by default.
+        var stem = System.IO.Path.GetFileNameWithoutExtension(path);
+        if (stem.EndsWith("_corrected", StringComparison.OrdinalIgnoreCase))
         {
             IncludeInBatch = false;
-            DetectLabel = "video";
         }
-        else
-        {
-            // Outputs written by ColorCorrect use this suffix. Keep them available for
-            // comparison, but do not feed them back through correction by default.
-            var stem = System.IO.Path.GetFileNameWithoutExtension(path);
-            if (stem.EndsWith("_corrected", StringComparison.OrdinalIgnoreCase))
-            {
-                IncludeInBatch = false;
-            }
 
-            _ = LoadThumbAsync();
-        }
+        _ = LoadThumbAsync();
     }
 
     public string Path { get; }
     public string Name { get; }
-    public string SessionAutomationName => IsVideo ? $"Session video {Name}" : $"Session still {Name}";
+    public string SessionAutomationName => $"Session still {Name}";
     public string RemoveAutomationName => $"Remove {Name} from session";
     public string FileName => Name;
     public string DisplayName => System.IO.Path.GetFileNameWithoutExtension(Name);
     public string SessionTip => string.IsNullOrWhiteSpace(DetectLabel) ? Name : $"{Name} · {DetectLabel}";
     public bool HasDetectBadge =>
         !string.IsNullOrWhiteSpace(DetectLabel)
-        && DetectLabel is not ("no chart" or "detect failed" or "video");
-    public string KindBadge => IsVideo ? "VID" : "";
+        && DetectLabel is not ("no chart" or "detect failed");
     public bool HasSaveable =>
         IsCorrected
         || File.Exists(CorrectedPath)
@@ -67,7 +57,6 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
     public string ReportPath { get; set; } = "";
     public string ModelPath { get; set; } = "";
     public string PreviewDir { get; set; } = "";
-    public bool IsVideo { get; set; }
     public CorrectionReport? Report { get; set; }
     public FfcPlane? FfcPlane { get; set; }
     public int FaceChoice { get; set; }

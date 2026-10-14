@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -7,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from colorcorrect import Engine, EngineError
+from colorcorrect import Engine, EngineError, SUPPORTED_COMMANDS, UNSUPPORTED_COMMANDS
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE = Path(__file__).with_name("fake_worker.py")
@@ -19,7 +20,7 @@ class ClientTests(unittest.TestCase):
         def launch(args, **options):
             return POPEN([sys.executable, str(FAKE)], **options)
         self.mock = patch("colorcorrect.subprocess.Popen", side_effect=launch)
-        self.mock.start()
+        self.launch = self.mock.start()
         self.engine = Engine(sys.executable, root=ROOT, timeout=5)
 
     def tearDown(self):
@@ -86,11 +87,49 @@ class ClientTests(unittest.TestCase):
                       (lambda: self.engine.fit("x", output="a", report="b", model_out="c"), "run"),
                       (lambda: self.engine.apply("m", "x", "out"), "apply"),
                       (lambda: self.engine.preview("m", "x", "cc", "out"), "preview_stage"),
-                      (lambda: self.engine.export_cube("m", "out"), "export_cube"),
-                      (lambda: self.engine.video("in", "out"), "video"),
-                      (lambda: self.engine.video_grade("m", "in", "out"), "video_grade")]
+                      (lambda: self.engine.export_cube("m", "out"), "export_cube")]
         for operation, expected in operations:
             self.assertEqual(operation()["echo"]["cmd"], expected)
+
+    def test_retired_video_helpers_are_explicit_errors_without_starting_worker(self):
+        for operation in (lambda: self.engine.video("missing.mp4", "unused.mp4"),
+                          lambda: self.engine.video_grade("missing.json", "missing.mp4", "unused.mp4")):
+            with self.assertRaises(EngineError) as caught:
+                operation()
+            reply = caught.exception.reply
+            self.assertFalse(reply["ok"])
+            self.assertEqual(reply["code"], "unsupported_feature")
+            self.assertEqual(reply["feature"], "video")
+            self.assertIn("still images only", str(caught.exception))
+        self.launch.assert_not_called()
+        self.assertIsNone(self.engine._process)
+        self.assertFalse(set(SUPPORTED_COMMANDS) & set(UNSUPPORTED_COMMANDS))
+
+    def test_retired_video_requests_ignore_old_options_and_support_unchecked_error(self):
+        for command in ("video", "video_grade", "VIDEO", "VIDEO_GRADE"):
+            reply = self.engine.request(command, do_ffc=True, nn={"hidden_layers": []}, check=False)
+            self.assertFalse(reply["ok"])
+            self.assertEqual(reply["code"], "unsupported_feature")
+        self.launch.assert_not_called()
+        # The compatibility error must not poison subsequent still requests.
+        self.assertTrue(self.engine.devices()["ok"])
+
+    def test_environment_does_not_discover_or_add_video_sidecars(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "refs").mkdir()
+            (root / "refs/neutrals.json").write_text("{}", encoding="utf-8")
+            (root / "models/opt2").mkdir(parents=True)
+            tools = root / "tools/ffmpeg"
+            tools.mkdir(parents=True)
+            for filename in ("ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe"):
+                (tools / filename).touch()
+            with patch.dict("os.environ", {}, clear=True), patch("colorcorrect.Path.home", return_value=root):
+                engine = Engine(sys.executable, root=root)
+                env = engine._environment()
+            self.assertNotIn("CCP_FFMPEG", env)
+            self.assertNotIn("CCP_FFPROBE", env)
+            self.assertNotIn(str(tools), env["PATH"].split(os.pathsep))
 
     def test_calibrate_preserves_options_and_reuses_ffc(self):
         with tempfile.TemporaryDirectory() as directory:

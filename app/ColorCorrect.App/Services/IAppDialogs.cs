@@ -13,7 +13,6 @@ public interface IAppDialogs
     Task<string?> SaveImageAsync(string suggestedName);
     Task<string?> SavePlotAsync(string title, string suggestedName);
     Task<string?> OpenWhiteAsync();
-    Task<string?> OpenVideoAsync();
     Task<string?> SaveCubeAsync(string suggestedName);
     Task<bool> ConfirmAsync(string title, string message, string? confirmLabel = null, bool danger = false);
     Task SetClipboardAsync(string text);

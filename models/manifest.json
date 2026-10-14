@@ -4,10 +4,10 @@
   "files": [
     {"path":"models/apply/lut3d_trilinear.onnx","bytes":19142,"sha256":"b241245c414a717ebbb36490882586f34403ee04a3587618d9e62c3307b1049c"},
     {"path":"models/apply/lut3d_trilinear.onnx.data","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-    {"path":"models/opt2/best_assemble_fp16_1280.torchscript","bytes":39722111,"sha256":"18250d538e3de594ac604a6189882ac77a2a00001764e6b5139aa47ed1fc62cf"},
-    {"path":"models/opt2/best_assemble_fp16_1536.torchscript","bytes":39912799,"sha256":"c8d245d98f889bcd1a00c1eea1f96c700f04f496b64341a78c2f6d4f09d262a1"},
-    {"path":"models/opt2/best_assemble_fp32_1280.onnx","bytes":39354951,"sha256":"2c36420bc09c263bfdee155a737b452ed4c6395fd5449e7b5bc1e713719f7473"},
-    {"path":"models/opt2/best_assemble_fp32_1536.onnx","bytes":39532359,"sha256":"10f06c8d1f145c22a7d91c7275505cca322d83c4736e49cdf7b7e9ab03eac1e8"},
+    {"path":"models/opt2/best_assemble_fp16_1280.torchscript","bytes":39668781,"sha256":"b3257fcbbf3f16906448e0918fb1660674c83721c893a9dca9f864cb4e5fbf4e"},
+    {"path":"models/opt2/best_assemble_fp16_1536.torchscript","bytes":39859317,"sha256":"e653cf2c37e5444ae24b727d38ff41926d8d18c13728fff186a062029fcadd2c"},
+    {"path":"models/opt2/best_assemble_fp32_1280.onnx","bytes":39354948,"sha256":"1d2e9cfca6c13922ad16abeb196b0ad3071778c0067bc9ea95c83b0e76ef2240"},
+    {"path":"models/opt2/best_assemble_fp32_1536.onnx","bytes":39532356,"sha256":"b1dc24fd86659e1e8927e0f8525290c806e2005eee0b333f52ef4a47604227ae"},
     {"path":"models/plane/plane_det_model_YOLO_512_n.onnx","bytes":44685968,"sha256":"51aacaf5424c85a8351e9e89d9e6e41892b0c56fbe3a61472ba7e4340b1837aa"}
   ]
 }

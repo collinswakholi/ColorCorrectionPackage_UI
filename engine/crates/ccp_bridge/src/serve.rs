@@ -21,11 +21,6 @@ use crate::run_pipeline::{
     SavedPipeline,
 };
 
-#[cfg(feature = "video")]
-use crate::run_pipeline::{
-    apply_saved_to_work, array3_to_u8_rgb, compute_ffc_gain, u8_rgb_to_array3,
-};
-
 #[derive(Debug)]
 pub struct ServeState {
     pub policy: String,
@@ -653,298 +648,15 @@ fn write_cube_reply(saved: &SavedPipeline, req: &Value) -> Value {
     }
 }
 
-#[cfg(feature = "video")]
-fn cmd_video(state: &mut ServeState, req: &Value) -> Value {
-    let input = match json_str(req, &["input", "image", "video"]) {
-        Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"video requires input"}),
-    };
-    let output = match json_str(req, &["output"]) {
-        Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"video requires output"}),
-    };
-    let cube_out = json_str(req, &["cube_out"])
-        .map(PathBuf::from)
-        .unwrap_or_else(|| output.with_extension("cube"));
-    let report_path = output.with_extension("shot.json");
-    let work = output
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(format!("ccp-video-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&work);
-
-    let keyframe_sec = req.get("keyframe_sec").and_then(Value::as_f64);
-    let sample_n = json_i64(req, &["sample_n"], 8).max(1) as usize;
-
-    let frame = work.join("keyframe.jpg");
-    let mut used_t = keyframe_sec.unwrap_or(0.0);
-    if let Some(t) = keyframe_sec {
-        emit_progress("Extracting keyframe");
-        if let Err(e) = ccp_video::extract_frame(&input, t, &frame) {
-            return json!({"ok":false,"error": e.to_string()});
-        }
-    } else {
-        emit_progress("Sampling frames for first Opt2 hit");
-        let thumbs = match ccp_video::timeline_thumbs(&input, 1.0, work.join("thumbs")) {
-            Ok(t) => t,
-            Err(e) => return json!({"ok":false,"error": e.to_string()}),
-        };
-        let take: Vec<_> = thumbs.into_iter().take(sample_n).collect();
-        let mut hit = None;
-        for (i, thumb) in take.iter().enumerate() {
-            let mut detect_req = req.clone();
-            if let Some(obj) = detect_req.as_object_mut() {
-                obj.insert("image".into(), json!(thumb));
-                obj.insert(
-                    "handshake_out".into(),
-                    json!(work.join(format!("hs_{i}.json"))),
-                );
-            }
-            let det = cmd_detect(state, &detect_req);
-            if det["ok"] == true && det["n_charts"].as_i64().unwrap_or(0) > 0 {
-                hit = Some((thumb.clone(), det, i as f64));
-                break;
-            }
-        }
-        let Some((thumb, det, t)) = hit else {
-            return json!({"ok":false,"error":"no Opt2 chart on sampled frames"});
-        };
-        used_t = t;
-        let _ = std::fs::copy(&thumb, &frame);
-        if let Some(hs) = det.get("handshake").and_then(Value::as_str) {
-            let mut run_req = req.clone();
-            if let Some(obj) = run_req.as_object_mut() {
-                obj.insert("image".into(), json!(frame));
-                obj.insert("handshake".into(), json!(hs));
-                obj.insert("output".into(), json!(work.join("keyframe_corrected.png")));
-                obj.insert("report".into(), json!(work.join("keyframe_report.json")));
-                obj.insert("model_out".into(), json!(work.join("model.json")));
-                obj.insert("lut_out".into(), json!(cube_out));
-                obj.insert("do_ffc".into(), json!(false));
-            }
-            return finish_video(
-                state,
-                &run_req,
-                req,
-                &input,
-                &output,
-                &cube_out,
-                &report_path,
-                used_t,
-            );
-        }
-    }
-
-    if keyframe_sec.is_some() {
-        let hs_out = work.join("handshake.json");
-        let mut detect_req = req.clone();
-        if let Some(obj) = detect_req.as_object_mut() {
-            obj.insert("image".into(), json!(frame));
-            obj.insert("handshake_out".into(), json!(hs_out));
-        }
-        let det = cmd_detect(state, &detect_req);
-        if det["ok"] != true {
-            return json!({"ok":false,"error": det.get("error").cloned().unwrap_or(json!("detect failed on keyframe"))});
-        }
-        let mut run_req = req.clone();
-        if let Some(obj) = run_req.as_object_mut() {
-            obj.insert("image".into(), json!(frame));
-            obj.insert(
-                "handshake".into(),
-                det.get("handshake").cloned().unwrap_or(json!(hs_out)),
-            );
-            obj.insert("output".into(), json!(work.join("keyframe_corrected.png")));
-            obj.insert("report".into(), json!(work.join("keyframe_report.json")));
-            obj.insert("model_out".into(), json!(work.join("model.json")));
-            obj.insert("lut_out".into(), json!(cube_out));
-            obj.insert("do_ffc".into(), json!(false));
-        }
-        return finish_video(
-            state,
-            &run_req,
-            req,
-            &input,
-            &output,
-            &cube_out,
-            &report_path,
-            used_t,
-        );
-    }
-    json!({"ok":false,"error":"video keyframe path failed"})
-}
-
-#[cfg(feature = "video")]
-#[allow(clippy::too_many_arguments)] // Video completion consumes the explicit request/artifact set.
-fn finish_video(
-    state: &mut ServeState,
-    run_req: &Value,
-    grade_req: &Value,
-    input: &Path,
-    output: &Path,
-    cube_out: &Path,
-    report_path: &Path,
-    keyframe: f64,
-) -> Value {
-    emit_progress("Fitting keyframe");
-    let run = cmd_run(state, run_req);
-    if run["ok"] != true {
-        return run;
-    }
-    if let Err(e) = grade_clip(state.last.as_ref(), input, output, cube_out, grade_req) {
-        return json!({"ok":false,"error": e});
-    }
-    let has_de = run["has_delta_e"].as_bool().unwrap_or(false);
-    let saved = state.last.as_ref();
-    let mut stages = Vec::new();
-    if json_bool(grade_req, &["do_ffc"], false) {
-        stages.push("ffc");
-    }
-    if json_bool(
-        grade_req,
-        &["do_gc"],
-        saved.map(|s| s.do_gc).unwrap_or(true),
-    ) {
-        stages.push("gc");
-    }
-    if json_bool(
-        grade_req,
-        &["do_wb"],
-        saved.map(|s| s.do_wb).unwrap_or(true),
-    ) {
-        stages.push("wb");
-    }
-    if json_bool(
-        grade_req,
-        &["do_cc"],
-        saved.map(|s| s.do_cc).unwrap_or(true),
-    ) {
-        stages.push("cc");
-    }
-    let stage_names = if stages.is_empty() {
-        "identity".into()
-    } else {
-        stages.join("+")
-    };
-    let transform = saved
-        .map(|s| format!("{stage_names} ({})", s.kind))
-        .unwrap_or(stage_names);
-    let shot = ccp_video::ShotReport::v1(transform, keyframe, has_de);
-    if let Err(e) = shot.write_json(report_path) {
-        return json!({"ok":false,"error": format!("video report write failed: {e}")});
-    }
-    let model_out = run.get("model_out").cloned().unwrap_or(Value::Null);
+// Preserve historical protocol names as errors, not hidden build-time features.
+// Rejection performs no filesystem access, detector work, or subprocess launch.
+fn unsupported_video_reply() -> Value {
     json!({
-        "ok": true,
-        "output": output,
-        "cube": cube_out,
-        "report": report_path,
-        "model_out": model_out,
-        "keyframe": keyframe,
-        "chart_delta_e_exists": has_de,
-        "transform": shot.transform,
-        "note": shot.note,
+        "ok": false,
+        "code": "unsupported_feature",
+        "feature": "video",
+        "error": "Video processing has been removed from ColorCorrect Studio. This app supports still images only; use detect, run, apply, preview_stage, or export_cube for still-image workflows."
     })
-}
-
-#[cfg(not(feature = "video"))]
-fn cmd_video(_state: &mut ServeState, _req: &Value) -> Value {
-    json!({"ok":false,"error":"ccp-engine was built without the video feature"})
-}
-
-#[cfg(feature = "video")]
-fn cmd_video_grade(req: &Value) -> Value {
-    let input = match json_str(req, &["input", "video"]) {
-        Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"video_grade requires input"}),
-    };
-    let output = match json_str(req, &["output"]) {
-        Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"video_grade requires output"}),
-    };
-    let model = match json_str(req, &["model", "model_path"]) {
-        Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"video_grade requires a fitted model"}),
-    };
-    let saved = match load_saved(&model) {
-        Ok(s) => s,
-        Err(e) => return json!({"ok":false,"error": e.to_string()}),
-    };
-    let cube_out = json_str(req, &["cube_out"])
-        .map(PathBuf::from)
-        .unwrap_or_else(|| output.with_extension("cube"));
-    if let Err(e) = grade_clip(Some(&saved), &input, &output, &cube_out, req) {
-        return json!({"ok":false,"error": e});
-    }
-    json!({
-        "ok": true,
-        "output": output,
-        "cube": cube_out,
-        "note": ccp_video::LUT3D_NOTE,
-        "ffc": json_bool(req, &["do_ffc"], false),
-    })
-}
-
-#[cfg(feature = "video")]
-fn video_pipeline(saved: &SavedPipeline, apply: &ApplyOptions) -> Result<SavedPipeline, String> {
-    let mut selected = saved.clone();
-    // FFC is handled per-frame, never inside the exported cube.
-    selected.do_ffc = false;
-    selected.do_gc = apply.do_gc;
-    selected.do_wb = apply.do_wb;
-    selected.do_cc = apply.do_cc;
-    let (_, settings) = selected.lut_pipeline().map_err(|e| e.to_string())?;
-    if settings.input_space.id != "srgb" || settings.input_space.white.id != "d65" {
-        return Err("video requires a model calibrated for encoded sRGB/D65 input".into());
-    }
-    if selected.do_cc
-        && (settings.target_space.id != "srgb" || settings.target_space.white.id != "d65")
-    {
-        return Err("video requires sRGB/D65 output; wide-gamut or linear output would be mislabeled Rec.709".into());
-    }
-    Ok(selected)
-}
-
-#[cfg(feature = "video")]
-fn grade_clip(
-    saved: Option<&SavedPipeline>,
-    input: &Path,
-    output: &Path,
-    cube_out: &Path,
-    req: &Value,
-) -> std::result::Result<(), String> {
-    let saved = saved.ok_or_else(|| "grade needs a fitted model".to_string())?;
-    let apply = ApplyOptions::from_req(req, saved);
-    let selected = video_pipeline(saved, &apply)?;
-    if apply.do_ffc {
-        if let Some(white) = &apply.white {
-            emit_progress("Computing FFC gain from white");
-            let gain = compute_ffc_gain(white, apply.crop_rect.as_deref(), &apply.ffc)
-                .map_err(|e| e.to_string())?;
-            emit_progress("Grading clip (FFC per frame, then GC/WB/CC)");
-            ccp_video::map_rgb_frames(input, output, |w, h, rgb| {
-                let mut work = u8_rgb_to_array3(w, h, rgb)
-                    .map_err(|e| ccp_video::Error::InvalidArgument(e.to_string()))?;
-                apply_saved_to_work(&mut work, saved, &apply, Some(&gain))
-                    .map_err(|e| ccp_video::Error::InvalidArgument(e.to_string()))?;
-                array3_to_u8_rgb(&work, rgb)
-                    .map_err(|e| ccp_video::Error::InvalidArgument(e.to_string()))?;
-                Ok(())
-            })
-            .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
-        emit_progress("FFC on but no white — cube-only grade");
-    }
-    emit_progress("Exporting LUT for video");
-    export_cube_from_saved(&selected, cube_out, DEFAULT_LUT_SIZE).map_err(|e| e.to_string())?;
-    emit_progress("Applying lut3d (no FFC in the cube)");
-    ccp_video::apply_lut3d(input, cube_out, output).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[cfg(not(feature = "video"))]
-fn cmd_video_grade(_req: &Value) -> Value {
-    json!({"ok":false,"error":"ccp-engine was built without the video feature"})
 }
 
 pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
@@ -959,8 +671,7 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
         "apply" => (cmd_apply(state, req), false),
         "preview_stage" => (cmd_preview_stage(state, req), false),
         "export_cube" => (cmd_export_cube(state, req), false),
-        "video" => (cmd_video(state, req), false),
-        "video_grade" => (cmd_video_grade(req), false),
+        "video" | "video_grade" => (unsupported_video_reply(), false),
         "shutdown" | "quit" => {
             crate::run_pipeline::flush_preview_encodes();
             (json!({"ok":true,"event":"shutdown"}), true)
@@ -1036,52 +747,58 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "video")]
     #[test]
-    fn video_lut_honors_requested_stage_switches() {
-        let saved = SavedPipeline {
-            gc_coeffs: Some(vec![0.0, 1.0]),
-            wb_diag: Some([1.2, 0.8, 1.1]),
-            ..SavedPipeline::default()
+    fn retired_video_commands_fail_without_consuming_paths_or_changing_state() {
+        let mut state = ServeState {
+            last: Some(SavedPipeline::default()),
+            detect_cache: HashMap::from([("retained".into(), PathBuf::from("retained.json"))]),
+            ..ServeState::default()
         };
-        let apply =
-            ApplyOptions::from_req(&json!({"do_gc":false,"do_wb":false,"do_cc":false}), &saved);
-        let selected = video_pipeline(&saved, &apply).unwrap();
-        let (lut, _) = selected.lut_pipeline().unwrap();
-        assert!(lut.gc.is_none() && lut.wb.is_none() && lut.cc.is_none());
-        assert_eq!(lut.apply_color([0.2, 0.4, 0.6]).unwrap(), [0.2, 0.4, 0.6]);
-        let default = video_pipeline(&saved, &ApplyOptions::from_saved(&saved)).unwrap();
-        let (lut, _) = default.lut_pipeline().unwrap();
-        assert!(lut.gc.is_some() && lut.wb.is_some());
+        for command in ["video", "video_grade", "VIDEO", "VIDEO_GRADE"] {
+            // Missing and nonsensical inputs must not turn a removed capability
+            // into a misleading missing-file/FFC/model error.
+            for options in [
+                json!({}),
+                json!({"input":"missing.mp4","output":"unused.mp4",
+                "model":"missing.json","do_ffc":true,"white":"missing-white.jpg"}),
+            ] {
+                let mut request = options;
+                request["cmd"] = json!(command);
+                let (reply, stop) = dispatch(&mut state, &request);
+                assert!(!stop);
+                assert_eq!(reply["ok"], false);
+                assert_eq!(reply["code"], "unsupported_feature");
+                assert_eq!(reply["feature"], "video");
+                assert!(reply["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("still images only"));
+                assert!(state.last.is_some());
+                assert_eq!(state.detect_cache.len(), 1);
+                assert!(!state.warmed);
+            }
+        }
+        let (reply, stop) = dispatch(&mut state, &json!({"cmd":"shutdown"}));
+        assert!(stop);
+        assert_eq!(reply["ok"], true);
     }
 
-    #[cfg(feature = "video")]
     #[test]
-    fn video_rejects_mislabeled_model_colorimetry() {
-        for (input, target, white) in [
-            ("linear-srgb", "srgb", "d65"),
-            ("srgb", "display-p3", "d65"),
-            ("srgb", "srgb", "d50"),
-        ] {
-            let saved = SavedPipeline {
-                input_space_id: input.into(),
-                target_space_id: target.into(),
-                target_white_id: white.into(),
-                do_gc: false,
-                do_wb: false,
-                ..SavedPipeline::default()
-            };
-            assert!(video_pipeline(&saved, &ApplyOptions::from_saved(&saved)).is_err());
-        }
-        let saved = SavedPipeline {
-            target_space_id: "display-p3".into(),
-            ..SavedPipeline::default()
-        };
-        let apply = ApplyOptions::from_req(&json!({"do_cc":false}), &saved);
-        assert!(
-            video_pipeline(&saved, &apply).is_ok(),
-            "disabled CC does not emit wide-gamut pixels"
+    fn still_run_requires_a_chart_handshake() {
+        let mut state = ServeState::default();
+        let (reply, stop) = dispatch(
+            &mut state,
+            &json!({
+                "cmd":"run", "image":"missing.jpg", "output":"unused.png", "policy":"cpu"
+            }),
         );
+        assert!(!stop);
+        assert_eq!(reply["ok"], false);
+        assert!(reply["error"]
+            .as_str()
+            .unwrap()
+            .contains("run requires handshake or chart_json"));
+        assert!(state.last.is_none());
     }
 
     #[test]

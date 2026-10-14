@@ -21,8 +21,14 @@ import tempfile
 from typing import Any, Callable
 
 __version__ = "1.1.0"
-COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage",
-            "export_cube", "video", "video_grade")
+SUPPORTED_COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage", "export_cube")
+# Historical SDK/CLI names are recognized only to return a clear compatibility error.
+UNSUPPORTED_COMMANDS = ("video", "video_grade")
+COMMANDS = SUPPORTED_COMMANDS + UNSUPPORTED_COMMANDS
+VIDEO_UNSUPPORTED = (
+    "Video processing has been removed from ColorCorrect Studio. This app supports still images only; "
+    "use detect, run, apply, preview_stage, or export_cube for still-image workflows."
+)
 
 
 class EngineError(RuntimeError):
@@ -95,7 +101,7 @@ class Engine:
                 candidates.insert(0, addon)
             candidates.append(local / "libtorch")
         runtime = Path(explicit).resolve() if explicit else next((p for p in candidates if (p / "libtorch.json").is_file()), None)
-        extras = [self.executable.parent, self.root / "tools/ffmpeg"]
+        extras = [self.executable.parent]
         if runtime:
             env.update(CCP_LIBTORCH_ROOT=str(runtime), LIBTORCH=str(runtime), LIBTORCH_PATH=str(runtime))
             extras.extend([runtime, runtime / "lib", runtime / "libtorch/lib"])
@@ -108,11 +114,6 @@ class Engine:
         for name in ort_names:
             if (self.executable.parent / name).is_file():
                 env.setdefault("ORT_DYLIB_PATH", str(self.executable.parent / name))
-        for name in ("ffmpeg", "ffprobe"):
-            filename = name + (".exe" if os.name == "nt" else "")
-            for folder in (self.root / "tools/ffmpeg", self.executable.parent):
-                if (folder / filename).is_file():
-                    env.setdefault("CCP_" + name.upper(), str(folder / filename))
         return env
 
     def _start(self) -> None:
@@ -170,12 +171,21 @@ class Engine:
 
     def request(self, command: str, *, timeout: float | None = None,
                 check: bool = True, **parameters: Any) -> dict:
-        """Send any documented operation. check=True raises even for partial batches."""
+        """Send a still-image operation; check=True raises even for partial batches.
+
+        Retired video/video_grade names return unsupported_feature without starting
+        the worker, validating old video options, or accessing media files.
+        """
         duration = self.timeout if timeout is None else timeout
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("timeout must be finite and positive")
         if "cmd" in parameters or "command" in parameters:
             raise ValueError("Pass the operation as the first argument, not cmd/command")
+        if command.lower() in UNSUPPORTED_COMMANDS:
+            reply = {"ok": False, "code": "unsupported_feature", "feature": "video", "error": VIDEO_UNSUPPORTED}
+            if check:
+                raise EngineError(VIDEO_UNSUPPORTED, reply)
+            return reply
         if parameters.get("do_ffc") and not parameters.get("white"):
             raise ValueError("FFC requires an explicit white image (Blank.JPG in the example corpus)")
         nn = parameters.get("nn")
@@ -264,9 +274,11 @@ class Engine:
         return self.request("export_cube", model=model, path=path, size=size, **options)
 
     def video(self, input, output, **options):
+        """Compatibility stub: video processing was removed; raises EngineError."""
         return self.request("video", input=input, output=output, **options)
 
     def video_grade(self, model, input, output, **options):
+        """Compatibility stub: video processing was removed; raises EngineError."""
         return self.request("video_grade", model=model, input=input, output=output, **options)
 
     def _stop(self):

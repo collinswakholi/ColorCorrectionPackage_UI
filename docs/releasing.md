@@ -20,27 +20,27 @@ Before entering `APPROVED`, record evidence for every gate:
 - [ ] All six methods, stage previews, saved-model application and exports pass.
   Both clean notebook sources execute against the actual staged/installed worker.
 - [ ] Live UI walkthrough: catalog/session, arrows, overlays, settings, fitting,
-  loaded-model application, exports, help, themes and SDR video.
+  loaded-model application, exports, help and themes. Former video commands must
+  return an explicit unsupported error, and video controls must not be present.
 - [ ] CPU-only clean Windows 11 x64 install, offline samples, legacy side-by-side,
   reinstall and uninstall without user-data deletion. Hosted `windows-2022`
   runners are Windows Server, **not proof of a clean Windows 11 installation**.
 - [ ] Available CUDA/DirectML checks report actual backend; unavailable checks
   clearly marked. Do not claim GPU NN training or universal acceleration.
 - [ ] All installer files/checksums/provenance/third-party notices reviewed.
-- [ ] Complete corresponding source/build material for Gyan FFmpeg 9.0 and
-  applicable static components reviewed; detector redistribution obligations reviewed.
+- [ ] No FFmpeg/ffprobe or video dependency is included in the installer or
+  release assets. Detector notices, license/source access and redistribution
+  obligations reviewed; the project's MIT license does not cover all weights.
 
-For the GPL corresponding-source bundle, configure repository variables
-`FFMPEG_CORRESPONDING_SOURCE_URL` (immutable HTTPS ZIP) and
-`FFMPEG_CORRESPONDING_SOURCE_SHA256` (64-character digest). It must include
-applicable third-party sources/licenses/build material for **the exact shipped
-full build**, not only a FFmpeg source checkout. The workflow verifies the archive
-hash and attaches it. A hash is integrity evidence, not a license review; the
-maintainer's `APPROVED` attestation covers completeness and installation gates.
-Do not configure a placeholder archive merely to bypass this requirement.
+The native preview is still-image-only. Its workflow has no FFmpeg download or
+corresponding-source archive variables because that component is not shipped.
+This removes the former FFmpeg publication gate; it does not waive obligations
+for the detector weights or any remaining bundled dependency. Review the model
+disclosures and complete dependency inventory before entering `APPROVED`.
 
 Assets: `ColorCorrect-Studio-win-x64.exe`, its `.sha256`, `build-info.json`,
-`dependency-inventory.json`, `THIRD_PARTY_NOTICES.md`, and `third-party-source.zip`.
+`dependency-inventory.json`, `THIRD_PARTY_NOTICES.md`, `model-provenance.md`,
+`NOTICE.md` (model notices), and `LICENSE-AGPL-3.0.txt` (model upstream license).
 No portable ZIP, Linux/macOS binaries or Docker pushes in this first release.
 Local dirty-worktree installers are QA artifacts and are never eligible for release.
 
@@ -49,7 +49,7 @@ Local dirty-worktree installers are QA artifacts and are never eligible for rele
 | Target | Source/scripts | Validation / distribution |
 | --- | --- | --- |
 | Windows 11 x64 | Pinned .NET 10 / Rust; self-contained Setup | Migration evidence records local QA; clean Win11 gate still explicit |
-| Linux x64 | Native-host tarball script retained; CPU SDK isolated | Needs native-host build/install/media validation; no v0.1.0 binary |
+| Linux x64 | Native-host tarball script retained; CPU SDK isolated | Needs native-host build/install/workflow validation; no v0.1.0 binary |
 | macOS arm64 | Native-host .app script retained; ad-hoc signature | Needs Apple Silicon build/install validation; not notarized; no v0.1.0 binary |
 
 Never represent script syntax checks or retained code as platform certification.

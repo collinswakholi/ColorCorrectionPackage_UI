@@ -114,7 +114,6 @@ version = "0.1.0"
 dependencies = [
  "ccp_core",
  "ccp_detect",
- "ccp_video",
  "image",
  "jpeg-encoder",
  "ndarray 0.16.1",
@@ -147,15 +146,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tch",
- "thiserror",
-]
-
-[[package]]
-name = "ccp_video"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
  "thiserror",
 ]
 

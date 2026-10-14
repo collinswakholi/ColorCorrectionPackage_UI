@@ -35,6 +35,14 @@ InfoBeforeFile=SMARTSCREEN.txt
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[InstallDelete]
+; Exact formerly managed video files only. Do not remove user data or runtimes.
+Type: files; Name: "{app}\ffmpeg.exe"
+Type: files; Name: "{app}\ffprobe.exe"
+Type: files; Name: "{app}\ffmpeg-sha256.txt"
+Type: files; Name: "{app}\licenses\ffmpeg\LICENSE"
+Type: files; Name: "{app}\licenses\ffmpeg\README.txt"
+
 [Files]
 Source: "{#Dist}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"
 Source: "{#Dist}\ccp-engine.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -47,12 +55,9 @@ Source: "{#Dist}\test_images\*"; DestDir: "{app}\test_images"; Flags: ignorevers
 Source: "{#Dist}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs
 Source: "{#Dist}\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\SHA256SUMS.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Dist}\ffmpeg-sha256.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\build-info.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Dist}\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#Dist}\ffprobe.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#Dist}\run.cmd"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 ; Exactly the freshly staged, checksum-covered runtime DLLs, including vccorlib.
 Source: "{#Dist}\*.dll"; DestDir: "{app}"; Flags: ignoreversion

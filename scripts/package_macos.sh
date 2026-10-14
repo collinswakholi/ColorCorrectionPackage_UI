@@ -84,7 +84,7 @@ fi
 
 export LIBTORCH="$LIBTORCH" LIBTORCH_PATH="$LIBTORCH" KMP_DUPLICATE_LIB_OK=TRUE LIBTORCH_BYPASS_VERSION_CHECK=1
 export DYLD_LIBRARY_PATH="$LIBTORCH/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-(cd "$ROOT/engine" && cargo build --locked -p ccp_bridge --release --features tch,ort-plane,video)
+(cd "$ROOT/engine" && cargo build --locked -p ccp_bridge --release --features tch,ort-plane)
 file "$ROOT/engine/target/release/ccp-engine" | grep -q 'Mach-O 64-bit executable arm64' || die "worker is not a macOS arm64 executable"
 
 safe_clean "$PUBLISH"
@@ -106,6 +106,7 @@ cp "$ROOT/models/opt2/"* "$MACOS/models/opt2/"
 cp "$ROOT/models/plane/plane_det_model_YOLO_512_n.onnx" "$MACOS/models/plane/"
 cp "$ROOT/models/apply/"* "$MACOS/models/apply/"
 cp "$ROOT/models/manifest.json" "$MACOS/models/"
+cp "$ROOT/models/NOTICE.md" "$ROOT/models/LICENSE-AGPL-3.0.txt" "$MACOS/models/"
 chmod +x "$MACOS/ColorCorrect.App" "$MACOS/ccp-engine"
 
 ICONSET="$DIST/ColorCorrect.iconset"
@@ -160,7 +161,7 @@ ColorCorrect Studio for Apple Silicon
 Move ColorCorrect Studio.app to Applications and open it. CPU LibTorch, ONNX Runtime,
 the native worker, models, references, and the .NET runtime are bundled.
 
-Video support requires FFmpeg. Install it with: brew install ffmpeg
+This application processes still images; video capabilities are not included.
 
 This development archive is ad-hoc signed, not Developer ID notarized. If Gatekeeper
 blocks it after download, run: xattr -cr "ColorCorrect Studio.app"

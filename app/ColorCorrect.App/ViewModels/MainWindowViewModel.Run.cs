@@ -16,7 +16,7 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanDetect))]
     private Task DetectAsync()
     {
-        if (Active is not { IsVideo: false } item || !File.Exists(item.Path) || !WorkerReady)
+        if (Active is not { } item || !File.Exists(item.Path) || !WorkerReady)
         {
             return Task.CompletedTask;
         }
@@ -87,12 +87,6 @@ public partial class MainWindowViewModel
     {
         if (Active is null || !CanApply())
         {
-            return;
-        }
-
-        if (Active.IsVideo)
-        {
-            await GradeActiveVideoAsync().ConfigureAwait(false);
             return;
         }
 
@@ -213,12 +207,12 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var items = Session.Where(item => item.IncludeInBatch && !item.IsVideo).ToArray();
+        var items = Session.Where(item => item.IncludeInBatch).ToArray();
         if (items.Length == 0)
         {
-            Status = Session.Any(item => !item.IsVideo)
+            Status = Session.Count > 0
                 ? "Select at least one still in Batch. FFC whites and corrected outputs start unchecked."
-                : "Batch needs stills. Videos are graded with Apply.";
+                : "Batch needs still images.";
             ToastService.ShowWarning(Status);
             return;
         }

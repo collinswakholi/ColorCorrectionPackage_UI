@@ -1598,26 +1598,23 @@ pub fn run_from_json_ex(
         if let Some(white) = white_path {
             progress("FFC");
             let t = Instant::now();
-            match resolve_cached_ffc(
+            let ffc = resolve_cached_ffc(
                 Path::new(white),
                 crop_rect.as_deref(),
                 &ffc_params,
                 ffc_cache.as_ref(),
-            ) {
-                Ok(ffc) => {
-                    ffc_plane = Some(ffc.plane);
-                    ffc_plane_source = Some(ffc.plane_source.clone());
-                    ffc_white_size = Some(ffc.white_size);
-                    ffc_gain = Some(Arc::clone(&ffc.gain));
-                    ffc_applied = true;
-                    ffc_elapsed = t.elapsed().as_secs_f64();
-                }
-                Err(_) => {
-                    progress("FFC skipped (white miss)");
-                }
-            }
-        } else {
-            progress("FFC skipped (white miss)");
+            )
+            .map_err(|e| {
+                Error::Message(format!(
+                    "FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup."
+                ))
+            })?;
+            ffc_plane = Some(ffc.plane);
+            ffc_plane_source = Some(ffc.plane_source.clone());
+            ffc_white_size = Some(ffc.white_size);
+            ffc_gain = Some(Arc::clone(&ffc.gain));
+            ffc_applied = true;
+            ffc_elapsed = t.elapsed().as_secs_f64();
         }
     }
     let defer_fused_ffc_gc = ffc_applied
@@ -1991,66 +1988,6 @@ pub fn compute_ffc_gain(
     Ok((*CachedFfc::compute(white, crop_rect, params)?.gain).clone())
 }
 
-pub fn apply_saved_to_work(
-    work: &mut Array3<f32>,
-    saved: &SavedPipeline,
-    apply: &ApplyOptions,
-    gain: Option<&Array2<f32>>,
-) -> Result<()> {
-    let (lut, _) = saved.lut_pipeline()?;
-    let fuse = apply.do_ffc && apply.do_gc && gain.is_some() && lut.gc.is_some();
-    if fuse {
-        apply_ffc_gc_fused_inplace(
-            work,
-            gain.expect("fuse requires gain"),
-            lut.gc.as_ref().expect("fuse requires gc"),
-        );
-    } else {
-        if apply.do_ffc {
-            if let Some(g) = gain {
-                apply_ffc_inplace(work, g);
-            }
-        }
-        if apply.do_gc {
-            if let Some(gc) = &lut.gc {
-                apply_gc_inplace(work, gc)?;
-            }
-        }
-    }
-    if apply.do_wb {
-        if let Some(wb) = &lut.wb {
-            apply_wb_inplace(work, wb);
-        }
-    }
-    if apply.do_cc {
-        if let Some((model, settings)) = &lut.cc {
-            apply_cc_accel(work, model, settings)?;
-        }
-    }
-    Ok(())
-}
-
-pub fn u8_rgb_to_array3(width: u32, height: u32, rgb: &[u8]) -> Result<Array3<f32>> {
-    let n = width as usize * height as usize * 3;
-    if rgb.len() != n {
-        return Err(Error::Message(format!("rgb24 length {} != {n}", rgb.len())));
-    }
-    let floats: Vec<f32> = rgb.iter().map(|b| *b as f32 / 255.0).collect();
-    Array3::from_shape_vec((height as usize, width as usize, 3), floats)
-        .map_err(|e| Error::Message(e.to_string()))
-}
-
-pub fn array3_to_u8_rgb(arr: &Array3<f32>, dest: &mut [u8]) -> Result<()> {
-    let src = array3_f32s(arr);
-    if dest.len() != src.len() {
-        return Err(Error::Message("rgb24 dest size mismatch".into()));
-    }
-    dest.par_iter_mut()
-        .zip(src.par_iter())
-        .for_each(|(d, s)| *d = f32_to_u8(*s));
-    Ok(())
-}
-
 pub fn apply_saved_to_image(saved: &SavedPipeline, image: &Path, output: &Path) -> Result<()> {
     apply_saved_to_image_ex(saved, image, output, None, &ApplyOptions::from_saved(saved))?;
     Ok(())
@@ -2074,26 +2011,25 @@ pub fn apply_saved_to_image_ex(
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
     let loaded = ccp_core::sample::load_image_with_icc(image, honor_icc)?;
     let mut work = rgb_image_into_array3(loaded)?;
-    let mut ffc_skipped = None;
+    let ffc_skipped = None;
     let gain = if apply.do_ffc {
-        match apply.white.as_ref().filter(|p| !p.as_os_str().is_empty()) {
-            None => {
-                ffc_skipped = Some("FFC is enabled but no white reference was provided".into());
-                None
-            }
-            Some(white) => match resolve_cached_ffc(
-                white,
-                apply.crop_rect.as_deref(),
-                &apply.ffc,
-                apply.ffc_cache.as_ref(),
-            ) {
-                Ok(ffc) => Some(Arc::clone(&ffc.gain)),
-                Err(e) => {
-                    ffc_skipped = Some(e.to_string());
-                    None
-                }
-            },
-        }
+        let white = apply
+            .white
+            .as_ref()
+            .filter(|p| !p.as_os_str().is_empty())
+            .ok_or_else(|| Error::Message("FFC requires a blank white-field image from the same capture setup; neither color chart is a flat-field reference.".into()))?;
+        let ffc = resolve_cached_ffc(
+            white,
+            apply.crop_rect.as_deref(),
+            &apply.ffc,
+            apply.ffc_cache.as_ref(),
+        )
+        .map_err(|e| {
+            Error::Message(format!(
+                "FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup."
+            ))
+        })?;
+        Some(Arc::clone(&ffc.gain))
     } else {
         None
     };
@@ -2267,6 +2203,105 @@ mod tests {
             error.contains("FFC requires a blank white-field image"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn requested_ffc_fit_rejects_missing_unreadable_and_invalid_references() {
+        let dir =
+            std::env::temp_dir().join(format!("ccp-ffc-fit-rejection-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let invalid = dir.join("invalid-white.png");
+        std::fs::write(&invalid, b"not a readable image").unwrap();
+        for (index, white) in [dir.join("missing-white.png"), invalid, dir.clone()]
+            .into_iter()
+            .enumerate()
+        {
+            let output = dir.join(format!("output-{index}.png"));
+            let report = dir.join(format!("report-{index}.json"));
+            let model = dir.join(format!("model-{index}.json"));
+            let request = json!({"image": image, "handshake": classic_handshake(120, 80),
+                "output": output, "report": report, "model_out": model,
+                "white": white, "do_ffc": true, "phase2_teacher": false});
+            let error = run_from_json(&request, &mut |_| {})
+                .err()
+                .unwrap()
+                .to_string();
+            assert!(
+                error.contains("FFC reference could not be loaded or fitted"),
+                "{error}"
+            );
+            assert!(error.contains("blank white-field image"), "{error}");
+            assert!(!output.exists() && !report.exists() && !model.exists());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn requested_ffc_apply_rejects_absent_missing_unreadable_and_invalid_references() {
+        let dir =
+            std::env::temp_dir().join(format!("ccp-ffc-apply-rejection-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let invalid = dir.join("invalid-white.png");
+        std::fs::write(&invalid, b"not a readable image").unwrap();
+        for (index, white) in [
+            None,
+            Some(PathBuf::new()),
+            Some(dir.join("missing-white.png")),
+            Some(invalid),
+            Some(dir.clone()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let output = dir.join(format!("output-{index}.png"));
+            let apply = ApplyOptions {
+                do_ffc: true,
+                white,
+                ..ApplyOptions::default()
+            };
+            let error =
+                apply_saved_to_image_ex(&SavedPipeline::default(), &image, &output, None, &apply)
+                    .err()
+                    .unwrap()
+                    .to_string();
+            assert!(
+                error.contains("FFC") && error.contains("blank white-field image"),
+                "{error}"
+            );
+            assert!(!output.exists());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn disabled_ffc_ignores_unused_invalid_white_for_fit_and_apply() {
+        let dir = std::env::temp_dir().join(format!("ccp-ffc-disabled-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let invalid = dir.join("invalid-white.png");
+        std::fs::write(&invalid, b"not a readable image").unwrap();
+        let request = json!({"image": image, "handshake": classic_handshake(120, 80),
+            "output": dir.join("fitted.png"), "report": dir.join("report.json"),
+            "model_out": dir.join("model.json"), "white": invalid,
+            "do_ffc": false, "phase2_teacher": false});
+        let fitted = run_from_json(&request, &mut |_| {}).unwrap();
+        assert!(!fitted.saved.do_ffc);
+        let output = dir.join("applied.png");
+        let apply = ApplyOptions {
+            do_ffc: false,
+            white: Some(invalid),
+            ..ApplyOptions::default()
+        };
+        let applied =
+            apply_saved_to_image_ex(&fitted.saved, &image, &output, None, &apply).unwrap();
+        assert!(output.is_file());
+        assert!(applied.ffc_skipped.is_none());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

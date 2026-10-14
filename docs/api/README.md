@@ -28,8 +28,10 @@ FFC unless `do_ffc=False`; other engine defaults are unchanged. Its `apply`
 remembers the FFC white and flag, creates a unique output folder by default, and
 accepts every original apply option. Keep the Engine context open while using it.
 
-All existing `detect`, `fit`, `apply`, video, preview, LUT and `request` methods
-remain compatible. Every fit keyword is accepted by `calibrate`; explicit
+All existing still-image `detect`, `fit`, `apply`, preview, LUT and `request` methods
+retain their options. Former `video`/`video_grade` names are retained only as
+compatibility stubs that return an explicit unsupported error. Every fit keyword
+is accepted by `calibrate`; explicit
 `output`, `report`, `model_out`, or `handshake` overrides remain available.
 Detection-specific settings go in `detect_options={...}`. A supplied handshake
 skips detection. No chart-type or space settings are removed or inferred from filenames.
@@ -94,14 +96,19 @@ Copy notebooks to a writable folder. Set `COLORCORRECT_ROOT` to the installed ap
 ```powershell
 python -m unittest discover -s api/tests -v
 python api/tests/integration_workflow.py
-python api/tests/integration_video.py
+python api/tests/integration_no_video.py
 ```
 
-The first command runs fast isolated transport tests, not color-science tests. The integration workflow uses real source images, covers two chart detections, fitting, all stage previews, model reload, LUT export and partial-batch failure. Video needs the optional native `video` feature plus FFmpeg/ffprobe; the shipped builds enable it. Integration artifacts are stored under a fresh temporary directory.
+The first command runs fast isolated transport tests, not color-science tests.
+The integration workflow uses real source images, covers two chart detections,
+fitting, all stage previews, model reload, LUT export and partial-batch failure.
+The still-image-only contract test verifies explicit rejection of former video
+operations without creating outputs or launching media tools. Integration artifacts
+are stored under a fresh temporary directory. FFmpeg/ffprobe are not shipped or used.
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Bundled LibTorch is preferred unless `CCP_LIBTORCH_ROOT` / `LIBTORCH_PATH` selects another runtime. Keep only one compatible LibTorch tree active. `CCP_FFMPEG` and `CCP_FFPROBE` can locate sidecars. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Bundled LibTorch is preferred unless `CCP_LIBTORCH_ROOT` / `LIBTORCH_PATH` selects another runtime. Keep only one compatible LibTorch tree active. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
@@ -112,8 +119,8 @@ The first command runs fast isolated transport tests, not color-science tests. T
 | `apply(model, images, output_dir, **options)` | Apply saved model to one/many images | model JSON, image path(s), destination |
 | `preview(model, image, stage, preview_dir, **options)` | Compute a selected cumulative stage | model, image, stage, destination |
 | `export_cube(model, path, size=33)` | Export global transform | explicit model and .cube path |
-| `video(input, output, **options)` | Find chart/keyframe, fit and grade video | input/output videos |
-| `video_grade(model, input, output, **options)` | Grade video with a saved model | model and input/output videos |
+| `video(input, output, **options)` | Removed; raises `EngineError` with `unsupported_feature` | legacy compatibility name only |
+| `video_grade(model, input, output, **options)` | Removed; raises `EngineError` with `unsupported_feature` | legacy compatibility name only |
 | `request(command, **parameters)` | Complete native protocol escape hatch | command + documented JSON fields |
 | `close()` | Stop worker and release pipes | none |
 
@@ -157,7 +164,7 @@ Required `image`, `handshake` (path or JSON object), `output`. Always provide `r
 | `preview_dir`, `preview_mode` | Optional preview artifacts; `none`, `corrected` (default), `all`, or stage name |
 | `lut_out` | Optional .cube export, excluding spatial FFC |
 
-FFC options in `ffc`: `method` (`linear`, `poly` default, `pls`, `nn`), `bins` (50), `smooth` (5, positive odd window), `degree` (5), `nn_max_iter` (10000), `tol` (1e-8), `cut_off` (1.3), `max_val` (1.8). This is independent of CC's NN settings. Explicitly enabling FFC without a `white` path is rejected by both the Python API and native worker. An unusable supplied white image can still cause FFC fitting to be skipped; inspect `report_json.do_ffc` and warnings rather than assuming it ran.
+FFC options in `ffc`: `method` (`linear`, `poly` default, `pls`, `nn`), `bins` (50), `smooth` (5, positive odd window), `degree` (5), `nn_max_iter` (10000), `tol` (1e-8), `cut_off` (1.3), `max_val` (1.8). This is independent of CC's NN settings. Explicitly enabling FFC without a `white` path is rejected by both the Python API and native worker. An unusable supplied blank-field reference also fails instead of silently continuing without the requested correction. Inspect errors, every batch result and `report_json.do_ffc`; do not infer that FFC ran merely from a supplied filename.
 
 NN options in `nn`: `hidden_layers` array (1–4 widths, each 4–512; Python also accepts a single integer), `hidden_size` fallback (100), `optimizer` (`adam`, `sgd`, `rmsprop`), `batch_norm` (false), `dropout` (0, range 0–.8), `epochs` (10000), `patience` (1500), `lr` (.001), `tol` (1e-6). Example: `{"hidden_layers":[128,64,32],"optimizer":"rmsprop","batch_norm":true,"dropout":0.1}`. The worker clamps several numeric parameters; use documented ranges rather than relying on silent normalization.
 
@@ -177,17 +184,17 @@ Required `model`, `image`, `preview_dir`; `stage`: `ffc`, `gc`, `wb`, `cc` or `c
 
 Required `path`; provide explicit `model` (otherwise native worker uses its last successful fit). `size` defaults to the native LUT size, Python helper explicitly defaults to 33 and limits 2–129. The export honors explicit model paths even after another fit. A .cube only represents the global transform; it cannot encode FFC. Export files can be large at high grid sizes.
 
-### `video` / `video_grade`
+### Removed video operations
 
-`video` requires `input` and `output`. Supply `keyframe_sec` for a known chart frame, otherwise it searches up to `sample_n` (8) one-second sample frames. Fitting options apply. Optional `cube_out` defaults beside output. Reply includes output, cube, shot report, model path and keyframe time.
-
-`video_grade` requires `model`, `input`, `output`, optional `cube_out`. Both support Apply stage/FFC options, including disabling GC/WB/CC in the LUT-only path. Only supported 8-bit SDR Rec.709/sRGB video is accepted; HDR, high-bit-depth and incompatible gamut metadata are rejected. Models must use sRGB/D65 input and, when CC is enabled, sRGB/D65 output; incompatible saved model colorimetry is rejected rather than mislabeled Rec.709. Per-frame FFC requires constant frame rate. LUT-only grading can preserve variable frame rate. These operations require external FFmpeg/ffprobe; CUDA detection is not a promise of GPU video encoding.
-
-```python
-with Engine(root=root) as engine:
-    engine.video("chart_clip.mp4", "graded.mp4", keyframe_sec=2.0, model="rpcc2")
-    engine.video_grade(out / "model.json", "scene.mp4", "scene_graded.mp4")
-```
+The native preview is still-image-only. The former NDJSON commands `video` and
+`video_grade` always return `ok:false`, `code:"unsupported_feature"` and
+`feature:"video"`, with an explanation that video processing has been removed.
+They create no outputs and do not invoke FFmpeg/ffprobe. The Python method names
+and CLI command names remain solely to give older callers a clear error rather
+than an unknown-method failure. `Engine.video(...)`, `Engine.video_grade(...)`
+and checked `request(...)` raise `EngineError`; `request("video", check=False)`
+returns the error dictionary for callers that inspect failures explicitly.
+No setting or separately installed media tool re-enables video processing.
 
 ## Color-space contract and scientific caution
 

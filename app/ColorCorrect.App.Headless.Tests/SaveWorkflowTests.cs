@@ -240,7 +240,6 @@ public sealed class SaveWorkflowTests
         public Task<string?> SaveImageAsync(string suggestedName) => Task.FromResult<string?>(null);
         public Task<string?> SavePlotAsync(string title, string suggestedName) => Task.FromResult<string?>(null);
         public Task<string?> OpenWhiteAsync() => Task.FromResult<string?>(null);
-        public Task<string?> OpenVideoAsync() => Task.FromResult<string?>(null);
         public Task<string?> SaveCubeAsync(string suggestedName) => Task.FromResult<string?>(null);
         public Task SetClipboardAsync(string text) => Task.CompletedTask;
     }

@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('payload', type=Path)
@@ -12,21 +13,28 @@ parser.add_argument('--installed', action='store_true', help='Allow only Inno-cr
 args = parser.parse_args()
 root = args.payload.resolve()
 required = ['ccp-engine.exe','app/ColorCorrect.App.exe','app/coreclr.dll','libtorch/lib/torch_cpu.dll',
-            'onnxruntime.dll','DirectML.dll','ffmpeg.exe','ffprobe.exe','vcruntime140.dll','msvcp140.dll',
+            'onnxruntime.dll','DirectML.dll','vcruntime140.dll','msvcp140.dll',
             'api/colorcorrect.py','docs/user-guide.md','docs/images/workflow.svg',
             'notebooks/01_headless_workflow.ipynb','notebooks/02_compare_fit_methods.ipynb',
             'test_images/Blank.JPG','test_images/ColorCard_Big.JPG','test_images/ColorCard_Combo.JPG',
             'test_images/Sample_3572.JPG','test_images/Sample_3573.JPG','build-info.json',
-            'licenses/dependency-inventory.json','licenses/ffmpeg/LICENSE','licenses/ffmpeg/README.txt',
+            'licenses/dependency-inventory.json','models/NOTICE.md','models/LICENSE-AGPL-3.0.txt',
             'licenses/dotnet/LICENSE.txt','licenses/pytorch-2.9.1/LICENSE.txt','THIRD_PARTY_NOTICES.md']
 for name in required:
     assert (root/name).is_file(), f'Missing payload file: {name}'
+for name in ('ffmpeg.exe', 'ffprobe.exe', 'ffmpeg-sha256.txt', 'licenses/ffmpeg'):
+    assert not (root/name).exists() or (root/name).is_dir() and not any((root/name).iterdir()), f'Obsolete video payload: {name}'
 models = json.loads((root/'models/manifest.json').read_text(encoding='utf-8-sig'))
 for item in models['files']:
     path = root/item['path']
     assert path.is_file() and path.stat().st_size == item['bytes'], f'Missing/changed model: {item["path"]}'
     with path.open('rb') as stream:
         assert hashlib.file_digest(stream,'sha256').hexdigest() == item['sha256'], item['path']
+    model_private = re.compile(rb'(?:[A-Za-z]:[\\/]+Users[\\/]+|/Users/)')
+    assert not model_private.search(path.read_bytes()), f'Private model path: {item["path"]}'
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            assert not any(model_private.search(archive.read(name)) for name in archive.namelist()), f'Private compressed model path: {item["path"]}'
 covered = set()
 for line in (root/'SHA256SUMS.txt').read_text(encoding='utf-8-sig').splitlines():
     expected, name = line.split('  ', 1)

@@ -331,7 +331,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => WorkerStartupComplete && !WorkerReady;
-    public bool CanOpenBatch => WorkerReady && !Busy && !IsSaving && Session.Any(item => !item.IsVideo);
+    public bool CanOpenBatch => WorkerReady && !Busy && !IsSaving && Session.Count > 0;
     public string StatusStateLabel => HasWorkerError
         ? "Engine error"
         : Busy
@@ -370,32 +370,23 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public string ApplyLabel => WillUseLoadedModel
-        ? Active?.IsVideo == true ? "Grade video" : "Apply model"
-        : Active?.IsVideo == true ? "Fit + grade" : "Fit + apply";
+    public string ApplyLabel => WillUseLoadedModel ? "Apply model" : "Fit + apply";
     public string ModelModeHint => WillUseLoadedModel
         ? "Run applies the loaded GC/WB/CC. Method and degree are ignored. FFC (if on) is recomputed from the white still."
-        : Active?.IsVideo == true
-            ? "Run takes a chart frame from this clip, fits a new model, then grades. A loaded model is replaced."
-            : Active?.Handshake is { Ok: true }
-                ? "Run fits a new model from this image and replaces the loaded model."
-                : "Detect the chart on this image, then Run to fit a new model.";
+        : Active?.Handshake is { Ok: true }
+            ? "Run fits a new model from this image and replaces the loaded model."
+            : "Detect the chart on this image, then Run to fit a new model.";
     public string WorkflowHint => Active is null
-        ? "Add a still or clip, then Fit + apply."
+        ? "Add a still image, then Fit + apply."
         : WillUseLoadedModel
-            ? Active.IsVideo
-                ? "Using the loaded model. Run grades this clip."
-                : "Using the loaded model. Run applies it to this still."
-            : Active.IsVideo
-                ? "Fit from this clip: Run finds a chart frame, then grades."
-                : Active.Handshake is { Ok: true }
-                    ? Active.IsCorrected
-                        ? "Corrected. Fit + apply again retrains from this still."
-                        : "Chart detected. Fit + apply trains a new model from this still."
-                    : "Detect the chart, then Fit + apply.";
-    public bool IsVideoActive => Active?.IsVideo == true;
-    public bool ShowStillPreview => HasImage && !IsVideoActive;
-    public bool ShowChartSection => HasImage && !IsVideoActive;
+            ? "Using the loaded model. Run applies it to this still."
+            : Active.Handshake is { Ok: true }
+                ? Active.IsCorrected
+                    ? "Corrected. Fit + apply again retrains from this still."
+                    : "Chart detected. Fit + apply trains a new model from this still."
+                : "Detect the chart, then Fit + apply.";
+    public bool ShowStillPreview => HasImage;
+    public bool ShowChartSection => HasImage;
     public bool ShowChartOverlay => OverlayHandshake is { Ok: true };
     public bool ShowOverlayLegend => ShowChartOverlay;
     public bool ShowPlaneOverlay => OverlayPlane is not null;
@@ -455,6 +446,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SessionItemViewModel? last = null;
         var added = false;
         var names = new List<string>();
+        var unsupported = 0;
         foreach (var path in incoming)
         {
             if (Session.Count >= MaxWorking)
@@ -463,8 +455,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 break;
             }
 
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path) || !(IsImage(path) || IsVideoFile(path)))
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
+                continue;
+            }
+
+            if (!IsImage(path))
+            {
+                unsupported++;
                 continue;
             }
 
@@ -475,7 +473,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 continue;
             }
 
-            last = new SessionItemViewModel(full, IsVideoFile(full));
+            last = new SessionItemViewModel(full);
             if (!string.IsNullOrWhiteSpace(WhiteImagePath) && PathsEqual(full, WhiteImagePath))
             {
                 last.IncludeInBatch = false;
@@ -501,10 +499,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             Log("Session", $"Added {names.Count} file(s).", LogLevel.Info, names);
-            foreach (var item in Session.Where(entry => entry.IsVideo && entry.Thumb is null))
-            {
-                _ = LoadVideoPosterAsync(item);
-            }
+        }
+
+        if (unsupported > 0)
+        {
+            Status = $"Skipped {unsupported} unsupported file(s). This preview supports JPEG, PNG and TIFF still images only; video is not supported.";
+            Log("Session", Status, LogLevel.Warning);
         }
     }
 
@@ -1421,7 +1421,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _jobCts?.Cancel();
         _cropCts?.Cancel();
         _previewGeneration++;
-        StopVideoCompare();
         var original = OriginalPreview;
         var corrected = CorrectedPreview;
         Preview = null;
@@ -1465,7 +1464,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var gen = ++_previewGeneration;
-        StopVideoCompare();
         LastPreviewDir = Directory.Exists(item.PreviewDir) ? item.PreviewDir : "";
         if (StageName != "Original")
         {
@@ -1482,7 +1480,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         NotifyStageRadios();
         HasImage = true;
         RebuildFaces(item);
-        if (!item.IsVideo && ImageSizeReader.TryRead(item.Path, out var width, out var height))
+        if (ImageSizeReader.TryRead(item.Path, out var width, out var height))
         {
             SetSourceSize(width, height);
         }
@@ -1492,14 +1490,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         HasReport = File.Exists(item.ReportPath);
         OpenReportCommand.NotifyCanExecuteChanged();
         NotifyRunCommands();
-        if (!item.IsVideo)
-        {
-            _ = LoadPreviewsAsync(item, gen);
-        }
-        else
-        {
-            _ = LoadVideoCompareAsync(item, gen);
-        }
+        _ = LoadPreviewsAsync(item, gen);
 
         MaybeAutoDetect();
         if (!string.IsNullOrWhiteSpace(LastPreviewDir) && item.IsCorrected)
@@ -1801,8 +1792,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         foreach (var item in Session)
         {
-            item.IsWhiteRef = !item.IsVideo
-                && !string.IsNullOrWhiteSpace(WhiteImagePath)
+            item.IsWhiteRef = !string.IsNullOrWhiteSpace(WhiteImagePath)
                 && PathsEqual(item.Path, WhiteImagePath);
         }
     }
@@ -1824,7 +1814,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(WillUseLoadedModel));
         OnPropertyChanged(nameof(IsUseLoadedMode));
         OnPropertyChanged(nameof(IsFitFromImage));
-        OnPropertyChanged(nameof(IsVideoActive));
         OnPropertyChanged(nameof(ShowStillPreview));
         OnPropertyChanged(nameof(ShowChartSection));
         OnPropertyChanged(nameof(CanOpenBatch));
@@ -1849,15 +1838,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool CanRemove() => HasSelected;
     private bool CanOpenReport() => HasReport;
     private bool CanDetect() =>
-        WorkerReady && !Busy && !IsSaving && Active is { IsVideo: false } && File.Exists(Active.Path);
+        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path);
     private bool CanApply() =>
         WorkerReady && !Busy && !IsSaving && Active is not null && NnSettingsValid &&
         (WillUseLoadedModel
-            || Active.IsVideo
             || Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && NnSettingsValid && Session.Any(item => !item.IsVideo);
+    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && NnSettingsValid && Session.Count > 0;
     private bool CanBatchApply() =>
-        WorkerReady && !Busy && !IsSaving && Session.Any(item => !item.IsVideo) && File.Exists(LoadedModelPath);
+        WorkerReady && !Busy && !IsSaving && Session.Count > 0 && File.Exists(LoadedModelPath);
     private bool CanRestartWorker() => !Busy && !IsSaving;
     private bool CanCancel() => IsBatching;
     private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);
@@ -1978,14 +1966,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (Active.IsVideo)
-        {
-            DetectSummary = WillUseLoadedModel
-                ? "Video — Run grades with the loaded model"
-                : "Video — Run finds a chart frame, fits, then grades";
-            return;
-        }
-
         if (Active.Handshake is { Ok: true })
         {
             DetectSummary = $"{Active.DetectLabel} · {Math.Max(1, Active.Handshake.ChartCount)} chart(s)";
@@ -2001,7 +1981,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void MaybeAutoDetect()
     {
-        if (_restoring || !WorkerReady || Active is not { Handshake: null, IsVideo: false } item
+        if (_restoring || !WorkerReady || Active is not { Handshake: null } item
             || !File.Exists(item.Path))
         {
             return;
@@ -2355,7 +2335,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 UseAllFaces = item.UseAllFaces,
                 IncludeInBatch = item.IncludeInBatch,
                 PreviewDir = item.PreviewDir,
-                IsVideo = item.IsVideo,
+                IsVideo = false, // Retained DTO field for legacy session compatibility.
                 FfcPlane = item.FfcPlane is { } plane
                     ? [plane.X, plane.Y, plane.Width, plane.Height]
                     : null,
@@ -2436,8 +2416,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    private void RestoreWorkingItems(SessionState state)
+    internal int RestoreWorkingItems(SessionState state)
     {
+        // Invalidate in-flight decodes before replacing a session, including a
+        // legacy session whose items are all unsupported in the still-only app.
+        _previewGeneration++;
         foreach (var item in Session.ToList())
         {
             item.Dispose();
@@ -2445,24 +2428,39 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         Session.Clear();
         Active = null;
+        _rangeAnchor = null;
+        LastPreviewDir = "";
+        SetPreview(null, null);
+        OverlayHandshake = null;
+        HasImage = false;
+        HasCorrected = false;
+        ShowFacePicker = false;
+        FaceOptions.Clear();
+        ClearPicker();
         ApplyReport(null);
+        var unsupported = 0;
         foreach (var dto in state.Items)
         {
+            if (dto.IsVideo || !IsImage(dto.Path))
+            {
+                unsupported++;
+                continue;
+            }
+
             if (!File.Exists(dto.Path) || Session.Count >= MaxWorking)
             {
                 continue;
             }
 
-            var item = new SessionItemViewModel(dto.Path, dto.IsVideo)
+            var item = new SessionItemViewModel(dto.Path)
             {
                 FaceChoice = dto.FaceChoice,
                 UseAllFaces = dto.UseAllFaces,
-                IncludeInBatch = !dto.IsVideo && dto.IncludeInBatch,
+                IncludeInBatch = dto.IncludeInBatch,
                 CorrectedPath = File.Exists(dto.CorrectedPath) ? dto.CorrectedPath : "",
                 ReportPath = File.Exists(dto.ReportPath) ? dto.ReportPath : "",
                 ModelPath = File.Exists(dto.ModelPath) ? dto.ModelPath : "",
                 PreviewDir = Directory.Exists(dto.PreviewDir) ? dto.PreviewDir : "",
-                IsVideo = dto.IsVideo,
                 IsCorrected = File.Exists(dto.CorrectedPath)
                     || (Directory.Exists(dto.PreviewDir) && ResolvePreviewFile(dto.PreviewDir, "corrected") is not null),
                 IncludeInSave = File.Exists(dto.CorrectedPath) || Directory.Exists(dto.PreviewDir),
@@ -2497,10 +2495,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         RefreshSessionUi();
         EnsureWhiteInSession(activate: false);
         NotifyRunCommands();
-        foreach (var item in Session.Where(entry => entry.IsVideo && entry.Thumb is null))
+        if (unsupported > 0)
         {
-            _ = LoadVideoPosterAsync(item);
+            Status = $"Skipped {unsupported} unsupported session item(s). Video is not supported; only JPEG, PNG and TIFF still images are restored.";
+            Log("Session", Status, LogLevel.Warning);
         }
+        return unsupported;
     }
 
     private static FfcPlane? PlaneFromDto(SessionItemDto dto)
@@ -2986,22 +2986,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }).ConfigureAwait(false);
     }
 
-    private static bool IsImage(string path)
-    {
-        var ext = Path.GetExtension(path);
-        return ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
-               || ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-               || ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
-               || ext.Equals(".tif", StringComparison.OrdinalIgnoreCase)
-               || ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsVideoFile(string path)
-    {
-        var ext = Path.GetExtension(path);
-        return ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase)
-               || ext.Equals(".mov", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsImage(string path) => SupportedStillImage.IsSupportedFile(path);
 
     private static List<NamedValue> Map((string Id, string Label)[] items) =>
         items.Select(item => new NamedValue(item.Id, item.Label)).ToList();
@@ -3107,7 +3092,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     partial void OnActiveChanged(SessionItemViewModel? value)
     {
-        OnPropertyChanged(nameof(IsVideoActive));
         OnPropertyChanged(nameof(ShowStillPreview));
         OnPropertyChanged(nameof(ShowChartSection));
         RefreshSessionNavigation();

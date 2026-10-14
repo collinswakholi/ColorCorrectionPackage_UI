@@ -239,16 +239,6 @@ public sealed class SpeedyWorker : IAsyncDisposable
                 psi.Environment["ORT_DYLIB_PATH"] = ortDll;
             }
         }
-        var bundledFf = VideoFrames.FindFfmpeg(_repoRoot);
-        if (!string.IsNullOrWhiteSpace(bundledFf))
-        {
-            psi.Environment["CCP_FFMPEG"] = bundledFf;
-            var ffDir = Path.GetDirectoryName(bundledFf);
-            if (!string.IsNullOrWhiteSpace(ffDir))
-            {
-                extras.Add(ffDir);
-            }
-        }
         var torch = EnginePaths.LibTorchRoot();
         if (Directory.Exists(torch))
         {

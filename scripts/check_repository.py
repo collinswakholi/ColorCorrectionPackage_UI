@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import zipfile
 
 root = Path(__file__).resolve().parents[1]
 files = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode().split('\0')
@@ -32,7 +33,8 @@ for relative in sorted(set(filter(None, files))):
                 failures.append(f'saved notebook execution: {relative}')
 
 manifest = json.loads((root / 'models/manifest.json').read_text())
-actual_models = {p.relative_to(root).as_posix() for p in (root/'models').rglob('*') if p.is_file() and p.name != 'manifest.json'}
+model_notices = {'manifest.json', 'NOTICE.md', 'LICENSE-AGPL-3.0.txt'}
+actual_models = {p.relative_to(root).as_posix() for p in (root/'models').rglob('*') if p.is_file() and p.name not in model_notices}
 if actual_models != {f['path'] for f in manifest['files']}:
     failures.append('model manifest does not cover exactly the shipped weights')
 for item in manifest['files']:
@@ -41,6 +43,15 @@ for item in manifest['files']:
         checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
     if path.stat().st_size != item['bytes'] or checksum != item['sha256']:
         failures.append(f'changed model: {item["path"]}')
+    # TorchScript stacks/config are compressed: checking only the outer ZIP
+    # missed export paths. Never unpickle model debug data during this scan.
+    model_private = re.compile(rb'(?:[A-Za-z]:[\\/]+Users[\\/]+|/Users/)')
+    if model_private.search(path.read_bytes()):
+        failures.append(f'private model metadata: {item["path"]}')
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            if any(model_private.search(archive.read(name)) for name in archive.namelist()):
+                failures.append(f'private compressed model metadata: {item["path"]}')
 expected = {'Blank.JPG','ColorCard_Big.JPG','ColorCard_Combo.JPG','Sample_3572.JPG','Sample_3573.JPG'}
 if {p.name for p in (root/'test_images').iterdir()} != expected:
     failures.append('public corpus must contain exactly the five original images')

@@ -42,6 +42,38 @@ def main():
         assert "validation_delta_e_2000" in fit["report_json"]
         for artifact in ("output", "report", "model_out"):
             assert Path(fit[artifact]).is_file()
+        # A chart image alone is not a fitting handshake; fail before writing artifacts.
+        try:
+            engine.fit(samples / "ColorCard_Big.JPG", output=out / "no-chart.png",
+                report=out / "no-chart.report.json", model_out=out / "no-chart.model.json")
+        except EngineError as error:
+            assert "run requires handshake or chart_json" in error.reply["error"], error.reply
+        else:
+            raise AssertionError("Missing chart handshake was accepted")
+        assert not (out / "no-chart.png").exists()
+        bad_white = out / "invalid-white.png"
+        bad_white.write_text("not an image", encoding="utf-8")
+        for index, white in enumerate((out / "missing-white.png", bad_white)):
+            try:
+                engine.fit(samples / "ColorCard_Big.JPG", handshake=detections["ColorCard_Big.JPG"]["handshake"],
+                    output=out / f"bad-ffc-{index}.png", report=out / f"bad-ffc-{index}.report.json",
+                    model_out=out / f"bad-ffc-{index}.model.json", do_ffc=True, white=white,
+                    phase2_teacher=False)
+            except EngineError as error:
+                assert "FFC reference could not be loaded or fitted" in error.reply["error"], error.reply
+            else:
+                raise AssertionError("Unreadable FFC reference silently skipped in fit")
+            assert not (out / f"bad-ffc-{index}.png").exists()
+            reply = engine.apply(out / "model.json", [samples / "Sample_3572.JPG", samples / "Sample_3573.JPG"],
+                out / f"bad-apply-{index}", do_ffc=True, white=white, check=False)
+            assert reply["ok"] is False and len(reply["results"]) == 2, reply
+            assert all(row["ok"] is False and "FFC reference could not be loaded or fitted" in row["error"]
+                for row in reply["results"]), reply
+            assert not list((out / f"bad-apply-{index}").glob("*_corrected.*"))
+        # A supplied but disabled white reference remains unused.
+        ignored_white = engine.apply(out / "model.json", samples / "Sample_3572.JPG", out / "ffc-off",
+            do_ffc=False, white=bad_white, write_output=False)
+        assert ignored_white["results"][0]["ok"] is True
         t = time.perf_counter()
         applied = engine.apply(out / "model.json", [samples / "Sample_3572.JPG", samples / "Sample_3573.JPG"],
             out / "applied", do_ffc=True, white=samples / "Blank.JPG", output_format="png")

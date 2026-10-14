@@ -26,8 +26,6 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       REQUESTED_SHA: ${{ inputs.source_sha }}
       REVIEWED_GATES: ${{ inputs.reviewed_release_gates }}
-      SOURCE_URL: ${{ vars.FFMPEG_CORRESPONDING_SOURCE_URL }}
-      SOURCE_SHA256: ${{ vars.FFMPEG_CORRESPONDING_SOURCE_SHA256 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -44,7 +42,6 @@ jobs:
           git checkout --detach $env:REQUESTED_SHA
           if ($LASTEXITCODE -ne 0) { throw 'source checkout failed' }
           if (git status --porcelain) { throw 'Clean source required.' }
-          if (-not $env:SOURCE_URL -or $env:SOURCE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Reviewed complete FFmpeg corresponding source must be checksum-pinned in repository variables.' }
           "sha=$main" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
         with:
@@ -61,7 +58,6 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
           if ($LASTEXITCODE -ne 0) { throw 'Rust setup' }
           ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
-          ./scripts/fetch_ffmpeg.ps1
           ./scripts/fetch_onnxruntime.ps1 -Dest .build-cache/test-runtime
           $env:LIBTORCH = (Get-Content .build-cache/sdk-cpu.json -Raw | ConvertFrom-Json).path
           $env:LIBTORCH_PATH = $env:LIBTORCH
@@ -69,8 +65,6 @@ jobs:
           $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
           $env:ORT_DYLIB_PATH = (Resolve-Path .build-cache/test-runtime/onnxruntime.dll).Path
           $env:PATH = "$(Resolve-Path .build-cache/test-runtime);$env:PATH"
-          $env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
-          $env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
           cargo fmt --manifest-path engine/Cargo.toml --all -- --check
           if ($LASTEXITCODE -ne 0) { throw 'format gate' }
           cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked -- -D warnings
@@ -95,8 +89,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'sample workflow' }
           python api/tests/integration_all_methods.py --root $env:CCP_NEW_UI_ROOT
           if ($LASTEXITCODE -ne 0) { throw 'six methods' }
-          python api/tests/integration_video.py --root $env:CCP_NEW_UI_ROOT
-          if ($LASTEXITCODE -ne 0) { throw 'video' }
+          python api/tests/integration_no_video.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'still-image-only contract' }
           python -m pip install -r notebooks/requirements-qa.txt
           if ($LASTEXITCODE -ne 0) { throw 'notebook dependencies' }
           python api/tests/execute_notebooks.py --root $env:CCP_NEW_UI_ROOT
@@ -131,5 +125,5 @@ jobs:
         run: |
           gh release view v0.1.0 *> $null
           if ($LASTEXITCODE -eq 0) { throw 'v0.1.0 already exists; do not overwrite it.' }
-          gh release create v0.1.0 release/ColorCorrect-Studio-win-x64.exe release/ColorCorrect-Studio-win-x64.exe.sha256 release/build-info.json release/dependency-inventory.json release/THIRD_PARTY_NOTICES.md release/third-party-source.zip --target $env:SOURCE_SHA --draft --prerelease --title 'ColorCorrect Studio v0.1.0 — Windows preview' --notes-file release/release-notes.md
+          gh release create v0.1.0 release/ColorCorrect-Studio-win-x64.exe release/ColorCorrect-Studio-win-x64.exe.sha256 release/build-info.json release/dependency-inventory.json release/THIRD_PARTY_NOTICES.md release/model-provenance.md release/NOTICE.md release/LICENSE-AGPL-3.0.txt --target $env:SOURCE_SHA --draft --prerelease --title 'ColorCorrect Studio v0.1.0 — Windows preview' --notes-file release/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Draft release preparation failed.' }

@@ -23,7 +23,7 @@ $info = [ordered]@{
     release_eligible=(-not $dirty -and $env:CCP_RELEASE_BUILD -eq '1')
     build_purpose=$(if ($env:CCP_RELEASE_BUILD -eq '1') { 'reviewed-main-draft' } else { 'validation-only' })
     built_utc=[DateTime]::UtcNow.ToString('o'); target='win-x64'; dotnet_sdk=$sdk; rust=$rust
-    ffmpeg='9.0-full_build-www.gyan.dev'; libtorch='2.9.1-cpu'; onnxruntime='1.22.1'; directml='1.15.4'
+    still_images_only=$true; libtorch='2.9.1-cpu'; onnxruntime='1.22.1'; directml='1.15.4'
     model_manifest=Get-Content (Join-Path $root 'models\manifest.json') -Raw | ConvertFrom-Json
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $Dest 'licenses') | Out-Null

@@ -30,7 +30,7 @@ $env:CFLAGS = ($env:CFLAGS + ' /Brepro /d1trimfile:' + $env:USERPROFILE).Trim()
 
 Push-Location (Join-Path $root "engine")
 try {
-    cargo build --locked -p ccp_bridge --release --features tch,ort-plane,video
+    cargo build --locked -p ccp_bridge --release --features tch,ort-plane
     if ($LASTEXITCODE -ne 0) { throw "cargo release build failed" }
 } finally {
     Pop-Location
@@ -67,6 +67,7 @@ Copy-Item (Join-Path $root "models\apply\lut3d_trilinear.onnx") (Join-Path $dist
 Copy-Item (Join-Path $root "models\apply\lut3d_trilinear.onnx.data") (Join-Path $dist "models\apply\")
 Copy-Item (Join-Path $root "models\plane\plane_det_model_YOLO_512_n.onnx") (Join-Path $dist "models\plane\")
 Copy-Item (Join-Path $root "models\manifest.json") (Join-Path $dist "models\manifest.json")
+Copy-Item -LiteralPath (Join-Path $root 'models\NOTICE.md'), (Join-Path $root 'models\LICENSE-AGPL-3.0.txt') -Destination (Join-Path $dist 'models')
 Copy-Item (Join-Path $root "refs") (Join-Path $dist "refs") -Recurse
 
 # Keep headless entry points and offline tutorials in every distribution.
@@ -83,19 +84,7 @@ foreach ($folder in @('api', 'docs', 'notebooks', 'test_images', 'licenses')) {
 }
 Copy-Item -LiteralPath (Join-Path $root 'README.md'), (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $dist
 
-$bundledFf = Join-Path $root "installer\ffmpeg.exe"
-$bundledProbe = Join-Path $root "installer\ffprobe.exe"
-& "$PSScriptRoot\fetch_ffmpeg.ps1"
-if (-not (Test-Path $bundledFf) -or -not (Test-Path $bundledProbe)) {
-    throw "Video sidecars are incomplete. Both installer\ffmpeg.exe and installer\ffprobe.exe are required."
-}
-Copy-Item $bundledFf (Join-Path $dist "ffmpeg.exe") -Force
-Copy-Item $bundledProbe (Join-Path $dist "ffprobe.exe") -Force
-Copy-Item -LiteralPath (Join-Path $root 'dist\third-party\ffmpeg') -Destination (Join-Path $dist 'licenses\ffmpeg') -Recurse -Force
 & "$PSScriptRoot\stage_vc_runtime.ps1" -Dest $dist
-$sidecarHashes = Get-FileHash $bundledFf, $bundledProbe -Algorithm SHA256 |
-    ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" }
-[IO.File]::WriteAllLines((Join-Path $dist "ffmpeg-sha256.txt"), $sidecarHashes)
 
 function Test-TorchKind([string]$dir, [string]$kind) {
     $json = Join-Path $dir "libtorch.json"
@@ -130,7 +119,6 @@ if not defined CCP_LIBTORCH_ROOT set "CCP_LIBTORCH_ROOT=%LOCALAPPDATA%\CCP-New\l
 set "LIBTORCH=%CCP_LIBTORCH_ROOT%"
 set "LIBTORCH_PATH=%CCP_LIBTORCH_ROOT%"
 set "KMP_DUPLICATE_LIB_OK=TRUE"
-if exist "%HERE%ffmpeg.exe" set "CCP_FFMPEG=%HERE%ffmpeg.exe"
 start "" /D "%HERE%" "%HERE%app\ColorCorrect.App.exe" %*
 "@
 $utf8 = New-Object System.Text.UTF8Encoding $false

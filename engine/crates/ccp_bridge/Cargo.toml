@@ -17,7 +17,6 @@ path = "src/main.rs"
 default = ["ort-plane"]
 tch = ["ccp_detect/tch"]
 ort-plane = ["ccp_detect/ort-plane"]
-video = ["dep:ccp_video"]
 # CUDA is a LibTorch payload / PATH story, not a crate that links CUDA.
 # Enable `tch` and install the CUDA add-on into the single libtorch_root
 # (`%LOCALAPPDATA%\CCP-New\libtorch` on Windows). The engine sets
@@ -28,7 +27,6 @@ cuda = []
 [dependencies]
 ccp_core = { path = "../ccp_core" }
 ccp_detect = { path = "../ccp_detect" }
-ccp_video = { path = "../ccp_video", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"

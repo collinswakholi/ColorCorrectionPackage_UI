@@ -71,7 +71,7 @@ public partial class HelpWindow : Window
         _illustration = null;
         var topic = TopicList.SelectedIndex >= 0 && TopicList.SelectedIndex < _filtered.Length
             ? _filtered[TopicList.SelectedIndex]
-            : new Topic("No matching topics", ["Try a shorter search, such as FFC, NN, ΔE, API, or video."]);
+            : new Topic("No matching topics", ["Try a shorter search, such as FFC, NN, ΔE, API, or export."]);
         ArticlePanel.Children.Add(new TextBlock
         {
             Text = topic.Title, FontSize = 19, FontWeight = FontWeight.SemiBold,

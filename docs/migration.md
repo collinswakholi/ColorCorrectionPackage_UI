@@ -25,7 +25,11 @@ folders differ; native uses internal `CCP-New` storage while the legacy Python
 app uses `.colorcorrector`. Neither old releases nor Docker Hub tags are altered.
 Backup your originals and calibration files before migrating a workflow.
 
-SDK operations/options and the existing native NDJSON protocol are preserved.
+Still-image SDK operations/options and the native NDJSON transport are preserved.
+Video capabilities are removed from this preview, including media tools and UI
+controls. Former `video`/`video_grade` names return an explicit unsupported error
+to older clients; installing FFmpeg does not restore them. Global `.cube` model
+export remains available and does not include spatial FFC.
 See [API examples](api/README.md). Bundle paths are relative to the installed app,
 but caller-supplied relative input/output paths are relative to the caller's cwd.
 Copy notebooks to a writable working directory; set `COLORCORRECT_ROOT` to the

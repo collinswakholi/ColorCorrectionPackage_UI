@@ -307,10 +307,12 @@ public partial class MainWindowViewModel
             return;
         }
 
-        RestoreWorkingItems(state);
-        Status = $"Session loaded · {Session.Count} image(s)";
-        Log("Session", Status, LogLevel.Success);
-        ToastService.ShowSuccess(Status);
+        var skipped = RestoreWorkingItems(state);
+        Status = $"Session loaded · {Session.Count} image(s)"
+            + (skipped > 0 ? $" · skipped {skipped} unsupported item(s); video is not supported." : "");
+        Log("Session", Status, skipped > 0 ? LogLevel.Warning : LogLevel.Success);
+        if (skipped > 0) ToastService.ShowWarning(Status);
+        else ToastService.ShowSuccess(Status);
     }
 
     internal void ClearTransientCache()
@@ -331,7 +333,6 @@ public partial class MainWindowViewModel
                 }
             }
 
-            TryDeleteDir(Path.Combine(SessionStore.AppDataDir(), "video-preview"));
         }
         catch
         {

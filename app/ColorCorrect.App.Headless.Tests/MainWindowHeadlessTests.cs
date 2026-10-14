@@ -61,7 +61,7 @@ public sealed class MainWindowHeadlessTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(chevron.IsVisible);
                 Assert.True(vm.ProcessExpanded);
-                foreach (var button in new[] { window.ImageUpload, window.FolderUpload, window.VideoUpload,
+                foreach (var button in new[] { window.ImageUpload, window.FolderUpload,
                     window.FfcSettingsButton, window.GcSettingsButton, window.CcSettingsButton })
                 {
                     Assert.True(button.Bounds.Width >= 28, $"{button.Name} has a usable target");

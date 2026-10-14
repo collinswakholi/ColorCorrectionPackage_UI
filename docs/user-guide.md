@@ -21,6 +21,8 @@ application reuses GC rather than fitting a new curve without a chart.
    intended **Chart face**.
 3. Load the blank field in the FFC section. In `test_images`,
    `Blank.JPG` is the flat-field input, **not** the chart.
+   If FFC is enabled, a missing or unusable blank reference fails the operation
+   instead of silently proceeding without flat-field correction.
 4. Start with encoded sRGB/D65 input. Enable the stages needed for your setup:
    FFC → GC → WB → CC. GC is automatic and has no degree setting.
 5. Choose **Fit + apply**; inspect stage previews, per-patch ΔE00, and held-out validation. Do not
@@ -99,9 +101,8 @@ not a completed calibration.
   calibrates every selected chart-bearing image separately.
 - Session, catalog, and process areas scroll when their content exceeds the panel.
 - Model JSON preserves a reusable pipeline; cube LUTs exclude spatial FFC.
-- Video requires FFmpeg/FFprobe and supports 8-bit SDR Rec.709/sRGB-family input.
-  HDR/wide-gamut/high-bit-depth input is rejected. Per-frame FFC requires CFR;
-  the LUT path supports VFR.
+- The app processes still images, not video. Cube export is a reusable global
+  model transform; it does not turn the app into a video processor or include FFC.
 
 ## Automation and notebooks
 

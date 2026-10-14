@@ -264,12 +264,12 @@
                                 </Border>
                             </DockPanel>
                             <Border x:Name="DropZone" Classes="dropZone" PointerPressed="OnDropZonePressed"
-                                    AutomationProperties.Name="Drop JPEG, PNG, TIFF, or video files">
+                                    AutomationProperties.Name="Drop JPEG, PNG, or TIFF still images">
                                 <Grid>
                                     <Rectangle Classes="dropDash" HorizontalAlignment="Stretch"
                                                VerticalAlignment="Stretch"/>
                                     <StackPanel Spacing="6">
-                                        <TextBlock Text="Drop stills or video" FontWeight="Medium" FontSize="12"
+                                        <TextBlock Text="Drop still images" FontWeight="Medium" FontSize="12"
                                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                                    HorizontalAlignment="Center" TextWrapping="Wrap"
                                                    TextAlignment="Center"/>
@@ -285,12 +285,6 @@
                                                     Command="{Binding OpenFolderCommand}"
                                                     ToolTip.Tip="Add every still in a folder to the working session"
                                                     AutomationProperties.Name="Open image folder"/>
-                                            <Button x:Name="VideoUpload" Content="Video"
-                                                    Theme="{StaticResource SecondaryButton}"
-                                                    Classes="sourceAction"
-                                                    Command="{Binding ImportVideoCommand}"
-                                                    ToolTip.Tip="Import an MP4 or MOV clip"
-                                                    AutomationProperties.Name="Import video"/>
                                         </controls:FitWrapPanel>
                                     </StackPanel>
                                 </Grid>
@@ -391,14 +385,6 @@
                                                                 IsVisible="{Binding IsCorrected}"
                                                                 ToolTip.Tip="Corrected"
                                                                 AutomationProperties.Name="Corrected"/>
-                                                        <Border Classes="kindBadge" IsVisible="{Binding IsVideo}"
-                                                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                IsHitTestVisible="False"
-                                                                ToolTip.Tip="Video">
-                                                            <Path Data="{StaticResource PlayIconGeometry}" Width="12" Height="12"
-                                                                  Stretch="Uniform" Fill="White" Margin="2,0,0,0"
-                                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                        </Border>
                                                         <Border Classes="whiteBadge" IsHitTestVisible="False"
                                                                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                                 Margin="0,0,4,4" IsVisible="{Binding IsWhiteRef}"
@@ -560,7 +546,7 @@
                                                    Classes="caption" VerticalAlignment="Center"/>
                                         <Slider x:Name="CropInset" Minimum="0.05" Maximum="1" Value="{Binding Crop}"
                                                 MinWidth="0" MinHeight="28" VerticalAlignment="Center"
-                                                ToolTip.Tip="Patch inset for detect and fit. Used on stills and when fitting from a video chart frame."
+                                                ToolTip.Tip="Patch inset for chart detection and fitting."
                                                 AutomationProperties.Name="Patch crop inset"/>
                                     </DockPanel>
                                 </StackPanel>
@@ -919,67 +905,9 @@
                                 <Grid>
                                     <StackPanel x:Name="InputEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
                                                 IsVisible="{Binding !HasImage}">
-                                        <TextBlock Text="Drop a still or video to begin" Classes="caption"
+                                        <TextBlock Text="Drop a still image to begin" Classes="caption"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
-                                    <DockPanel x:Name="VideoCompare" IsVisible="{Binding IsVideoActive}" Margin="8">
-                                        <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                                            <Button x:Name="VideoPlayBtn" DockPanel.Dock="Left"
-                                                    Command="{Binding ToggleVideoPlayCommand}"
-                                                    Theme="{StaticResource TinyIconButton}"
-                                                    IsEnabled="{Binding VideoCompareReady}"
-                                                    ToolTip.Tip="{Binding VideoPlayLabel}"
-                                                    AutomationProperties.Name="Play video compare">
-                                                <Panel>
-                                                    <Path Data="{StaticResource PlayIconGeometry}" Width="14" Height="14"
-                                                          Stretch="Uniform"
-                                                          IsVisible="{Binding !VideoPlaying}"
-                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                                                    <Path Data="{StaticResource PauseIconGeometry}" Width="14" Height="14"
-                                                          Stretch="Uniform"
-                                                          IsVisible="{Binding VideoPlaying}"
-                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                                                </Panel>
-                                            </Button>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding VideoTimecode}" Classes="caption"
-                                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
-                                            <Slider Minimum="0" Maximum="{Binding VideoFrameMax}"
-                                                    Value="{Binding VideoFrameIndex}"
-                                                    Margin="10,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    IsEnabled="{Binding VideoCompareReady}"
-                                                    AutomationProperties.Name="Video compare scrub"/>
-                                        </DockPanel>
-                                        <Grid RowDefinitions="Auto,*" RowSpacing="6">
-                                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                                <TextBlock Text="ORIGINAL" Classes="caption"/>
-                                                <TextBlock Grid.Column="1" Text="CORRECTED" Classes="caption"/>
-                                            </Grid>
-                                            <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10"
-                                                  PointerReleased="OnVideoSurfaceReleased">
-                                                <Border Background="#111" Cursor="Hand">
-                                                    <Image Source="{Binding VideoOriginalFrame}" Stretch="Uniform"/>
-                                                </Border>
-                                                <Border Grid.Column="1" Background="#111" Cursor="Hand">
-                                                    <Grid>
-                                                        <TextBlock Text="{Binding VideoCorrectedHint}" Classes="caption"
-                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                   TextWrapping="Wrap" Margin="12"
-                                                                   IsVisible="{Binding !HasVideoCorrected}"/>
-                                                        <Image Source="{Binding VideoCorrectedFrame}" Stretch="Uniform"
-                                                               IsVisible="{Binding HasVideoCorrected}"/>
-                                                    </Grid>
-                                                </Border>
-                                                <Border Grid.ColumnSpan="2" Classes="videoPlayOverlay"
-                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                        IsVisible="{Binding ShowVideoPlayOverlay}">
-                                                    <Path Data="{StaticResource PlayIconGeometry}" Width="18" Height="18"
-                                                          Stretch="Uniform" Fill="White" Margin="3,0,0,0"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                            </Grid>
-                                        </Grid>
-                                    </DockPanel>
                                     <controls:ZoomPanView x:Name="OriginalStage" IsVisible="{Binding ShowStillPreview}">
                                         <Grid Width="{Binding NaturalWidth}" Height="{Binding NaturalHeight}"
                                               Cursor="Cross"
@@ -1446,7 +1374,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:SessionItemViewModel">
                                     <CheckBox IsChecked="{Binding IncludeInBatch}" Margin="0,0,0,4"
-                                              IsVisible="{Binding !IsVideo}">
+>
                                         <TextBlock Text="{Binding FileName}" FontSize="12"
                                                    TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
                                     </CheckBox>
@@ -1531,7 +1459,7 @@
         <Grid x:Name="DragOverlay" Grid.RowSpan="3" IsVisible="False" IsHitTestVisible="False">
             <Border Background="{DynamicResource DragOverlayBrush}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="Drop stills or video" FontSize="24" Foreground="White"
+                    <TextBlock Text="Drop still images" FontSize="24" Foreground="White"
                                FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock Text="They join the working session" FontSize="14"
                                Foreground="{DynamicResource DragSubtitleBrush}"

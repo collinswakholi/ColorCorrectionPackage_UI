@@ -13,7 +13,7 @@
     "Paragraphs": [
       "Flat-field correction compensates for spatial brightness variation. Use a clean, matte blank white field captured in the same setup. In the supplied test corpus, Blank.JPG is the FFC input—not a chart for fitting color correction.",
       "Inspect the chosen white-field region: it should exclude objects, edges, dirt, glare, and saturated areas. Surface degree and smoothing describe the illumination field; increasing complexity is not automatically more accurate.",
-      "FFC is spatial and cannot be represented by a 3D cube LUT. Reuse it only when camera geometry, framing, lighting, and image dimensions match. Video with FFC uses the per-frame path and requires constant frame rate.",
+      "FFC is spatial and cannot be represented by a 3D cube LUT. Reuse it only when camera geometry, framing, lighting, and image dimensions match.",
       "FFC, GC, and WB currently require encoded sRGB input with D65 white. For other input RGB spaces, convert the image first or use CC alone; unsupported combinations are rejected rather than interpreted silently."
     ]
   },
@@ -54,11 +54,10 @@
     ]
   },
   {
-    "Title": "Apply, save & video",
+    "Title": "Apply & save",
     "Paragraphs": [
       "To apply an existing fit, expand Model and select Use loaded; load model JSON first if needed. Select the sample image and run Apply model. Fit from image is a different mode. No chart is needed on an apply-only image, but capture conditions must match. In Batch, choose Apply current model to reuse the model; Fit from chart calibrates each chart image separately.",
       "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S, choose corrected images, stage images, and reports, then Save selected. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
-      "Video supports 8-bit SDR Rec.709/sRGB-family input. HDR/PQ/HLG, wide-gamut Rec.2020, and high-bit-depth inputs are rejected. FFmpeg and FFprobe are required. The LUT path preserves variable-frame-rate timing; spatial FFC uses constant-frame-rate per-frame correction.",
       "Keep the source files unchanged and store outputs separately. Compare corrected results in a color-managed viewer before downstream measurement or publication."
     ]
   },
@@ -66,7 +65,7 @@
     "Title": "API & notebooks",
     "Paragraphs": [
       "The same Rust worker used by the GUI accepts sequential newline-delimited JSON commands without opening a window. The bundled Python SDK and command-line interface provide a friendlier route for scripts, automation, and Jupyter notebooks; Python is optional for the desktop app.",
-      "Find api/, docs/api/, and notebooks/ beside the packaged application. The short Python workflow is Engine.calibrate(chart, white=blank, folder=results), then calibration.apply(images). Calibration detects automatically and retains all advanced fit options; the original detect, fit, apply, video and request interfaces remain available. Start with the API README for a complete runnable example.",
+      "Find api/, docs/api/, and notebooks/ beside the packaged application. The short Python workflow is Engine.calibrate(chart, white=blank, folder=results), then calibration.apply(images). Calibration detects automatically and retains all advanced fit options; the original detect, fit, apply and request interfaces remain available. Start with the API README for a complete runnable example.",
       "Use a separate worker per independent session and send one request at a time. Treat model state as belonging to that worker. A timeout must terminate the worker before another request, so a late reply cannot be mistaken for the next operation.",
       "The API is a local process interface, not an internet server. The app does not open a network listener by default. Use explicit output directories and retain your model, configuration, chart reference, and reports for reproducibility."
     ]
@@ -78,7 +77,7 @@
       "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
       "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
       "Worker or native-library error: open Accelerators from the app title, inspect the status, try CPU, and restart the worker. CUDA download installs a separate per-user libtorch-cuda add-on and preserves CPU. CUDA can run detection and explicitly selected LUT application; NN fitting remains CPU. Auto still-image LUT application intentionally uses CPU. Device availability alone does not prove a particular operation used CUDA; inspect apply_backend in API replies. Keep the bundled executable, models, references, and runtime libraries together.",
-      "Video cannot open: check FFmpeg/FFprobe availability and the supported SDR contract. Do not relabel HDR footage as SDR; convert it deliberately outside the app first."
+      "Unsupported media: this preview supports JPEG, PNG and TIFF still images only. Video is not supported; older sessions skip video entries and preserve their still images."
     ]
   },
   {

@@ -1,11 +1,60 @@
 # Native migration validation — 14 October 2026
 
+## Still-image-only follow-up
+
+At the maintainer's request, the preview now removes video import/playback/grading,
+the video crate and FFmpeg/ffprobe entirely. Former NDJSON/Python video names are
+retained only as explicit `unsupported_feature` errors; they never require media
+tools or create output. Current regression gates pass **54 .NET**, **88 Rust**
+and **16 Python** tests. All 13 existing Windows visual baselines pass unchanged.
+The three documentation illustrations were individually rendered, reviewed and
+updated for the still-only controls; no baselines were refreshed to hide failures.
+
+A corrected native negative test exposed that earlier missing-FFC coverage used
+`out_dir` instead of `output_dir` and rejected the request for the wrong reason.
+With the proper key, the old worker silently skipped an unusable blank reference.
+Explicit FFC now rejects absent, missing, corrupt and unreadable references in
+fit/application; disabled FFC ignores an unused reference. Real native regressions
+and all six valid-input correction methods pass, with unchanged chart/CV values.
+
+The artifact scan was expanded to inspect compressed TorchScript metadata. Local
+training/export path prefixes were sanitized without changing graph/tensor data.
+All 214 ONNX initializers and 535/545 immutable TorchScript entries were checked;
+actual original-versus-portable CPU and CUDA detection handshake JSON was exactly
+identical. Known embedded Ultralytics 8.4.92/AGPL-3.0 notices are preserved and
+bundled; missing training-input provenance is disclosed, not invented.
+
+The last video-enabled QA build (`ea6c0aa`) passed live JPEG and PNG exports of
+all five images plus JSON, with no warnings/crash. Its four PNG stage exports
+matched native raw RGB preview bytes exactly. Final still-only installer/CI and
+fresh Windows 11 evidence is recorded separately on the PR as each gate finishes.
+The follow-up guest was forcefully exited before its final gates completed, so
+that interrupted attempt is not reported as a pass.
+
+The sections below document earlier migration validation. Video/FFmpeg evidence
+there is historical and does not describe the current still-only preview.
+
 This evidence concerns the migration branch, not a published release or clean
 Windows 11 certification. Source review remains required. The legacy main SHA
 was rechecked unchanged at `c790f8af459ca522090bfc92519fdd4398ec7545` before
 import; that commit is preserved remotely on `legacy-web` / `legacy-web-final`.
 
-## Regressions and packaging
+## Current still-image-only revision
+
+At the maintainer's request, the native preview now removes video processing,
+video UI, the native video crate/feature, and FFmpeg/ffprobe downloads and payloads.
+Former video API names return an explicit `unsupported_feature` error; model
+cube export remains supported. CI now runs `integration_no_video.py` rather than
+a video pipeline. Explicit FFC requests reject unusable blank references instead
+of silently skipping the requested stage. Detector metadata sanitization and
+license/source disclosures are recorded separately in [model provenance](model-provenance.md).
+
+**The evidence below was collected before these changes.** It is historical
+baseline evidence, not a pass for the still-image-only revision. Its new source,
+packaged workflows, notebooks, live UI and clean-Windows gates require a new run;
+record those results on the PR without carrying old totals forward.
+
+## Historical regressions and packaging (before video removal)
 
 - .NET SDK 10.0.402: **49 passed** (18 engine reliability, 31 headless UI/decoder/help/export).
   Existing Windows visual baselines passed unchanged; none were refreshed.
@@ -19,11 +68,11 @@ import; that commit is preserved remotely on `legacy-web` / `legacy-web-final`.
 - Public source scan passed: five original samples and seven pinned model
   artifacts, no source executables, private machine paths or saved notebook output.
 - A self-contained unsigned Windows Setup compiled locally. The payload contains
-  app-local CPU LibTorch and MSVC CRT, verified ORT/DirectML/FFmpeg, samples,
+  app-local CPU LibTorch and MSVC CRT, then-bundled ORT/DirectML/FFmpeg, samples,
   illustrated help, API and notebooks. SHA-256 manifests cover every payload file.
   Local dirty-worktree builds are QA-only and cannot satisfy the release gate.
 
-## Packaged CPU workflows
+## Historical packaged CPU workflows
 
 Tests used the staged application and its bundled CPU runtime with developer SDK
 paths removed from PATH. No sibling project or sample junction was needed.
@@ -50,13 +99,14 @@ Every method used the separate Blank.JPG, all four enabled stages, and actual
 CPU application telemetry. A missing blank-field path was rejected by the native
 worker. Source color math was not altered for this migration.
 
-Generated one-second SDR Rec.709 video passed chart keyframe fit/grade,
-saved-model identity switches (all 35,937 cube entries checked), and per-frame FFC.
+Before removal, generated one-second SDR Rec.709 video passed chart keyframe
+fit/grade, saved-model identity switches (all 35,937 cube entries checked), and
+per-frame FFC. This is not a currently supported operation or release gate.
 Both notebooks executed top-to-bottom against the packaged worker in fresh kernels:
 01 **14.85 s**, 02 **21.77 s**, including all methods and Adam/SGD/RMSProp with BN
 and dropout. Clean source notebooks retain no outputs or private paths.
 
-## Remaining publication gates
+## Historical follow-up and remaining publication gates
 
 Independent fresh checkout at the initial migration commit passed all 40 .NET,
 93 Rust and 13 Python tests, with empty compiled-output directories, tracked
@@ -109,9 +159,12 @@ The next live export exposed lazy full-resolution materialization writing direct
 to the chosen export destination, followed by a redundant copy onto itself.
 Both PNG/JPEG regressions reproduced the failure before the fix and passed after
 same-path copies were skipped. Export tests now reject partial-success status,
-not merely check its prefix. All 49 .NET tests and existing visual baselines pass.
-Repeat live export evidence is attached to the PR; the
-complete interactive walkthrough is not marked passed. No captures containing
+not merely check its prefix. All 49 .NET tests and existing visual baselines passed
+at that source. The installed `ea6c0aa` live export retest produced six outputs
+for each of PNG and JPEG; codec signatures were checked and raw-stage PNG pixels
+were bit-exact. Evidence is attached to the PR. This predates video removal and
+does not validate the new installer. The complete interactive walkthrough is not
+marked passed. No captures containing
 occluding other apps were saved or uploaded.
 
 The legacy archive tag now has an active, exact-ref GitHub ruleset preventing
@@ -133,11 +186,14 @@ Python was staged. Native reinstall/uninstall preserved its guest profile sentin
 The existing legacy Windows release was installed separately in that guest: both
 installer identities coexisted, its localhost UI returned HTTP 200, and native
 uninstall left the legacy executable, a retention sentinel and running UI intact.
-These results are specific to that source; the final export-fix installer requires
-the same independent retest. The full interactive walkthrough remains separately
-reported on the PR. Linux/macOS native builds are not validated here.
-Complete corresponding source/build material for the GPL FFmpeg full build and
-upstream detector redistribution obligations require maintainer review.
-The manual workflow will not create a draft until source is merged, gates are
-attested, and the corresponding-source archive is pinned. No release was published,
+These results are specific to that source. A later final-installer guest exited
+before validation completed, so it is not marked passed. The disposable Sandbox
+may be replaced with the maintainer's authorization for a final clean-Windows run.
+The full interactive walkthrough remains separately reported on the PR.
+Linux/macOS native builds are not validated here.
+The prior Gyan FFmpeg source-material gate no longer applies because no FFmpeg
+binary or video capability is shipped. Detector redistribution obligations and
+remaining dependency notices still require review; see model provenance.
+The manual workflow will not create a draft until source is merged and all
+current gates are attested. No release was published,
 no main merge was performed and no Docker Hub image was changed.

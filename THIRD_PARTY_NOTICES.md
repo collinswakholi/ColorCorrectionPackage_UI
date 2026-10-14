@@ -13,22 +13,17 @@ The following are principal components, not a substitute for those full notices.
 | ONNX Runtime | Windows DirectML 1.22.1, MIT | https://github.com/microsoft/onnxruntime/tree/v1.22.1 |
 | DirectML | 1.15.4, Microsoft license in NuGet package | https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4 |
 | Visual C++ runtime | licensed Microsoft redistributable, not MIT | https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files |
-| FFmpeg full Windows build | Gyan 9.0, GPL v3; separate process | https://github.com/GyanD/codexffmpeg/releases/tag/9.0 |
 | Rust / NuGet dependencies | locked versions; individual licenses | generated inventory in `licenses/` |
-| Detector weights / chart references | see provenance and reference notices | [models](docs/model-provenance.md), [reference audit](docs/color-science-validation.md) |
+| Opt2 detector weights | embedded metadata records Ultralytics 8.4.92 / AGPL-3.0 | [model notices](models/NOTICE.md), [provenance/source access](docs/model-provenance.md) |
+| Plane detector / chart references | see provenance and reference notices | [models](docs/model-provenance.md), [reference audit](docs/color-science-validation.md) |
 
-FFmpeg's static full build includes numerous externally licensed libraries. Its
-upstream LICENSE and README preserve its complete configuration/version inventory.
-The FFmpeg source commit is `d32b387f2b`; source access is
-https://github.com/FFmpeg/FFmpeg/tree/d32b387f2b. **This alone is not a complete
-corresponding-source bundle for all statically linked components.** Before public
-release, supply and review corresponding source/build material for that exact
-binary and its applicable components, retaining their licenses. The draft release
-workflow fails closed until a checksum-pinned corresponding-source archive is
-configured and the release checklist is attested by the maintainer. A URL to
-FFmpeg alone is not treated as legal clearance.
+The native preview processes still images only. FFmpeg/ffprobe and video
+capabilities have been removed; those executables are not downloaded or bundled
+by the packaging scripts. This does not alter older releases or their notices.
 
 Detector training provenance beyond supplied artifacts is not reconstructed or
-invented. Maintainer redistribution authorization and known limitations are
-recorded in [model provenance](docs/model-provenance.md). Review weights and any
-training-framework-derived obligations before public publication.
+invented. Known embedded metadata, maintainer authorization and remaining
+limitations are recorded in [model provenance](docs/model-provenance.md).
+The installer preserves model notices and the AGPL-3.0 license text; this does
+not turn the weights into MIT-licensed assets or establish undocumented dataset
+rights. Review the disclosed obligations before public publication.
