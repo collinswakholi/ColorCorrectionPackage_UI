@@ -1,4 +1,4 @@
-//! 17³ encoded-RGB LUT apply via ONNX Runtime (DirectML / CUDA / CPU).
+//! Variable-grid encoded-RGB LUT apply via ONNX Runtime (DirectML / CUDA / CPU).
 
 #[cfg(feature = "ort-plane")]
 mod ort_lut {
@@ -87,6 +87,12 @@ mod ort_lut {
                     .map_err(|e| e.to_string())?;
             }
             LutEp::DirectMl => {
+                // DirectML requires sequential execution and no memory patterns.
+                builder = builder
+                    .with_memory_pattern(false)
+                    .map_err(|e| e.to_string())?
+                    .with_parallel_execution(false)
+                    .map_err(|e| e.to_string())?;
                 ort::ep::DirectML::default()
                     .register(&mut builder)
                     .map_err(|e| e.to_string())?;
@@ -184,7 +190,9 @@ mod ort_lut {
         let pixels = height * width;
         let chunk = LUT_CHUNK;
         let mut pixel_buf = vec![0.0f32; chunk * 3];
-        let mut out_buf = vec![0.0f32; chunk * 3];
+        // Commit only after every chunk succeeds. Otherwise the caller's CPU
+        // fallback could double-correct chunks already mutated before an error.
+        let mut completed = Vec::with_capacity(rgb.len());
         let mut backend = String::from("cpu");
         let lut_vec = lut.to_vec();
         let mut offset = 0usize;
@@ -224,16 +232,10 @@ mod ort_lut {
                 Ok(data[..n * 3].to_vec())
             })?;
             backend = ep;
-            out_buf[..n * 3].copy_from_slice(&chunk_out);
-            for i in 0..n {
-                let src = i * 3;
-                let dst = (offset + i) * 3;
-                rgb[dst] = out_buf[src];
-                rgb[dst + 1] = out_buf[src + 1];
-                rgb[dst + 2] = out_buf[src + 2];
-            }
+            completed.extend_from_slice(&chunk_out[..n * 3]);
             offset += n;
         }
+        rgb.copy_from_slice(&completed);
         Ok(match backend.as_str() {
             "directml" => "directml",
             "cuda" => "cuda",

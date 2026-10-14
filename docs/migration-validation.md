@@ -58,6 +58,36 @@ and dropout. Clean source notebooks retain no outputs or private paths.
 
 ## Remaining publication gates
 
+Independent fresh checkout at the initial migration commit passed all 40 .NET,
+93 Rust and 13 Python tests, with empty compiled-output directories, tracked
+samples/models and its own isolated full SDK/runtime stage. Only checksum-verified
+dependency download archives were reused; no installed LibTorch/ORT runtime or
+cached model path was used. Dependency locks stayed unchanged after publish.
+
+CUDA smoke test reported actual `fit_apply_backend: cuda` and `apply_backend: cuda`.
+A stricter DirectML test initially exposed a fixed-17³ ONNX apply graph against
+the engine's 33³ LUT. The apply graph was regenerated with symbolic grid sizes;
+17³/33³ CPU parity and a real chunk boundary were checked. The repeated DirectML
+fit/apply check then reported actual `directml` for both, with chart mean after
+1.262135227 versus CPU 1.262135247. NN training remains CPU. DirectML session
+options now explicitly follow upstream sequential/no-memory-pattern requirements.
+GPU chunk results commit atomically so a later failure cannot double-correct
+already-mutated pixels during CPU fallback. This is a release-validation fix,
+not a change to fitted color math or reference tables.
+
+Actual Setup installation succeeded into an isolated workspace folder. The first
+installed-manifest check caught upstream PDBs excluded by Inno and a missing
+FFmpeg checksum file. Staging now excludes debug symbols before hashing and
+includes the checksum file. Binary scans also caught local compiler paths in
+C++ header assertions; Rust/MSVC release path trimming removes them. Full source
+and payload scans include binaries and all model-manifest artifacts. The FFmpeg
+PEM parser's string labels were distinguished from actual private-key material.
+
+Live installed app launched and the five-image catalog/control tree was observed,
+but desktop input was blocked by helper activation/active-request errors even
+after the desktop was unlocked. No screenshots containing occluding other apps
+were saved or uploaded. Full interactive walkthrough is not marked passed.
+
 Live installed-app, fresh-checkout, available accelerator, reinstall/uninstall
 evidence is added to the PR as it is verified. A development host with removed
 PATH entries is not equivalent to a clean OS without installed runtimes.

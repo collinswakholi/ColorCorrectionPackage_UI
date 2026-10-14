@@ -101,7 +101,8 @@ cp -a "$ROOT/refs" "$PACKAGE/refs"
 (cd "$ROOT" && tar --exclude=__pycache__ --exclude='*.pyc' --exclude=.ipynb_checkpoints --exclude=.venv -cf - api docs notebooks test_images licenses README.md LICENSE THIRD_PARTY_NOTICES.md) | tar -xf - -C "$PACKAGE"
 cp "$ROOT/models/opt2/"* "$PACKAGE/models/opt2/"
 cp "$ROOT/models/plane/plane_det_model_YOLO_512_n.onnx" "$PACKAGE/models/plane/"
-cp "$ROOT/models/apply/lut3d_trilinear.onnx" "$PACKAGE/models/apply/"
+cp "$ROOT/models/apply/"* "$PACKAGE/models/apply/"
+cp "$ROOT/models/manifest.json" "$PACKAGE/models/"
 chmod +x "$PACKAGE/ccp-engine" "$PACKAGE/app/ColorCorrect.App"
 
 cat > "$PACKAGE/run.sh" <<'EOF'

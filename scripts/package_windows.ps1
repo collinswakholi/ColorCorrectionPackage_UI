@@ -64,6 +64,7 @@ Copy-Item (Join-Path $root "models\opt2\best_assemble_fp32_1280.onnx") (Join-Pat
 Copy-Item (Join-Path $root "models\opt2\best_assemble_fp32_1536.onnx") (Join-Path $dist "models\opt2\")
 New-Item -ItemType Directory -Force -Path (Join-Path $dist "models\apply") | Out-Null
 Copy-Item (Join-Path $root "models\apply\lut3d_trilinear.onnx") (Join-Path $dist "models\apply\") -ErrorAction SilentlyContinue
+Copy-Item (Join-Path $root "models\apply\lut3d_trilinear.onnx.data") (Join-Path $dist "models\apply\")
 Copy-Item (Join-Path $root "models\plane\plane_det_model_YOLO_512_n.onnx") (Join-Path $dist "models\plane\")
 Copy-Item (Join-Path $root "models\manifest.json") (Join-Path $dist "models\manifest.json")
 Copy-Item (Join-Path $root "refs") (Join-Path $dist "refs") -Recurse

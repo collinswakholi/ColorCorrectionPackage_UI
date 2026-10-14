@@ -9,7 +9,7 @@ import sys
 root = Path(__file__).resolve().parents[1]
 files = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode().split('\0')
 failures = []
-private = re.compile(r'(?:[A-Za-z]:[\\/]+Users[\\/]+C[o]llins[\\/]|[A-Za-z]:\\\\Users\\\\C[o]llins\\\\|/Users/C[o]llins/|PRIVATE\s+KEY-----)', re.I)
+private = re.compile(r'(?:[A-Za-z]:[\\/]+Users[\\/]+C[o]llins[\\/]|[A-Za-z]:\\\\Users\\\\C[o]llins\\\\|/Users/C[o]llins/|-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----[\r\n]+[A-Za-z0-9+/]{32})', re.I)
 generated = {'bin', 'obj', 'target', '__pycache__', '.build-cache', 'TestResults', 'dist', '.avalonia-build-tasks'}
 text_suffixes = {'.md','.py','.rs','.cs','.json','.ipynb','.ps1','.sh','.yml','.yaml','.toml','.iss','.txt','.props','.csproj','.cff','.psd1'}
 for relative in sorted(set(filter(None, files))):

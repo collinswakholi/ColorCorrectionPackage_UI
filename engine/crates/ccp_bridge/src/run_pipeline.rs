@@ -183,9 +183,14 @@ fn apply_cc_accel(
         }
         let (h, w, _) = img.dim();
         if let Some(slice) = img.as_slice_mut() {
-            if let Ok(backend) = apply_encoded_lut_ort(slice, h, w, &lut, gs) {
-                remember_apply_backend(backend);
-                return Ok(());
+            match apply_encoded_lut_ort(slice, h, w, &lut, gs) {
+                Ok(backend) => {
+                    remember_apply_backend(backend);
+                    return Ok(());
+                }
+                Err(error) => {
+                    eprintln!("ccp_bridge: LUT {prefer} inference failed; CPU fallback: {error}")
+                }
             }
         }
     }

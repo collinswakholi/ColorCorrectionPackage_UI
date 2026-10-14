@@ -41,26 +41,33 @@ fn lut_ort_matches_cpu() {
         eprintln!("skip lut_ort_matches_cpu: missing lut3d_trilinear.onnx");
         return;
     }
-    let gs = 17;
-    let lut = identity_lut(gs);
-    let probes: Vec<[f32; 3]> = vec![
-        [0.0, 0.0, 0.0],
-        [1.0, 1.0, 1.0],
-        [0.5, 0.25, 0.75],
-        [0.1, 0.9, 0.3],
-    ];
-    let mut pixels: Vec<f32> = probes.iter().flat_map(|p| p.iter().copied()).collect();
-    let n = probes.len();
-    apply_encoded_lut_ort(&mut pixels, 1, n, &lut, gs).expect("ort lut apply");
-    for (i, rgb) in probes.iter().enumerate() {
-        let cpu = sample_encoded_lut(&lut, gs, [rgb[0] as f64, rgb[1] as f64, rgb[2] as f64]);
-        for c in 0..3 {
-            let got = pixels[i * 3 + c];
-            let want = cpu[c] as f32;
-            assert!(
-                (got - want).abs() <= 1e-5,
-                "pixel {i} ch {c}: ort {got} cpu {want}"
-            );
+    for gs in [17, 33] {
+        let mut lut = identity_lut(gs);
+        for color in lut.chunks_exact_mut(3) {
+            let (r, g, b) = (color[0], color[1], color[2]);
+            color[0] = 0.85 * r * r + 0.1 * g + 0.05 * b;
+            color[1] = 0.8 * g.sqrt() + 0.15 * b + 0.05 * r;
+            color[2] = 0.9 * b + 0.1 * g * r;
+        }
+        let probes: Vec<[f32; 3]> = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0],
+            [0.5, 0.25, 0.75],
+            [0.1, 0.9, 0.3],
+        ];
+        let mut pixels: Vec<f32> = probes.iter().flat_map(|p| p.iter().copied()).collect();
+        let n = probes.len();
+        apply_encoded_lut_ort(&mut pixels, 1, n, &lut, gs).expect("ort lut apply");
+        for (i, rgb) in probes.iter().enumerate() {
+            let cpu = sample_encoded_lut(&lut, gs, [rgb[0] as f64, rgb[1] as f64, rgb[2] as f64]);
+            for c in 0..3 {
+                let got = pixels[i * 3 + c];
+                let want = cpu[c] as f32;
+                assert!(
+                    (got - want).abs() <= 1e-5,
+                    "pixel {i} ch {c}: ort {got} cpu {want}"
+                );
+            }
         }
     }
 }
@@ -72,9 +79,9 @@ fn lut_ort_chunked_ramp() {
         eprintln!("skip lut_ort_chunked_ramp: missing lut3d_trilinear.onnx");
         return;
     }
-    let gs = 17;
+    let gs = 33;
     let lut = identity_lut(gs);
-    let n = 4096usize;
+    let n = ccp_detect::lut_ort::LUT_CHUNK + 1;
     let mut pixels: Vec<f32> = (0..n)
         .flat_map(|i| {
             let t = i as f32 / (n - 1) as f32;

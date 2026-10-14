@@ -17,7 +17,9 @@ class Lut3dTrilinear(nn.Module):
   def forward(self, pixels: torch.Tensor, lut: torch.Tensor) -> torch.Tensor:
     """pixels [N,3] in [0,1]; lut [gs,gs,gs,3] layout (b,g,r) channel order."""
     gs = lut.shape[0]
-    maxv = float(gs - 1)
+    # Keep the grid size symbolic; the native mapper uses 33³, while callers/tests
+    # may still supply 17³. Converting it to float freezes the traced graph at 17.
+    maxv = gs - 1
     rgb = pixels.clamp(0.0, 1.0) * maxv
     r = rgb[:, 0]
     g = rgb[:, 1]
@@ -76,7 +78,8 @@ def main() -> None:
     str(args.output),
     input_names=["pixels", "lut"],
     output_names=["output"],
-    dynamic_axes=None,
+    dynamic_axes={"lut": {0: "grid_b", 1: "grid_g", 2: "grid_r"}},
+    dynamo=False,
     opset_version=17,
   )
   import onnx
