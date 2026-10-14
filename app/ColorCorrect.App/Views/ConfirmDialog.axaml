@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ColorCorrect.App.Views.ConfirmDialog"
+        Width="460" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Title="Confirm"
+        KeyDown="OnKeyDown">
+    <Border Background="{DynamicResource SidebarBrush}"
+            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+            CornerRadius="12" Margin="8" Padding="20">
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Cancel" Theme="{StaticResource SecondaryButton}" Click="OnCancel"
+                        AutomationProperties.Name="Cancel"/>
+                <Button x:Name="ConfirmBtn" Content="Continue" Theme="{StaticResource PrimaryButton}" Click="OnOk"
+                        AutomationProperties.Name="Continue"/>
+            </StackPanel>
+            <StackPanel>
+                <TextBlock x:Name="TitleText" Classes="heading" FontSize="15" Margin="0,0,0,8"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Name="MessageText" TextWrapping="Wrap" Classes="body" LineHeight="20"/>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</Window>

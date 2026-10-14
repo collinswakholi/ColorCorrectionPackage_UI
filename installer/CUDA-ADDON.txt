@@ -1,0 +1,7 @@
+This add-on replaces %LOCALAPPDATA%\CCP-New\libtorch with official LibTorch 2.9.x + CUDA.
+
+It deletes the CPU tree first. Two torch.dll files will break CUDA (Windows loads the one beside the exe).
+
+After install, launch ColorCorrect Studio. The worker restarts on CUDA if NVIDIA initializes. If the driver or runtime is missing, the CUDA zip still runs CPU and the probe reports failed: no_runtime.
+
+tch-rs 0.22 requires LibTorch 2.9.x. Do not drop a 2.11 zip here.

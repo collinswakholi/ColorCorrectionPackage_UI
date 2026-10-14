@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "Please cite this software and the related research when using it in scientific work."
+type: software
+title: ColorCorrect Studio
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/collinswakholi/ColorCorrectionPackage_UI"
+authors:
+  - family-names: Wakholi
+    given-names: Collins
+    orcid: "https://orcid.org/0000-0003-0635-9463"
+references:
+  - type: article
+    title: "A systematic color correction pipeline for controlled-environment imaging"
+    doi: "10.1002/ppj2.70067"
+    journal: The Plant Phenome Journal
+    volume: "9"
+    issue: "1"
+    start: e70067
+    year: 2026
+    authors:
+      - {family-names: Wakholi, given-names: Collins}
+      - {family-names: Hardigan, given-names: "Michael A."}
+      - {family-names: Lee, given-names: Jungmin}
+      - {family-names: Lukas, given-names: "Scott B."}
+      - {family-names: Feldman, given-names: "Max J."}
+      - {family-names: Altendorf, given-names: "Kayla R."}
+      - {family-names: Neyhart, given-names: "Jeffrey L."}
+      - {family-names: Rippner, given-names: "Devin A."}

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" role="img" aria-labelledby="title desc">
+  <title id="title">ColorCorrect calibration and application workflow</title>
+  <desc id="desc">A blank white field supplies flat-field correction. The detected chart's neutral patches supply gamma correction and white balance; its color patches supply color mapping. These measurements follow the enabled upstream stages. Validate the fit, save a model, then apply it to images from matching capture conditions. Applying a saved model needs no new chart. A cube LUT excludes spatial FFC.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#367a70"/></marker></defs>
+  <rect width="1000" height="420" rx="16" fill="#f4f7f7"/>
+  <g font-family="Segoe UI,Arial,sans-serif" fill="#142e2b">
+    <text x="32" y="44" font-size="25" font-weight="600">Calibrate once. Validate. Apply consistently.</text>
+    <text x="32" y="74" font-size="15">Default full pipeline: encoded sRGB / D65 input. Use only the stages your setup needs.</text>
+    <rect x="32" y="100" width="200" height="58" rx="8" fill="#fff" stroke="#aec9c4"/>
+    <text x="48" y="126" font-size="17" font-weight="600">Blank white field</text><text x="48" y="147" font-size="13">Blank.JPG in the test corpus</text>
+    <rect x="286" y="100" width="320" height="58" rx="8" fill="#fff" stroke="#aec9c4"/>
+    <text x="302" y="126" font-size="17" font-weight="600">Detected chart + matching reference</text><text x="302" y="147" font-size="13">Neutrals → GC / WB · color patches → CC</text>
+    <path d="M132 158V186" fill="none" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M446 158V174M287 174H647" fill="none" stroke="#367a70" stroke-width="2"/>
+    <path d="M287 174V186" fill="none" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M467 174V186" fill="none" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M647 174V186" fill="none" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <g fill="#dcece8" stroke="#aec9c4"><rect x="32" y="194" width="150" height="65" rx="8"/><rect x="212" y="194" width="150" height="65" rx="8"/><rect x="392" y="194" width="150" height="65" rx="8"/><rect x="572" y="194" width="150" height="65" rx="8"/></g>
+    <g font-size="18" font-weight="600"><text x="48" y="221">1 · FFC</text><text x="228" y="221">2 · GC</text><text x="408" y="221">3 · WB</text><text x="588" y="221">4 · CC</text></g>
+    <g font-size="13"><text x="48" y="245">Spatial illumination</text><text x="228" y="245">Tone response</text><text x="408" y="245">Neutral balance</text><text x="588" y="245">Color mapping</text></g>
+    <path d="M184 226H204" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M364 226H384" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M544 226H564" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M724 226H753" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="764" y="194" width="204" height="65" rx="8" fill="#fff" stroke="#367a70"/>
+    <text x="780" y="221" font-size="17" font-weight="600">Validate the result</text><text x="780" y="245" font-size="13">Patch ΔE00 + held-out error</text>
+    <path d="M866 259V289H620" fill="none" stroke="#367a70" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="286" y="282" width="320" height="54" rx="8" fill="#fff" stroke="#aec9c4"/>
+    <text x="302" y="304" font-size="16" font-weight="600">Save model → apply to sample images</text><text x="302" y="324" font-size="13">Same camera, exposure, geometry and illumination</text>
+    <text x="32" y="376" font-size="15">No chart on an apply-only image → no measured chart ΔE.</text>
+    <text x="32" y="400" font-size="15">Model JSON retains the pipeline. A .cube LUT excludes spatial FFC.</text>
+  </g>
+</svg>

@@ -1,134 +1,99 @@
-# Color Correction Studio
+# ColorCorrect Studio
 
-[![GitHub Release](https://img.shields.io/github/v/release/collinswakholi/ColorCorrectionPackage_UI?style=flat-square)](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/latest)
-[![Docker](https://img.shields.io/docker/pulls/collins137/colorcorrector?style=flat-square)](https://hub.docker.com/r/collins137/colorcorrector)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE.txt)
+Native, chart-based color calibration for still images and 8-bit SDR video. An
+Avalonia desktop workbench and a local Rust worker share the same correction
+pipeline. No browser server, Python ML installation, or internet connection is
+needed for the bundled CPU sample workflow.
 
-A modern web-based interface for the [ColorCorrectionPipeline](https://github.com/collinswakholi/ColorCorrectionPackage) — upload images, detect color charts, run stepwise color correction, and visualize results in real-time.
+![ColorCorrect Studio native workbench with public samples](docs/images/session-workbench.png)
 
-![Color Correction UI](Ui_animation.webp)
+## Windows preview
 
-## Download
+**v0.1.0 is being prepared and is not yet published.** The first native preview
+targets **Windows 11 x64** and will be unsigned. When approved, download
+`ColorCorrect-Studio-win-x64.exe` and its SHA-256 from the
+[explicit native preview release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.1.0).
+Do not use `/releases/latest`: it can still identify the older stable web app.
 
-Get the latest pre-built installer for your OS from the [Releases page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/latest):
+Verify the checksum with `Get-FileHash <installer> -Algorithm SHA256`, run Setup,
+and open **ColorCorrect Studio**. Unsigned installers may trigger SmartScreen;
+verify the source and hash before deciding whether to continue. CPU libraries,
+the .NET runtime, detector weights, five examples, offline illustrated help,
+the Python SDK, and notebooks are included. Python is optional for the GUI.
+CUDA is an optional large download, not part of this installer.
 
-| Platform | File | Notes |
-|----------|------|-------|
-| **Windows x64** | `ColorCorrector-Setup-Windows-x64.exe` | Installer wizard with Start Menu shortcut |
-| **macOS Intel** | `ColorCorrector-macOS-x86_64.dmg` | Drag to Applications |
-| **macOS Apple Silicon** | `ColorCorrector-macOS-arm64.dmg` | Native M1/M2/M3 build |
-| **Linux x64** | `ColorCorrector-Linux-x86_64.AppImage` | `chmod +x` and run directly |
-| **Docker** | `collins137/colorcorrector:latest` | `docker pull collins137/colorcorrector:latest` |
+The native installer has its own identity and can coexist with **ColorCorrector**.
+It does not uninstall the legacy app or migrate its data. Native settings use the
+existing internal `CCP-New` folder; CPU libraries are app-local, not installed
+over your CPU/CUDA data directories. Uninstall removes application files, not
+your saved models, sessions, outputs, or user-data directory.
 
-All installers are self-contained — no dependencies or manual setup required. The app launches a local server and opens your browser to `http://localhost:5000`.
+## From calibration to application
 
-> **Note:** Unsigned app warnings may appear on first run. Windows: *More info → Run anyway*. macOS: *Right-click → Open*.
+![FFC, chart-neutral GC/WB, chart-color CC, validation and application](docs/images/workflow.svg)
 
-## Features
+1. Add `test_images/ColorCard_Big.JPG`; detect and inspect the chart overlay.
+2. For FFC, load **`test_images/Blank.JPG` as the separate blank-field reference**.
+3. Enable needed FFC → GC → WB → CC stages. GC/WB use the chart's named neutrals;
+   CC uses its color patches. Choose one of six fit methods and **Fit + apply**.
+4. Inspect training and held-out ΔE00 and stage previews. Save model JSON.
+5. Choose **Use loaded / Apply model** for images from matching capture conditions.
+   **Ctrl+S / Save selected** writes full-resolution outputs; previews alone do not.
 
-### Pipeline Steps
-- **Flat-Field Correction (FFC)** — configurable bin count, white image, sampling method
-- **Gamma Correction (GC)** — adjustable gamma value
-- **White Balance (WB)** — automatic illuminant-based correction
-- **Color Correction (CC)** — multiple methods (linear, polynomial, PLS, neural network) with configurable hidden layers, polynomial degree, and model persistence
+The six methods are CCM, root-polynomial orders 2/3, polynomial (`linear` protocol
+name), PLS, and NN. NN offers editable layer widths, Adam/SGD/RMSProp, batch
+normalization and dropout. Saved models reuse all enabled stages; a cube LUT
+excludes spatial FFC. No chart on an apply-only image means no invented chart ΔE.
 
-### Image Processing
-- **Drag-and-drop upload** with multi-image batch support
-- **Automatic color chart detection** with confidence scoring and patch visualization
-- **Batch processing** — run the full pipeline on selected images with progress tracking
-- **Apply trained model** — use a trained CC model to correct new images in parallel
+## Guidance and automation
 
-### Analysis & Visualization
-- **Before/After comparison** — side-by-side corrected image overlay
-- **ΔE (Delta-E) metrics** — per-step color accuracy with configurable thresholds
-- **Difference images** — pixel-level deviation heatmaps
-- **Scatter plots** — Lab color-space correction quality
+Press **F1** or **?** for searchable illustrated offline help. See the
+[user guide](docs/user-guide.md), [SDK 1.1 / NDJSON API](docs/api/README.md),
+[runnable notebooks](notebooks/), [color-science validation](docs/color-science-validation.md),
+and [migration guide](docs/migration.md).
 
-### Model Management
-- **Save/load trained models** (.pkl) for reuse across sessions
-- **Load CCM files** for external model application
-- **Configurable save directory** and step-selective export
+With sRGB/D65 input, embedded ICC profiles normalize to working sRGB. Explicit
+other input encodings bypass this conversion and must match stored pixels.
+FFC/GC/WB require encoded sRGB/D65. Exported wide-gamut/linear bytes do not acquire
+a matching ICC profile automatically; interpret their declared encoding downstream.
+Held-out chart scores evaluate CC conditional on fitted GC/WB, not an independent
+validation of the whole imaging pipeline. Use a separately photographed validation
+chart. Video is 8-bit SDR only; HDR/high-bit-depth/wide-gamut video is rejected.
 
-### UI
-- **Modern glassmorphism design** — Indigo + Slate palette, Inter font, Lucide icons
-- **Responsive layout** — collapsible panels, sticky header, mobile-friendly
-- **Real-time log console** — buffered output with 50KB cap
-- **Step-selective save** — choose which pipeline steps and images to export
+CUDA can accelerate chart inference and explicit LUT image application; DirectML
+can accelerate plane detection/LUT application where available. NN training,
+regression fits, and many preprocessing stages remain CPU work. A selected policy
+or installed runtime is not proof that a request ran on GPU: inspect telemetry.
 
-## Quick Start
+## Source and development
 
-### Docker (Recommended)
+The native source is at repository root: `app/` (Avalonia and .NET integration),
+`engine/` (Rust color math/detection/video/NDJSON), `api/`, `models/`, `refs/`,
+`notebooks/`, and `test_images/`. No junctions or sibling projects are required.
+Toolchains are pinned to **.NET SDK 10.0.402** and **Rust 1.95.0**.
+See [build and test instructions](docs/building.md) and [CONTRIBUTING](CONTRIBUTING.md).
 
-```bash
-docker pull collins137/colorcorrector:latest
-docker run -p 5000:5000 collins137/colorcorrector:latest
-```
+The first native binary release is Windows-only. Linux x64 and macOS arm64 source
+and packaging scripts are retained; native-host build/install validation is still
+required, and no new Linux/macOS binaries are promised by v0.1.0. See the
+[release gates and platform status](docs/releasing.md).
 
-Open [http://localhost:5000](http://localhost:5000).
+## Legacy, research and license
 
-### Local Development
+The browser/Flask implementation remains on
+[legacy-web](https://github.com/collinswakholi/ColorCorrectionPackage_UI/tree/legacy-web)
+and [legacy-web-final](https://github.com/collinswakholi/ColorCorrectionPackage_UI/tree/legacy-web-final).
+[Existing legacy downloads](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v2026.05.08-build.32)
+and existing Docker images are unchanged. Legacy REST clients need to move to the
+local process API. **Old pickle models require refitting to native JSON**; no
+pickle converter or Flask compatibility service is supplied.
 
-**Prerequisites:** Python 3.12+, Node.js 18+
+Research background: Wakholi et al. (2026), *A systematic color correction pipeline
+for controlled-environment imaging*, The Plant Phenome Journal 9(1), e70067,
+[DOI: 10.1002/ppj2.70067](https://doi.org/10.1002/ppj2.70067).
+The illustrated app guide is offline; the study PDF is **not bundled**.
+See [CITATION.cff](CITATION.cff).
 
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-python server_enhanced.py
-
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-- Vite dev server: [http://localhost:5173](http://localhost:5173)
-- Flask (serves built frontend): [http://localhost:5000](http://localhost:5000)
-
-## Building
-
-### Standalone Executable
-
-```bash
-cd frontend && npm run build
-cd ../backend
-pyinstaller -y colorcorrector.spec
-```
-
-Output: `backend/dist/ColorCorrector/`
-
-### Docker Image
-
-```bash
-docker build -t colorcorrector -f backend/Dockerfile .
-docker run -p 5000:5000 colorcorrector
-```
-
-## Architecture
-
-| Layer | Stack | Details |
-|-------|-------|---------|
-| **Frontend** | React 18 + Vite 6 + Tailwind CSS 3 | Modular component design with lazy-loaded modals |
-| **Backend** | Flask 2.x REST API | Thread-safe processing, parallel batch inference, lazy analysis endpoints |
-| **Core** | [ColorCorrectionPipeline](https://pypi.org/project/ColorCorrectionPipeline/) 1.4.5 | OpenCV DNN ONNX FFC detection, Numba/CUDA acceleration, lazy 3D LUT prediction, batch APIs |
-| **Packaging** | PyInstaller + Inno Setup / DMG / AppImage | Cross-platform CI via GitHub Actions |
-
-## Dependencies
-
-Core backend requirements (see [requirements.txt](backend/requirements.txt)):
-
-- `ColorCorrectionPipeline==1.4.5` — the underlying correction engine
-- `Flask>=2.3.0`, `flask-cors`, `flask-compress` — web server
-- `numba>=0.55.0` — JIT/CUDA acceleration
-- `opencv-contrib-python>=4.8.0` — image I/O and chart detection
-- `numpy`, `pandas`, `scikit-learn`, `scipy`, `matplotlib`, `Pillow` — scientific stack
-
-## License
-
-This project is licensed under the MIT License — see [LICENSE.txt](LICENSE.txt).
-
-## Credits
-
-Built on [ColorCorrectionPackage](https://github.com/collinswakholi/ColorCorrectionPackage) by [Collins Wakholi](https://github.com/collinswakholi).
-
-Made with ❤️ for the scientific imaging community.
+Application source is [MIT licensed](LICENSE), preserving legacy attribution.
+Bundled dependencies and weights have separate notices: see
+[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) and [model provenance](docs/model-provenance.md).

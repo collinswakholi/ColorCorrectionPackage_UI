@@ -1,0 +1,129 @@
+name: Prepare Windows preview draft (manual only)
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full reviewed and merged main commit SHA
+        required: true
+        type: string
+      reviewed_release_gates:
+        description: Type APPROVED only after all gates in docs/releasing.md pass
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: native-v0.1.0-draft
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    env:
+      CI: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      REQUESTED_SHA: ${{ inputs.source_sha }}
+      REVIEWED_GATES: ${{ inputs.reviewed_release_gates }}
+      SOURCE_URL: ${{ vars.FFMPEG_CORRESPONDING_SOURCE_URL }}
+      SOURCE_SHA256: ${{ vars.FFMPEG_CORRESPONDING_SOURCE_SHA256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: source
+        name: Require exact merged main source and maintainer review
+        shell: pwsh
+        run: |
+          if ($env:REVIEWED_GATES -cne 'APPROVED') { throw 'Release gate review is required.' }
+          if ($env:REQUESTED_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Full source SHA required.' }
+          $main = (git rev-parse origin/main).Trim()
+          if ($main -cne $env:REQUESTED_SHA) { throw 'Build only the exact reviewed current main commit.' }
+          git checkout --detach $env:REQUESTED_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'source checkout failed' }
+          if (git status --porcelain) { throw 'Clean source required.' }
+          if (-not $env:SOURCE_URL -or $env:SOURCE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Reviewed complete FFmpeg corresponding source must be checksum-pinned in repository variables.' }
+          "sha=$main" >> $env:GITHUB_OUTPUT
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: 10.0.402
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Locked regression validation
+        shell: pwsh
+        run: |
+          python scripts/check_repository.py
+          if ($LASTEXITCODE -ne 0) { throw 'source gate' }
+          rustup set auto-self-update disable
+          rustup toolchain install 1.95.0 --profile minimal --component clippy --component rustfmt
+          if ($LASTEXITCODE -ne 0) { throw 'Rust setup' }
+          ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
+          ./scripts/fetch_ffmpeg.ps1
+          $env:LIBTORCH = (Get-Content .build-cache/sdk-cpu.json -Raw | ConvertFrom-Json).path
+          $env:LIBTORCH_PATH = $env:LIBTORCH
+          $env:LIBTORCH_BYPASS_VERSION_CHECK = '1'
+          $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
+          $env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
+          $env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
+          cargo fmt --manifest-path engine/Cargo.toml --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'format gate' }
+          cargo test --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Rust tests' }
+          dotnet restore app/ColorCorrect.sln --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'locked restore' }
+          dotnet test app/ColorCorrect.sln -c Release --no-restore --logger trx
+          if ($LASTEXITCODE -ne 0) { throw '.NET tests' }
+          python -m unittest discover -s api/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'SDK tests' }
+      - name: Compile installer and validate packaged operations
+        shell: pwsh
+        run: |
+          ./scripts/package_windows.ps1 -SkipFetch -SkipPortableArchive -BuildInstaller
+          $env:CCP_NEW_UI_ROOT = (Resolve-Path dist/win-cpu).Path
+          $env:CCP_ENGINE_EXE = "$env:CCP_NEW_UI_ROOT/ccp-engine.exe"
+          $env:CCP_LIBTORCH_ROOT = "$env:CCP_NEW_UI_ROOT/libtorch"
+          python api/tests/integration_workflow.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'sample workflow' }
+          python api/tests/integration_all_methods.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'six methods' }
+          python api/tests/integration_video.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'video' }
+          python -m pip install -r notebooks/requirements-qa.txt
+          if ($LASTEXITCODE -ne 0) { throw 'notebook dependencies' }
+          python api/tests/execute_notebooks.py --root $env:CCP_NEW_UI_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'notebooks' }
+          python scripts/verify_payload.py dist/win-cpu --release
+          if ($LASTEXITCODE -ne 0) { throw 'payload gate' }
+          ./scripts/prepare_release_assets.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reviewed-windows-preview
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 14
+  draft:
+    needs: build
+    runs-on: windows-2022
+    environment: native-preview
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: reviewed-windows-preview
+          path: release
+      - name: Prepare only a draft prerelease; never publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          gh release view v0.1.0 *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'v0.1.0 already exists; do not overwrite it.' }
+          gh release create v0.1.0 release/ColorCorrect-Studio-win-x64.exe release/ColorCorrect-Studio-win-x64.exe.sha256 release/build-info.json release/dependency-inventory.json release/THIRD_PARTY_NOTICES.md release/third-party-source.zip --target $env:SOURCE_SHA --draft --prerelease --title 'ColorCorrect Studio v0.1.0 — Windows preview' --notes-file release/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release preparation failed.' }

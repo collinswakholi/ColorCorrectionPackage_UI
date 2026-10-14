@@ -1,0 +1,92 @@
+[
+  {
+    "Title": "Start here",
+    "Paragraphs": [
+      "1 · Capture a chart and a blank white field with the same camera, exposure, lighting, focus, and image dimensions as your samples. Avoid clipped patches, glare, deep shadows, and automatic camera adjustments.",
+      "2 · Add your images to the session. Select the chart image and press Detect. Verify its detected type and patch overlay; if several faces are found, choose the intended Chart face. A wrong chart, orientation, or patch order invalidates calibration.",
+      "3 · Add the blank white image in the FFC area, not as a color chart. Enable the stages you need, then Fit + apply. Inspect stage previews, patch errors, and held-out validation before applying the model.",
+      "4 · Expand Model and choose Use loaded, then select a sample and run Apply model. A successful fit makes the model available but does not switch this mode automatically. Use matching capture conditions; save model JSON, reports, and corrected images."
+    ]
+  },
+  {
+    "Title": "FFC · illumination",
+    "Paragraphs": [
+      "Flat-field correction compensates for spatial brightness variation. Use a clean, matte blank white field captured in the same setup. In the supplied test corpus, Blank.JPG is the FFC input—not a chart for fitting color correction.",
+      "Inspect the chosen white-field region: it should exclude objects, edges, dirt, glare, and saturated areas. Surface degree and smoothing describe the illumination field; increasing complexity is not automatically more accurate.",
+      "FFC is spatial and cannot be represented by a 3D cube LUT. Reuse it only when camera geometry, framing, lighting, and image dimensions match. Video with FFC uses the per-frame path and requires constant frame rate.",
+      "FFC, GC, and WB currently require encoded sRGB input with D65 white. For other input RGB spaces, convert the image first or use CC alone; unsupported combinations are rejected rather than interpreted silently."
+    ]
+  },
+  {
+    "Title": "GC & white balance",
+    "Paragraphs": [
+      "Yes, GC uses the detected chart: it compares measured lightness from named neutral patches (after FFC when enabled) with the matching reference lightness. At least two usable named neutrals are required. It fits a monotonic curve anchored at black and white, not a fixed gamma exponent. There is no GC degree setting.",
+      "Apply model reuses the saved GC curve on every pixel; new sample images need no chart. A new fit, however, needs a detected chart with usable neutral patches. The stage order remains FFC → GC → WB → CC.",
+      "White balance adjusts the channel gains using neutral reference patches. Check that those patches are not clipped, occluded, or reflecting glare. A color-mapping model cannot recover information that the camera did not record.",
+      "Turn off stages you do not need, but evaluate the complete pipeline you intend to apply. Changing capture conditions requires recalibration; a low fitting error is not evidence that a model transfers to another setup."
+    ]
+  },
+  {
+    "Title": "CC & neural networks",
+    "Paragraphs": [
+      "Start with a simple fit and compare held-out error before increasing polynomial degree or model complexity. Linear and PLS fits provide useful baselines; NN is flexible but can overfit a small chart.",
+      "NN hidden layers accept a single width or one to four widths. Examples: ‘100’ or ‘100, 30’ or ‘[64, 32]’ or ‘[128, 64, 32]’. A comma-separated sequence specifies successive layers, not candidate models.",
+      "Choose Adam, SGD with momentum, or RMSProp. Batch normalization is optional and uses full-chart statistics for small datasets. Dropout ranges from 0 to 0.8; zero disables it. Keep a record of the optimizer, architecture, normalization, dropout, and training settings when comparing fits.",
+      "New NN models learn an identity-safe residual and keep their best non-regressing training checkpoint. That safeguards training, but does not guarantee low error on unseen images. Compare held-out results and inspect saturated colors, neutrals, shadows, and highlights."
+    ]
+  },
+  {
+    "Title": "Color spaces & ΔE",
+    "Paragraphs": [
+      "Input RGB space and white must describe the numeric pixels being supplied. Output RGB space describes the corrected pixel encoding. These are not cosmetic labels. Standard sRGB uses D65; selecting another white with the same primaries describes a custom variant.",
+      "With sRGB/D65 input, embedded ICC profiles are converted to working sRGB before correction. EXIF rotation is applied consistently to detection, sampling, thumbnails and exports. Explicit non-sRGB or custom-white input selections bypass ICC conversion and use the declared pixel encoding. Original previews honor ICC profiles for display. Corrected and stage previews are converted to display sRGB independently of exported bytes. Non-sRGB exports still need a downstream workflow that interprets their declared encoding correctly.",
+      "CIEDE2000 (ΔE00) measures perceptual distance in CIELAB with a common reference white. Lower is better, but a single mean hides outliers. Inspect the per-patch values, worst patches, and held-out validation as well as the mean.",
+      "A fitting score measures the calibration chart. Held-out error tests the CC mapping after GC/WB have been fitted; it is not validation of the whole pipeline on independent photographs. Low training error with high held-out error signals overfitting or an unsuitable chart reference. Apply-only images have no measured chart error. The app must not fabricate ΔE for them.",
+      "Reference values depend on chart type, patch order, illuminant, observer, and the physical chart. Published nominal values cannot certify your individual chart: aging, dirt, printing variation, glare, and illumination spectra remain sources of uncertainty. See the bundled color-science validation document for independent numerical fixtures and the exact tested scope."
+    ]
+  },
+  {
+    "Title": "Session & catalog",
+    "Paragraphs": [
+      "The catalog organizes available files; the session is your current working set. Select a session tile to make it active. The left and right preview arrows, or Alt+Left / Alt+Right, browse different session images—not the correction-stage previews.",
+      "Scroll the session and catalog areas to reach longer collections. Inspect the active filename before running, saving, or removing an item. Delete removes the selected item from the working session; it is not a command to erase your original image file.",
+      "Ctrl+O adds files; Ctrl+Shift+O adds a folder. Ctrl+Shift+S saves the session, and Ctrl+Alt+O loads it. Session persistence is separate from exporting corrected image files or reusable model JSON."
+    ]
+  },
+  {
+    "Title": "Apply, save & video",
+    "Paragraphs": [
+      "To apply an existing fit, expand Model and select Use loaded; load model JSON first if needed. Select the sample image and run Apply model. Fit from image is a different mode. No chart is needed on an apply-only image, but capture conditions must match. In Batch, choose Apply current model to reuse the model; Fit from chart calibrates each chart image separately.",
+      "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S, choose corrected images, stage images, and reports, then Save selected. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
+      "Video supports 8-bit SDR Rec.709/sRGB-family input. HDR/PQ/HLG, wide-gamut Rec.2020, and high-bit-depth inputs are rejected. FFmpeg and FFprobe are required. The LUT path preserves variable-frame-rate timing; spatial FFC uses constant-frame-rate per-frame correction.",
+      "Keep the source files unchanged and store outputs separately. Compare corrected results in a color-managed viewer before downstream measurement or publication."
+    ]
+  },
+  {
+    "Title": "API & notebooks",
+    "Paragraphs": [
+      "The same Rust worker used by the GUI accepts sequential newline-delimited JSON commands without opening a window. The bundled Python SDK and command-line interface provide a friendlier route for scripts, automation, and Jupyter notebooks; Python is optional for the desktop app.",
+      "Find api/, docs/api/, and notebooks/ beside the packaged application. The short Python workflow is Engine.calibrate(chart, white=blank, folder=results), then calibration.apply(images). Calibration detects automatically and retains all advanced fit options; the original detect, fit, apply, video and request interfaces remain available. Start with the API README for a complete runnable example.",
+      "Use a separate worker per independent session and send one request at a time. Treat model state as belonging to that worker. A timeout must terminate the worker before another request, so a late reply cannot be mistaken for the next operation.",
+      "The API is a local process interface, not an internet server. The app does not open a network listener by default. Use explicit output directories and retain your model, configuration, chart reference, and reports for reproducibility."
+    ]
+  },
+  {
+    "Title": "Troubleshooting",
+    "Paragraphs": [
+      "No chart found: check focus, exposure, framing, and patch visibility, then press Detect again. Verify the detected chart type and overlay. Do not use Blank.JPG as the chart. Try a clear chart-bearing image from the same setup.",
+      "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
+      "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
+      "Worker or native-library error: open Accelerators from the app title, inspect the status, try CPU, and restart the worker. CUDA download installs a separate per-user libtorch-cuda add-on and preserves CPU. CUDA can run detection and explicitly selected LUT application; NN fitting remains CPU. Auto still-image LUT application intentionally uses CPU. Device availability alone does not prove a particular operation used CUDA; inspect apply_backend in API replies. Keep the bundled executable, models, references, and runtime libraries together.",
+      "Video cannot open: check FFmpeg/FFprobe availability and the supported SDR contract. Do not relabel HDR footage as SDR; convert it deliberately outside the app first."
+    ]
+  },
+  {
+    "Title": "Research & citation",
+    "Paragraphs": [
+      "This application builds on the stepwise workflow presented by Wakholi and colleagues: A systematic color correction pipeline for controlled-environment imaging. The Plant Phenome Journal 9, e70067 (2026). DOI: 10.1002/ppj2.70067. Published 11 March 2026.",
+      "The research motivates evaluating the imaging setup together with correction, rather than treating a regression model as a substitute for controlled capture. The current application is an evolving implementation; its automatic GC and NN safeguards should not be assumed to reproduce every historical experimental setting.",
+      "Use Original research to open the publisher article. Study PDF opens docs/research/ppj2.70067.pdf when available locally. The build's direct download was blocked by the publisher, so place a legitimately downloaded copy there for offline access; this package does not claim to bundle the paper. The illustrated guide itself is embedded and always available offline. Numerical validation sources and test limitations are in docs/color-science-validation.md."
+    ]
+  }
+]

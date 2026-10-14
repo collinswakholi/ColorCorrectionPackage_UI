@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ColorCorrect.App.Views.HelpWindow"
+        Title="ColorCorrect Studio · Guide" Width="820" Height="600"
+        MinWidth="600" MinHeight="360" WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False" Background="{DynamicResource SidebarBrush}"
+        FontFamily="{StaticResource DefaultFont}" Opened="OnOpened"
+        KeyboardNavigation.TabNavigation="Cycle">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <StackPanel Spacing="4">
+                <TextBlock Text="A field guide to better color" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock Text="Capture carefully. Calibrate once. Validate before applying."
+                           Classes="caption" TextWrapping="Wrap"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Close" Theme="{StaticResource SecondaryButton}"
+                    Click="Close_Click" VerticalAlignment="Top" Margin="12,0,0,0"
+                    AutomationProperties.Name="Close guide"/>
+        </Grid>
+        <Grid Grid.Row="1" ColumnDefinitions="185,20,*">
+            <Grid RowDefinitions="Auto,Auto,*">
+                <TextBlock Text="Find a topic" Classes="settingsLabel" Margin="0,0,0,6"/>
+                <TextBox x:Name="SearchBox" Grid.Row="1" PlaceholderText="Search the guide"
+                         TextChanged="Search_Changed" Margin="0,0,0,12"
+                         AutomationProperties.Name="Search help topics"/>
+                <ListBox x:Name="TopicList" Grid.Row="2" SelectionChanged="Topic_Changed"
+                         Background="Transparent" BorderThickness="0"
+                         AutomationProperties.Name="Help topics"/>
+            </Grid>
+            <Border Grid.Column="2" Background="{DynamicResource CardBrush}"
+                    CornerRadius="8" Padding="20">
+                <ScrollViewer x:Name="GuideScroll" HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Visible" AllowAutoHide="False"
+                              AutomationProperties.Name="Help article">
+                    <StackPanel x:Name="ArticlePanel" Spacing="14"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,14,0,0">
+            <TextBlock x:Name="GuideStatus" Text="Available offline · F1 opens this guide · Esc closes it"
+                       Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Documentation" Theme="{StaticResource SecondaryButton}"
+                    Margin="12,0,0,0" Click="Documentation_Click"
+                    ToolTip.Tip="Open offline API documentation and validation notes"
+                    AutomationProperties.Name="Open documentation folder"/>
+            <Button Grid.Column="2" Content="Original research ↗" Theme="{StaticResource SecondaryButton}"
+                    Margin="12,0,0,0" Click="Research_Click"
+                    AutomationProperties.Name="Open original research in browser"/>
+            <Button Grid.Column="3" Content="Study PDF" Theme="{StaticResource SecondaryButton}"
+                    Margin="8,0,0,0" Click="OfflineResearch_Click"
+                    ToolTip.Tip="Open docs/research/ppj2.70067.pdf if available locally"
+                    AutomationProperties.Name="Open offline study PDF"/>
+        </Grid>
+    </Grid>
+</Window>

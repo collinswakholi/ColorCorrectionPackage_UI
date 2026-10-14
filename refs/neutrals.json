@@ -1,0 +1,6 @@
+{
+  "classic": ["white", "neutral 8", "neutral 6.5", "neutral 5", "neutral 3.5", "black"],
+  "passport": ["white", "neutral 8", "neutral 6.5", "neutral 5", "neutral 3.5", "black"],
+  "spyder": ["A1", "A2", "A3", "A4", "A5", "A6"],
+  "digital-sg": ["E5", "F5", "G5", "H5", "I5", "J5", "E6", "F6", "G6", "H6", "I6", "J6"]
+}

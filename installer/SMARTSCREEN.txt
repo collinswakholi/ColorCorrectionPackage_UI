@@ -1,0 +1,14 @@
+This Windows build is unsigned.
+
+SmartScreen may show "Windows protected your PC". That is expected until the installer is signed. Choose More info → Run anyway only if you built or received this package yourself.
+
+Setup includes the app and CPU LibTorch only. NVIDIA CUDA is not in this file.
+
+On the Acceleration page, CPU is the default unless an NVIDIA GPU is found. If you choose CUDA, Setup reuses a local LibTorch 2.9 CUDA tree or downloads official LibTorch 2.9.1 + CUDA 12.6 from download.pytorch.org (~3.8 GB). The running app will also offer that download if Setup stayed on CPU.
+
+Intel / AMD graphics do not need a CUDA download. Plane detect uses ONNX Runtime DirectML (included). Chart detect and apply stay on CPU — there is no Vulkan LibTorch. Official LibTorch 2.9 has no Windows Vulkan build.
+
+Only one folder is used: %LOCALAPPDATA%\CCP-New\libtorch. Do not copy a second torch.dll next to ccp-engine.exe.
+
+Silent: ColorCorrect-Studio-win-x64.exe /SILENT
+Silent CUDA (reuse or download): ColorCorrect-Studio-win-x64.exe /SILENT /LIBTORCH=cuda
