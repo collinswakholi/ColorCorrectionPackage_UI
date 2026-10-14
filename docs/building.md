@@ -10,6 +10,7 @@ Provision tools before building; do not substitute whatever happens to be on PAT
 pwsh ./scripts/link_samples.ps1 # validates tracked samples; creates no junctions
 pwsh ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
 pwsh ./scripts/fetch_ffmpeg.ps1
+pwsh ./scripts/fetch_onnxruntime.ps1 -Dest .build-cache/test-runtime
 pwsh ./scripts/start_desktop.ps1
 ```
 
@@ -30,6 +31,7 @@ $env:LIBTORCH = (Get-Content .build-cache/sdk-cpu.json -Raw | ConvertFrom-Json).
 $env:LIBTORCH_PATH = $env:LIBTORCH
 $env:LIBTORCH_BYPASS_VERSION_CHECK = '1'
 $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
+$env:ORT_DYLIB_PATH = (Resolve-Path .build-cache/test-runtime/onnxruntime.dll).Path
 $env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
 $env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
 cargo fmt --manifest-path engine/Cargo.toml --all -- --check

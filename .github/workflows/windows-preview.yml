@@ -62,14 +62,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Rust setup' }
           ./scripts/fetch_libtorch.ps1 -Kind cpu -StageOnly
           ./scripts/fetch_ffmpeg.ps1
+          ./scripts/fetch_onnxruntime.ps1 -Dest .build-cache/test-runtime
           $env:LIBTORCH = (Get-Content .build-cache/sdk-cpu.json -Raw | ConvertFrom-Json).path
           $env:LIBTORCH_PATH = $env:LIBTORCH
           $env:LIBTORCH_BYPASS_VERSION_CHECK = '1'
           $env:PATH = "$env:LIBTORCH/lib;$env:PATH"
+          $env:ORT_DYLIB_PATH = (Resolve-Path .build-cache/test-runtime/onnxruntime.dll).Path
+          $env:PATH = "$(Resolve-Path .build-cache/test-runtime);$env:PATH"
           $env:CCP_FFMPEG = (Resolve-Path installer/ffmpeg.exe).Path
           $env:CCP_FFPROBE = (Resolve-Path installer/ffprobe.exe).Path
           cargo fmt --manifest-path engine/Cargo.toml --all -- --check
           if ($LASTEXITCODE -ne 0) { throw 'format gate' }
+          cargo clippy --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'strict lint' }
           cargo test --manifest-path engine/Cargo.toml --workspace --all-targets --all-features --locked
           if ($LASTEXITCODE -ne 0) { throw 'Rust tests' }
           dotnet restore app/ColorCorrect.sln --locked-mode
