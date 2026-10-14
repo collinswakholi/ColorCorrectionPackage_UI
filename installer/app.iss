@@ -42,6 +42,7 @@ Type: files; Name: "{app}\ffprobe.exe"
 Type: files; Name: "{app}\ffmpeg-sha256.txt"
 Type: files; Name: "{app}\licenses\ffmpeg\LICENSE"
 Type: files; Name: "{app}\licenses\ffmpeg\README.txt"
+Type: files; Name: "{app}\api\tests\integration_video.py"
 
 [Files]
 Source: "{#Dist}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs; Excludes: "*.pdb"

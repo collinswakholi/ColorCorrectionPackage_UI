@@ -24,6 +24,10 @@ public sealed class StillOnlyWorkflowTests
             Assert.Null(window.FindControl<Button>("VideoUpload"));
             Assert.Null(window.FindControl<Control>("VideoCompare"));
             Assert.Null(window.FindControl<Button>("VideoPlayBtn"));
+            var fitMode = window.FindControl<RadioButton>("FitFromImageRadio");
+            Assert.NotNull(fitMode);
+            Assert.Equal("Train a new model from the selected still (needs a detected chart). Replaces the loaded model.",
+                ToolTip.GetTip(fitMode));
             Assert.Equal("Add a still image, then Fit + apply.", vm.WorkflowHint);
         }
         finally

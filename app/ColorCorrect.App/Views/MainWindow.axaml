@@ -674,7 +674,7 @@
                                                                  Theme="{StaticResource StageRadioButton}"
                                                                  HorizontalAlignment="Stretch" MinWidth="0"
                                                                  IsChecked="{Binding IsFitFromImage}"
-                                                                 ToolTip.Tip="Train a new model from the selected still (needs a detected chart) or from a chart frame in the clip. Replaces the loaded model."
+                                                                 ToolTip.Tip="Train a new model from the selected still (needs a detected chart). Replaces the loaded model."
                                                                  AutomationProperties.Name="Fit from this image"/>
                                                 </UniformGrid>
                                             </Border>
