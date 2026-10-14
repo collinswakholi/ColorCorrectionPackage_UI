@@ -40,9 +40,11 @@ public sealed class SaveWorkflowTests
     }
 
     [AvaloniaTheory]
-    [InlineData("png")]
-    [InlineData("jpg")]
-    public async Task Export_RawStagesAndCorrected_UseSelectedCodecAndDistinctNames(string format)
+    [InlineData("png", false)]
+    [InlineData("jpg", false)]
+    [InlineData("png", true)]
+    [InlineData("jpg", true)]
+    public async Task Export_RawStagesAndCorrected_UseSelectedCodecAndDistinctNames(string format, bool correctedAlreadyAtDestination)
     {
         var scratch = Path.Combine(Path.GetTempPath(), "colorcorrect-save-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
@@ -51,8 +53,12 @@ public sealed class SaveWorkflowTests
         var rgb = Enumerable.Range(0, 16 * 16 * 3).Select(i => new byte[] { 80, 130, 180 }[i % 3]).ToArray();
         foreach (var stage in new[] { "ffc", "gc", "wb", "corrected" })
             PreviewRgb.Write(Path.Combine(previews, stage + ".rgb"), 16, 16, rgb);
-        var corrected = Path.Combine(scratch, "full-corrected.png");
-        using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) bitmap.Save(corrected);
+        Directory.CreateDirectory(output);
+        // Lazy full-resolution materialization writes directly to OutputDir.
+        var corrected = correctedAlreadyAtDestination
+            ? Path.Combine(output, $"sample_corrected.{format}")
+            : Path.Combine(scratch, "full-corrected.png");
+        using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) BitmapExport.Save(bitmap, corrected);
         var vm = CreateViewModel(Path.Combine(scratch, "unused-report.json"), output);
         vm.SaveCorrected = vm.SaveFfc = vm.SaveGc = vm.SaveWb = vm.SaveCc = true;
         vm.SaveReport = false;
@@ -69,7 +75,7 @@ public sealed class SaveWorkflowTests
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
             await Task.Run(() => dialogs.Result.SetResult(true));
             await saving;
-            Assert.StartsWith("Saved 5 file(s)", vm.Status);
+            Assert.StartsWith("Saved 5 file(s) as", vm.Status);
             Assert.Equal(5, Directory.GetFiles(output).Length);
             foreach (var stage in new[] { "corrected", "ffc", "gc", "wb", "cc" })
             {

@@ -7,7 +7,7 @@ import; that commit is preserved remotely on `legacy-web` / `legacy-web-final`.
 
 ## Regressions and packaging
 
-- .NET SDK 10.0.402: **47 passed** (18 engine reliability, 29 headless UI/decoder/help/export).
+- .NET SDK 10.0.402: **49 passed** (18 engine reliability, 31 headless UI/decoder/help/export).
   Existing Windows visual baselines passed unchanged; none were refreshed.
 - Rust 1.95.0: format check, strict all-feature Clippy, and **93 tests passed**.
   Includes 34 published CIEDE2000 vector pairs in both directions, 64 space/white
@@ -105,6 +105,11 @@ for every destination and gives the CC fallback a distinct filename. Two further
 regressions check all five image exports, codec signatures, dimensions and pixels.
 Explicit Skia encoding also fixes Avalonia's PNG-only `Bitmap.Save` being used
 for JPEG destinations, including plot export; a rendered-plot JPEG test covers it.
+The next live export exposed lazy full-resolution materialization writing directly
+to the chosen export destination, followed by a redundant copy onto itself.
+Both PNG/JPEG regressions reproduced the failure before the fix and passed after
+same-path copies were skipped. Export tests now reject partial-success status,
+not merely check its prefix. All 49 .NET tests and existing visual baselines pass.
 Repeat live export evidence is attached to the PR; the
 complete interactive walkthrough is not marked passed. No captures containing
 occluding other apps were saved or uploaded.
@@ -121,8 +126,16 @@ The export fix is revalidated by the same gates; its final result is on the PR.
 Live installed-app, fresh-checkout, available accelerator, reinstall/uninstall
 evidence is added to the PR as it is verified. A development host with removed
 PATH entries is not equivalent to a clean OS without installed runtimes.
-Clean Windows 11 x64/offline/legacy side-by-side validation remains a required
-independent gate; Linux/macOS native builds are not validated here.
+A fresh offline Windows 11 Enterprise x64 guest (10.0.26100) at source `c317a6c`
+passed installed CPU six-method/stage/application/video checks, with no developer
+tools or enabled IP network adapters. The self-contained GUI started before QA
+Python was staged. Native reinstall/uninstall preserved its guest profile sentinel.
+The existing legacy Windows release was installed separately in that guest: both
+installer identities coexisted, its localhost UI returned HTTP 200, and native
+uninstall left the legacy executable, a retention sentinel and running UI intact.
+These results are specific to that source; the final export-fix installer requires
+the same independent retest. The full interactive walkthrough remains separately
+reported on the PR. Linux/macOS native builds are not validated here.
 Complete corresponding source/build material for the GPL FFmpeg full build and
 upstream detector redistribution obligations require maintainer review.
 The manual workflow will not create a draft until source is merged, gates are

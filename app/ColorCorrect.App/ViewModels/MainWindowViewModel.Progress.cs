@@ -358,7 +358,12 @@ public partial class MainWindowViewModel
         var srcExt = Path.GetExtension(src);
         if (string.Equals(srcExt, wantExt, StringComparison.OrdinalIgnoreCase))
         {
-            File.Copy(src, dest, overwrite: true);
+            // Lazy full-resolution apply can materialize directly into this
+            // destination. Copying that completed file onto itself fails on
+            // Windows despite there being no competing process.
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!string.Equals(Path.GetFullPath(src), Path.GetFullPath(dest), comparison))
+                File.Copy(src, dest, overwrite: true);
             return;
         }
 
