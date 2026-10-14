@@ -86,7 +86,16 @@ PEM parser's string labels were distinguished from actual private-key material.
 Live installed app launched and the five-image catalog/control tree was observed,
 but desktop input was blocked by helper activation/active-request errors even
 after the desktop was unlocked. No screenshots containing occluding other apps
-were saved or uploaded. Full interactive walkthrough is not marked passed.
+were saved or uploaded. After geometry-backed capture, Catalog expanded successfully
+and listed exactly the five public files with Blank's dedicated FFC action. Further
+input still failed with helper state/active-request errors. Full interactive
+walkthrough is not marked passed.
+
+The legacy archive tag now has an active, exact-ref GitHub ruleset preventing
+updates/deletion with no bypass actors. It still resolves to the original commit.
+CI's first full run exposed an unrelated ORT 1.5.2 on the hosted runner's PATH;
+both workflows now explicitly load checksum-pinned 1.22.1 from an isolated test
+stage. The same dedicated-stage regression rerun passed all 93 Rust tests locally.
 
 Live installed-app, fresh-checkout, available accelerator, reinstall/uninstall
 evidence is added to the PR as it is verified. A development host with removed

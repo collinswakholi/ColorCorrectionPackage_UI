@@ -86,6 +86,7 @@ jobs:
       - name: Compile installer and validate packaged operations
         shell: pwsh
         run: |
+          $env:CCP_RELEASE_BUILD = '1'
           ./scripts/package_windows.ps1 -SkipFetch -SkipPortableArchive -BuildInstaller
           $env:CCP_NEW_UI_ROOT = (Resolve-Path dist/win-cpu).Path
           $env:CCP_ENGINE_EXE = "$env:CCP_NEW_UI_ROOT/ccp-engine.exe"

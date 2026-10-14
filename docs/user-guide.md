@@ -79,6 +79,8 @@ not establish generalization to another camera or lighting setup.
 ![Updated light-theme workbench showing a populated session and preview navigation](images/session-workbench.png)
 
 In this layout example, the left panel holds your working images and settings.
+Screenshots are native Avalonia/Skia regression renders using only the five public
+samples, not evidence of a completed calibration or an interactive release gate.
 The large arrows browse session images; the tabs above the preview select
 processing stages. The bottom-left action area stays reachable while settings scroll.
 
