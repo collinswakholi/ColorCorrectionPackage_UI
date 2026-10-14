@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -1137,7 +1138,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (!await EnsureOutputAllowedAsync().ConfigureAwait(false))
+        // This command changes bound state after confirmation. Keep the Avalonia
+        // synchronization context even when the dialog completes asynchronously.
+        if (!await EnsureOutputAllowedAsync())
         {
             return;
         }
@@ -1145,7 +1148,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var destDir = string.IsNullOrWhiteSpace(OutputDir)
             ? Path.Combine(_worker.RepoRoot, "assets", "runs", "saved")
             : Path.IsPathRooted(OutputDir) ? OutputDir : Path.GetFullPath(Path.Combine(_worker.RepoRoot, OutputDir));
-        Directory.CreateDirectory(destDir);
         var format = SelectedOutputFormat?.Value ?? "jpg";
         var ext = format.Equals("png", StringComparison.OrdinalIgnoreCase) ? ".png" : ".jpg";
         IsSaving = true;
@@ -1156,6 +1158,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var jobs = new List<(string Src, string Dest)>();
         try
         {
+            Directory.CreateDirectory(destDir);
             for (var i = 0; i < items.Count; i++)
             {
                 var item = items[i];
@@ -1209,6 +1212,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             var copied = 0;
+            var failures = new ConcurrentQueue<string>();
             var degree = Math.Clamp(Environment.ProcessorCount, 2, 6);
             await Parallel.ForEachAsync(jobs, new ParallelOptions { MaxDegreeOfParallelism = degree }, async (job, _) =>
             {
@@ -1230,16 +1234,22 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                         SaveProgressLabel = $"Saving {n} / {jobs.Count}";
                     }).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    failures.Enqueue($"{Path.GetFileName(job.Dest)}: {ex.Message}");
                 }
             });
 
-            Status = copied == 0
-                ? "No matching stage files to copy."
-                : $"Saved {copied} file(s) as {format.ToUpperInvariant()} to {destDir}";
-            Log("Save", Status, copied == 0 ? LogLevel.Warning : LogLevel.Success);
-            if (copied > 0)
+            Status = failures.IsEmpty
+                ? copied == 0
+                    ? "No matching stage files to copy."
+                    : $"Saved {copied} file(s) as {format.ToUpperInvariant()} to {destDir}"
+                : copied == 0
+                    ? $"Save failed: {failures.Count} file(s) could not be written."
+                    : $"Saved {copied} file(s); {failures.Count} file(s) failed. Check the save log.";
+            Log("Save", Status, failures.IsEmpty && copied > 0 ? LogLevel.Success : LogLevel.Warning,
+                failures.IsEmpty ? null : failures.ToArray());
+            if (copied > 0 && failures.IsEmpty)
             {
                 ToastService.ShowSuccess(Status);
             }
@@ -1247,6 +1257,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             {
                 ToastService.ShowWarning(Status);
             }
+        }
+        catch (Exception ex)
+        {
+            Status = $"Save failed: {ex.Message}";
+            Log("Save", Status, LogLevel.Error);
+            ToastService.ShowError(Status);
         }
         finally
         {
@@ -1317,7 +1333,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var options = BuildOptions();
         options.WriteOutput = true;
         options.PreviewMode = "none";
-        var outcome = await _client.ApplyModelAsync(item.Path, model, options).ConfigureAwait(false);
+        // Updating this session item's outputs also notifies UI bindings.
+        var outcome = await _client.ApplyModelAsync(item.Path, model, options);
         if (!outcome.Ok || !File.Exists(outcome.OutputPath))
         {
             return false;

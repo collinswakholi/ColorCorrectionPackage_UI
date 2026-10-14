@@ -1,7 +1,7 @@
 # Model and sample provenance
 
 The maintainer supplied these artifacts with `CCP_New_UI` and authorized regular
-Git distribution for this migration. Exact imported bytes are listed in
+Git distribution for this migration. Exact shipped bytes are listed in
 [`models/manifest.json`](../models/manifest.json): path, byte count and SHA-256.
 The manifest is validated before commit and in CI. Each file is below GitHub's
 100 MiB individual-file limit. Approximately 203 MB of weights are intentionally

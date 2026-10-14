@@ -11,6 +11,8 @@
 - Verify immutable FFmpeg 9.0 / ORT / DirectML downloads, retain notices and record
   build/model/dependency provenance and payload checksums.
 - Illustrated offline help, notebooks, migration/build/security/contribution docs.
+- Live release validation found and fixed export UI-thread loss after folder
+  confirmation; save failures now report errors without crashing or false success.
 - Replace automatic release/Docker workflows with read-only PR validation and a
   manual source-matched draft Windows preview workflow. No new Unix binaries.
 

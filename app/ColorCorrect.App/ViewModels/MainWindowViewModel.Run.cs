@@ -108,7 +108,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!await EnsureOutputAllowedAsync().ConfigureAwait(false))
+        if (!await EnsureOutputAllowedAsync())
         {
             Status = "Output folder not confirmed.";
             return;
@@ -201,7 +201,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!await EnsureOutputAllowedAsync().ConfigureAwait(false))
+        if (!await EnsureOutputAllowedAsync())
         {
             Status = "Output folder not confirmed.";
             return;

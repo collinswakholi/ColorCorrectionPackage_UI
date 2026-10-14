@@ -7,7 +7,7 @@ import; that commit is preserved remotely on `legacy-web` / `legacy-web-final`.
 
 ## Regressions and packaging
 
-- .NET SDK 10.0.402: **40 passed** (18 engine reliability, 22 headless UI/decoder/help).
+- .NET SDK 10.0.402: **44 passed** (18 engine reliability, 26 headless UI/decoder/help/export).
   Existing Windows visual baselines passed unchanged; none were refreshed.
 - Rust 1.95.0: format check, strict all-feature Clippy, and **93 tests passed**.
   Includes 34 published CIEDE2000 vector pairs in both directions, 64 space/white
@@ -83,19 +83,34 @@ C++ header assertions; Rust/MSVC release path trimming removes them. Full source
 and payload scans include binaries and all model-manifest artifacts. The FFmpeg
 PEM parser's string labels were distinguished from actual private-key material.
 
-Live installed app launched and the five-image catalog/control tree was observed,
-but desktop input was blocked by helper activation/active-request errors even
-after the desktop was unlocked. No screenshots containing occluding other apps
-were saved or uploaded. After geometry-backed capture, Catalog expanded successfully
-and listed exactly the five public files with Blank's dedicated FFC action. Further
-input still failed with helper state/active-request errors. Full interactive
-walkthrough is not marked passed.
+The Setup payload at `e905345` passed all 545 installed checksums, a CPU workflow
+with developer PATH entries removed, and both installed notebooks (12.77/20.00 s).
+Scoped reinstall/uninstall passed: its binaries were removed, a user-profile
+sentinel survived, and the original settings/session hashes remained unchanged.
+
+The live helper initially had activation/state errors, then recovered. The
+installed app passed catalog loading, chart detection overlays, Blank's dedicated
+FFC action, all stage previews, Previous/Next browsing through a three-image
+session, RPCC2 fitting and saved-model application. With the UI's default FFC
+polynomial d3, chart mean ΔE00 was 7.10 → 1.42, held-out mean 2.35; these settings
+differ from the PLS FFC benchmark above. A real export outside the installation
+folder exposed an unhandled UI-thread exception after confirmation. The command
+now retains the Avalonia context, as does corrected-output materialization;
+directory/copy errors report failures instead of crashing or silently claiming
+success. Four added headless cases cover asynchronous approval/rejection and
+directory/individual-copy failure with real UI command bindings. Existing visual
+baselines still pass. Repeat live export evidence is attached to the PR; the
+complete interactive walkthrough is not marked passed. No captures containing
+occluding other apps were saved or uploaded.
 
 The legacy archive tag now has an active, exact-ref GitHub ruleset preventing
 updates/deletion with no bypass actors. It still resolves to the original commit.
 CI's first full run exposed an unrelated ORT 1.5.2 on the hosted runner's PATH;
 both workflows now explicitly load checksum-pinned 1.22.1 from an isolated test
 stage. The same dedicated-stage regression rerun passed all 93 Rust tests locally.
+The `e905345` read-only PR run then passed on the fresh Windows Server runner,
+including actual Setup integrity/uninstall, six methods, video and notebooks.
+The export fix is revalidated by the same gates; its final result is on the PR.
 
 Live installed-app, fresh-checkout, available accelerator, reinstall/uninstall
 evidence is added to the PR as it is verified. A development host with removed
