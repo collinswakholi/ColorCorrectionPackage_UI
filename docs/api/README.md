@@ -6,17 +6,18 @@ All native correction operations are already callable through the bundled `ccp-e
 
 ### Short Python workflow (SDK 1.1)
 
-Add the packaged `api/` folder to Python's import path, then:
+Add the packaged `api/` folder to Python's import path. From the installed app
+folder (or source checkout root), the bundled sample workflow is:
 
 ```python
 from colorcorrect import Engine
 
 with Engine() as engine:
-    calibration = engine.calibrate("ColorCard_Big.JPG", folder="results",
-        white="Blank.JPG", model="nn", nn={"hidden_layers": [64, 32],
+    calibration = engine.calibrate("test_images/ColorCard_Big.JPG", folder="results",
+        white="test_images/Blank.JPG", model="nn", nn={"hidden_layers": [64, 32],
         "optimizer": "adam", "batch_norm": True, "dropout": 0.01})
     print(calibration.report["report_json"])  # Inspect held-out errors before reuse.
-    calibration.apply(["Sample_3572.JPG", "Sample_3573.JPG"])
+    calibration.apply(["test_images/Sample_3572.JPG", "test_images/Sample_3573.JPG"])
     print(calibration.model)  # Persist this path for another session.
 ```
 

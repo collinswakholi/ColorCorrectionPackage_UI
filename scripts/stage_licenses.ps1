@@ -35,7 +35,7 @@ Get-ChildItem (Join-Path $root 'app') -Recurse -Filter packages.lock.json -File 
             if (-not (Test-Path -LiteralPath $folder)) { continue }
             $target = Join-Path $licenses "nuget\$($dependency.Name)-$($dependency.Value.resolved)"
             New-Item -ItemType Directory -Force -Path $target | Out-Null
-            Get-ChildItem -LiteralPath $folder -File -Recurse | Where-Object { $_.Name -match '(?i)^(license|notice|copying)' -or $_.Extension -eq '.nuspec' } | ForEach-Object {
+            Get-ChildItem -LiteralPath $folder -File -Recurse | Where-Object { $_.Name -match '(?i)^(license|notice|copying|ofl)' -or $_.Extension -eq '.nuspec' } | ForEach-Object {
                 $to = Join-Path $target ([IO.Path]::GetRelativePath($folder,$_.FullName))
                 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $to) | Out-Null
                 Copy-Item -LiteralPath $_.FullName -Destination $to -Force

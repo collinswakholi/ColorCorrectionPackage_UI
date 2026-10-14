@@ -54,12 +54,8 @@ Source: "{#Dist}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#Dist}\ffprobe.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#Dist}\run.cmd"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#Dist}\onnxruntime.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#Dist}\onnxruntime_providers_shared.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#Dist}\DirectML.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#Dist}\msvcp140*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Dist}\vcruntime140*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Dist}\concrt140.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+; Exactly the freshly staged, checksum-covered runtime DLLs, including vccorlib.
+Source: "{#Dist}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Dist}\libtorch\*"; DestDir: "{app}\libtorch"; Flags: ignoreversion recursesubdirs
 Source: "..\scripts\install_libtorch_cuda.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "..\scripts\runtime_hashes.psd1"; DestDir: "{tmp}"; Flags: deleteafterinstall
