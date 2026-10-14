@@ -25,8 +25,8 @@ $env:LIBTORCH_BYPASS_VERSION_CHECK = "1"
 $env:PATH = (Join-Path $libtorch "lib") + ";" + $env:PATH
 $env:RUSTFLAGS = ($env:RUSTFLAGS + ' --remap-path-prefix=' + $env:USERPROFILE + '=/build').Trim()
 # MSVC's prefix trimming also removes __FILE__ paths from torch-sys C++ headers.
-$env:CXXFLAGS = ($env:CXXFLAGS + ' /d1trimfile:' + $env:USERPROFILE).Trim()
-$env:CFLAGS = ($env:CFLAGS + ' /d1trimfile:' + $env:USERPROFILE).Trim()
+$env:CXXFLAGS = ($env:CXXFLAGS + ' /Brepro /d1trimfile:' + $env:USERPROFILE).Trim()
+$env:CFLAGS = ($env:CFLAGS + ' /Brepro /d1trimfile:' + $env:USERPROFILE).Trim()
 
 Push-Location (Join-Path $root "engine")
 try {

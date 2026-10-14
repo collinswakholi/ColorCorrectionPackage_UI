@@ -13,7 +13,7 @@ parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent
 parser.add_argument("--engine", type=Path)
 parser.add_argument("--policy", default="cpu")
 args = parser.parse_args()
-samples = Path(__file__).resolve().parents[2] / "test_images"
+samples = args.root / "test_images"
 folder = tempfile.mkdtemp(prefix="colorcorrect-simple-")
 with Engine(args.engine, root=args.root, policy=args.policy) as engine:
     devices = engine.devices()
@@ -29,5 +29,5 @@ with Engine(args.engine, root=args.root, policy=args.policy) as engine:
         "fit_apply_backend": calibration.report.get("apply_backend"),
         "apply_backend": applied.get("apply_backend"),
         "delta_e": calibration.report["report_json"]["delta_e_2000"]}, indent=2))
-    if args.policy == "cuda":
-        assert applied.get("apply_backend") == "cuda", "CUDA policy fell back: do not claim GPU execution"
+    if args.policy in ('cuda', 'directml'):
+        assert applied.get("apply_backend") == args.policy, f"{args.policy} policy fell back: do not claim GPU execution"
