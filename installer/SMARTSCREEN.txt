@@ -1,14 +1,19 @@
-This Windows build is unsigned.
+ColorCorrect Studio v0.1.0 preview is unsigned.
 
-SmartScreen may show "Windows protected your PC". That is expected until the installer is signed. Choose More info → Run anyway only if you built or received this package yourself.
+Verify the installer SHA-256 and trusted source before continuing. SmartScreen
+may warn. Do not treat a checksum as publisher identity or disable Windows security.
 
-Setup includes the app and CPU LibTorch only. NVIDIA CUDA is not in this file.
+CPU LibTorch, .NET 10 and native runtime DLLs ship app-locally. Setup does not
+replace per-user installed CPU/CUDA libraries. CPU is the default on all hardware.
+Offline CPU sample workflows require no download.
 
-On the Acceleration page, CPU is the default unless an NVIDIA GPU is found. If you choose CUDA, Setup reuses a local LibTorch 2.9 CUDA tree or downloads official LibTorch 2.9.1 + CUDA 12.6 from download.pytorch.org (~3.8 GB). The running app will also offer that download if Setup stayed on CPU.
+Optional CUDA reuses or downloads official LibTorch 2.9.1/cu126 (~3.8 GB) into
+the separate CCP-New/libtorch-cuda folder. Existing invalid folders are refused,
+not deleted. Each worker loads one compatible LibTorch tree.
 
-Intel / AMD graphics do not need a CUDA download. Plane detect uses ONNX Runtime DirectML (included). Chart detect and apply stay on CPU — there is no Vulkan LibTorch. Official LibTorch 2.9 has no Windows Vulkan build.
+DirectML is bundled for supported Windows graphics drivers. CUDA/DirectML can
+accelerate selected detector/LUT operations; NN training and many stages remain
+CPU work. Check actual backend telemetry; policy selection alone is not evidence.
 
-Only one folder is used: %LOCALAPPDATA%\CCP-New\libtorch. Do not copy a second torch.dll next to ccp-engine.exe.
-
-Silent: ColorCorrect-Studio-win-x64.exe /SILENT
-Silent CUDA (reuse or download): ColorCorrect-Studio-win-x64.exe /SILENT /LIBTORCH=cuda
+Silent CPU: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LIBTORCH=cpu
+Silent CUDA (explicit opt-in download): /SILENT /LIBTORCH=cuda

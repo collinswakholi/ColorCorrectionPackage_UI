@@ -1,8 +1,4 @@
-; CUDA add-on — REPLACES the single libtorch_root.
-; Prefer the unified installer/app.iss (CPU vs CUDA page). This script is for
-; upgrading an older CPU-only install without re-shipping the app.
-; Do not install beside a CPU torch.dll. This script deletes then writes
-; %LOCALAPPDATA%\CCP-New\libtorch from dist\libtorch-cuda (fetch_libtorch.ps1 -Kind cuda).
+; Optional development CUDA add-on, separate from app-local CPU. Never wipe data.
 #define MyAppName "ColorCorrect Studio CUDA add-on"
 #define MyAppVersion "0.1.0"
 #define Torch "..\dist\libtorch-cuda"
@@ -28,14 +24,13 @@ InfoBeforeFile=CUDA-ADDON.txt
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[InstallDelete]
-Type: filesandordirs; Name: "{localappdata}\CCP-New\libtorch"
-
 [Files]
-Source: "{#Torch}\*"; DestDir: "{localappdata}\CCP-New\libtorch"; Flags: ignoreversion recursesubdirs
+Source: "{#Torch}\*"; DestDir: "{localappdata}\CCP-New\libtorch-cuda"; Flags: ignoreversion recursesubdirs
 
 [Code]
 function InitializeSetup(): Boolean;
 begin
-  Result := True;
+  Result := not DirExists(ExpandConstant('{localappdata}\CCP-New\libtorch-cuda'));
+  if not Result then
+    MsgBox('The CUDA destination already exists. Keep it; use the app runtime manager or choose a new destination with the staging script.', mbInformation, MB_OK);
 end;
