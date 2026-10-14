@@ -7,7 +7,7 @@ import; that commit is preserved remotely on `legacy-web` / `legacy-web-final`.
 
 ## Regressions and packaging
 
-- .NET SDK 10.0.402: **44 passed** (18 engine reliability, 26 headless UI/decoder/help/export).
+- .NET SDK 10.0.402: **47 passed** (18 engine reliability, 29 headless UI/decoder/help/export).
   Existing Windows visual baselines passed unchanged; none were refreshed.
 - Rust 1.95.0: format check, strict all-feature Clippy, and **93 tests passed**.
   Includes 34 published CIEDE2000 vector pairs in both directions, 64 space/white
@@ -99,7 +99,13 @@ now retains the Avalonia context, as does corrected-output materialization;
 directory/copy errors report failures instead of crashing or silently claiming
 success. Four added headless cases cover asynchronous approval/rejection and
 directory/individual-copy failure with real UI command bindings. Existing visual
-baselines still pass. Repeat live export evidence is attached to the PR; the
+baselines still pass. The live retest then exposed raw RGB stage files being sent
+to a standard codec. Stage saving now uses the native RGB decoder, honors PNG/JPEG
+for every destination and gives the CC fallback a distinct filename. Two further
+regressions check all five image exports, codec signatures, dimensions and pixels.
+Explicit Skia encoding also fixes Avalonia's PNG-only `Bitmap.Save` being used
+for JPEG destinations, including plot export; a rendered-plot JPEG test covers it.
+Repeat live export evidence is attached to the PR; the
 complete interactive walkthrough is not marked passed. No captures containing
 occluding other apps were saved or uploaded.
 

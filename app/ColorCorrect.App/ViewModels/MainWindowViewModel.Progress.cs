@@ -362,14 +362,11 @@ public partial class MainWindowViewModel
             return;
         }
 
-        using var bitmap = new Bitmap(src);
-        if (wantExt == ".jpg")
-        {
-            bitmap.Save(dest, 92);
-        }
-        else
-        {
-            bitmap.Save(dest);
-        }
+        // Fast stage previews use the native CCPRGB8 container, not a standard
+        // image codec. Decode its pixels directly without reapplying input ICC.
+        using var bitmap = PreviewRgb.TryReadHeader(src, out _, out _)
+            ? PreviewRgb.TryLoad(src) ?? throw new InvalidDataException("Incomplete RGB stage preview.")
+            : new Bitmap(src);
+        BitmapExport.Save(bitmap, dest);
     }
 }

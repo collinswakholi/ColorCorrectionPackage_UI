@@ -1201,7 +1201,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     await EnsureItemStageAsync(item, "cc");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "cc", ext))
                     {
-                        QueueStageCopy(jobs, item, destDir, stem, "corrected", ext);
+                        QueueStageCopy(jobs, item, destDir, stem, "cc", ext, sourceStage: "corrected");
                     }
                 }
 
@@ -1280,16 +1280,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         string destDir,
         string stem,
         string stage,
-        string ext)
+        string ext,
+        string? sourceStage = null)
     {
-        var src = ResolvePreviewFile(item.PreviewDir, stage, forDisplay: false);
+        var src = ResolvePreviewFile(item.PreviewDir, sourceStage ?? stage, forDisplay: false);
         if (string.IsNullOrWhiteSpace(src))
         {
             return false;
         }
 
-        var destExt = Path.GetExtension(src).Equals(".rgb", StringComparison.OrdinalIgnoreCase) ? ext : Path.GetExtension(src);
-        jobs.Add((src, Path.Combine(destDir, $"{stem}_{stage}{destExt}")));
+        // All images honor the selected encoding. CC's corrected-source fallback
+        // keeps its own filename so parallel copies never share a destination.
+        jobs.Add((src, Path.Combine(destDir, $"{stem}_{stage}{ext}")));
         return true;
     }
 

@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using ColorCorrect.App.Services;
 using ColorCorrect.Engine;
 
 namespace ColorCorrect.App.Controls;
@@ -31,16 +32,9 @@ internal static class PlotExport
             h = Math.Max(h, 540);
         }
 
-        var bitmap = new RenderTargetBitmap(new PixelSize(w, h), new Vector(96, 96));
+        using var bitmap = new RenderTargetBitmap(new PixelSize(w, h), new Vector(96, 96));
         bitmap.Render(visual);
-        if (ext is ".jpg" or ".jpeg")
-        {
-            bitmap.Save(path, 92);
-        }
-        else
-        {
-            bitmap.Save(path);
-        }
+        BitmapExport.Save(bitmap, path);
     }
 
     public static string WithSuffix(string path, string suffix)

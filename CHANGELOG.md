@@ -13,6 +13,8 @@
 - Illustrated offline help, notebooks, migration/build/security/contribution docs.
 - Live release validation found and fixed export UI-thread loss after folder
   confirmation; save failures now report errors without crashing or false success.
+- Decode native RGB stage previews for export, honor the chosen PNG/JPEG format
+  throughout and avoid colliding corrected/CC destination names.
 - Replace automatic release/Docker workflows with read-only PR validation and a
   manual source-matched draft Windows preview workflow. No new Unix binaries.
 

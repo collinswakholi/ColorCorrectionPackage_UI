@@ -1,5 +1,8 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Threading;
+using ColorCorrect.App.Controls;
 using ColorCorrect.App.Services;
 using ColorCorrect.App.ViewModels;
 using ColorCorrect.App.Views;
@@ -9,6 +12,90 @@ namespace ColorCorrect.App.Headless.Tests;
 
 public sealed class SaveWorkflowTests
 {
+    [AvaloniaFact]
+    public void PlotExport_JpegContainsJpegPixels_NotMislabeledPng()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "colorcorrect-plot-test-" + Guid.NewGuid().ToString("N") + ".jpg");
+        var visual = new Border { Width = 64, Height = 32, Background = Brushes.Red };
+        var window = new Window { Width = 64, Height = 32, Content = visual };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        try
+        {
+            PlotExport.Save(path, new ColorCorrect.Engine.CorrectionReport(), PlotKind.Bars, visual);
+            var bytes = File.ReadAllBytes(path);
+            Assert.Equal(new byte[] { 255, 216, 255 }, bytes[..3]);
+            using var image = SkiaSharp.SKBitmap.Decode(bytes);
+            Assert.NotNull(image);
+            Assert.Equal(64, image.Width);
+            Assert.Equal(32, image.Height);
+            Assert.InRange((int)image.GetPixel(32, 16).Red, 250, 255);
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData("png")]
+    [InlineData("jpg")]
+    public async Task Export_RawStagesAndCorrected_UseSelectedCodecAndDistinctNames(string format)
+    {
+        var scratch = Path.Combine(Path.GetTempPath(), "colorcorrect-save-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(scratch);
+        var output = Path.Combine(scratch, "exports");
+        var previews = Path.Combine(scratch, "previews");
+        var rgb = Enumerable.Range(0, 16 * 16 * 3).Select(i => new byte[] { 80, 130, 180 }[i % 3]).ToArray();
+        foreach (var stage in new[] { "ffc", "gc", "wb", "corrected" })
+            PreviewRgb.Write(Path.Combine(previews, stage + ".rgb"), 16, 16, rgb);
+        var corrected = Path.Combine(scratch, "full-corrected.png");
+        using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) bitmap.Save(corrected);
+        var vm = CreateViewModel(Path.Combine(scratch, "unused-report.json"), output);
+        vm.SaveCorrected = vm.SaveFfc = vm.SaveGc = vm.SaveWb = vm.SaveCc = true;
+        vm.SaveReport = false;
+        vm.SelectedOutputFormat = vm.OutputFormats.Single(option => option.Value == format);
+        vm.Session[0].PreviewDir = previews;
+        vm.Session[0].CorrectedPath = corrected;
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var dialogs = new DeferredConfirmation();
+        vm.Dialogs = dialogs;
+        try
+        {
+            var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
+            await Task.Run(() => dialogs.Result.SetResult(true));
+            await saving;
+            Assert.StartsWith("Saved 5 file(s)", vm.Status);
+            Assert.Equal(5, Directory.GetFiles(output).Length);
+            foreach (var stage in new[] { "corrected", "ffc", "gc", "wb", "cc" })
+            {
+                var path = Path.Combine(output, $"sample_{stage}.{format}");
+                var bytes = await File.ReadAllBytesAsync(path);
+                Assert.Equal(format == "png" ? new byte[] { 137, 80, 78, 71 } : new byte[] { 255, 216, 255 },
+                    bytes[..(format == "png" ? 4 : 3)]);
+                using var image = SkiaSharp.SKBitmap.Decode(bytes);
+                Assert.NotNull(image);
+                Assert.Equal(16, image.Width);
+                Assert.Equal(16, image.Height);
+                var pixel = image.GetPixel(8, 8);
+                Assert.InRange((int)pixel.Red, 77, 83);
+                Assert.InRange((int)pixel.Green, 127, 133);
+                Assert.InRange((int)pixel.Blue, 177, 183);
+            }
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+            vm.Session[0].Dispose();
+            Directory.Delete(scratch, recursive: true);
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
