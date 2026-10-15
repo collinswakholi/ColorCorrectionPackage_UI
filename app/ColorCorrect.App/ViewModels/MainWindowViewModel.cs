@@ -2418,6 +2418,31 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     internal int RestoreWorkingItems(SessionState state)
     {
+        var wasRestoring = _restoring;
+        _restoring = true;
+        try
+        {
+            if (state.HasOptions)
+            {
+                ApplyOptions(state.Options);
+                Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
+                OverlayCrop = Crop;
+            }
+
+            return RestoreWorkingItemsCore(state);
+        }
+        finally
+        {
+            _restoring = wasRestoring;
+            UpdateCcSummary();
+            NotifyRunCommands();
+            ScheduleSave();
+            MaybeAutoDetect();
+        }
+    }
+
+    private int RestoreWorkingItemsCore(SessionState state)
+    {
         // Invalidate in-flight decodes before replacing a session, including a
         // legacy session whose items are all unsupported in the still-only app.
         _previewGeneration++;

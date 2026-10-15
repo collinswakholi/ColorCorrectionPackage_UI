@@ -21,6 +21,9 @@
   do not silently apply an incomplete pipeline.
 - Make NN correction settings independently discoverable in the Windows task
   switcher and inherit the owner's icon, without changing the dialog layout.
+- Restore saved correction options and crop when loading a session, including
+  NN architecture, optimizer, batch normalization and dropout. Image-only legacy
+  session files continue to preserve the current workflow settings.
 - Replace automatic release/Docker workflows with read-only PR validation and a
   manual source-matched draft Windows preview workflow. No new Unix binaries.
 

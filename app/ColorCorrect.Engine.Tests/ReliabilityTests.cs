@@ -51,6 +51,20 @@ public sealed class ReliabilityTests : IDisposable
         Assert.False(SessionStore.Write(directoryTarget, new SessionState()));
     }
 
+    [Theory]
+    [InlineData("{}", false)]
+    [InlineData("{\"Options\":null}", false)]
+    [InlineData("{\"Options\":{\"Method\":\"nn\"}}", true)]
+    public void SessionOptions_DistinguishSavedWorkflowFromOlderImageOnlyFiles(string json, bool hasOptions)
+    {
+        var path = Path.Combine(_root, "optional-options.json");
+        File.WriteAllText(path, json);
+        var (loaded, error) = SessionStore.TryLoadFrom(path);
+        Assert.Null(error);
+        Assert.NotNull(loaded.Options);
+        Assert.Equal(hasOptions, loaded.HasOptions);
+    }
+
     [Fact]
     public void DuplicateImageStems_GetDistinctArtifactNamesAndSelectedFormat()
     {

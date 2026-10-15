@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ColorCorrect.Engine;
 
@@ -6,7 +7,20 @@ public sealed class SessionState
 {
     public List<SessionItemDto> Items { get; set; } = [];
     public string ActivePath { get; set; } = "";
-    public CorrectionOptions Options { get; set; } = new();
+    private CorrectionOptions _options = new();
+    // Older image-only session files omit Options. Do not replace a user's
+    // current workflow with defaults when loading one of those files.
+    [JsonIgnore]
+    public bool HasOptions { get; private set; }
+    public CorrectionOptions Options
+    {
+        get => _options;
+        set
+        {
+            _options = value ?? new();
+            HasOptions = value is not null;
+        }
+    }
     public double Crop { get; set; } = 0.75;
     public string Theme { get; set; } = "Dark";
     public List<string> TrustedOutputDirs { get; set; } = [];
