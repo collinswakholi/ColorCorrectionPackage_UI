@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.1.0 native Windows preview
+## Documentation and release designation — 15 October 2026
+
+- Promote the existing v0.1.0 Windows build to the main GitHub release (Latest),
+  remove its prerelease flag, and label all 13 browser/Flask releases retired.
+  Keep the released installer, tag, checksums, and legacy downloads unchanged.
+- Restore an animated native workflow demo and a clearer download, quick-start,
+  features, API, and documentation structure to the README.
+
+## 0.1.0 native Windows release
 
 - Replace browser/Flask source at repository root with reviewed ColorCorrect
   Studio Avalonia/Rust source; preserve history and the legacy branch/tag.
@@ -27,4 +35,4 @@
 - Replace automatic release/Docker workflows with read-only PR validation and a
   manual source-matched draft Windows preview workflow. No new Unix binaries.
 
-Earlier browser releases remain available unchanged on GitHub Releases.
+Earlier browser release assets remain available as retired historical downloads.
