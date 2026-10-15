@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ColorCorrect.App.Views.SplashWindow"
+        Width="420" Height="280"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Title="ColorCorrect Studio splash"
+        AutomationProperties.Name="ColorCorrect Studio splash"
+        ShowInTaskbar="True">
+    <Border Background="{DynamicResource SidebarBrush}"
+            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+            CornerRadius="12" Margin="8" Padding="28">
+        <StackPanel VerticalAlignment="Center" Spacing="12">
+            <Image Source="avares://ColorCorrect.App/Assets/app.png"
+                   Width="64" Height="64" HorizontalAlignment="Center"
+                   AutomationProperties.Name="ColorCorrect Studio logo"/>
+            <TextBlock Text="ColorCorrect Studio" Classes="heading" FontSize="22"
+                       HorizontalAlignment="Center"/>
+            <TextBlock x:Name="VersionText" Classes="body" Opacity="0.85"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="Collins Wakholi" Classes="body" Opacity="0.7"
+                       HorizontalAlignment="Center" FontStyle="Italic"/>
+            <ProgressBar x:Name="SplashProgress" Minimum="0" Maximum="100"
+                          IsIndeterminate="True" Height="6" Margin="0,8,0,0"
+                          AutomationProperties.Name="Splash progress"/>
+            <TextBlock x:Name="StatusText" Text="Starting…" Classes="body"
+                       Opacity="0.75" HorizontalAlignment="Center" FontSize="12"
+                       TextAlignment="Center" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite"/>
+        </StackPanel>
+    </Border>
+</Window>

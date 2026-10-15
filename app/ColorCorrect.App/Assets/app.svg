@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ColorCorrect Studio</title>
+  <desc id="desc">A C-shaped calibration mosaic inside a rounded teal instrument frame.</desc>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="#10231F" stroke="#3A8C7D" stroke-width="28"/>
+  <rect x="102" y="104" width="86" height="86" rx="18" fill="#E97952"/>
+  <rect x="213" y="104" width="86" height="86" rx="18" fill="#E7B832"/>
+  <rect x="324" y="104" width="86" height="86" rx="18" fill="#4C82BA"/>
+  <rect x="102" y="213" width="86" height="86" rx="18" fill="#4C9567"/>
+  <rect x="102" y="322" width="86" height="86" rx="18" fill="#B84C55"/>
+  <rect x="213" y="322" width="86" height="86" rx="18" fill="#A95D8E"/>
+  <rect x="324" y="322" width="86" height="86" rx="18" fill="#D7A66F"/>
+</svg>

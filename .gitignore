@@ -1,26 +1,26 @@
-node_modules/
-frontend/node_modules/
-.env
-dist/
-frontend/dist/
-backend/frontend_dist/
-.DS_Store
-*.pyc
+**/target/
+**/bin/
+**/obj/
+**/TestResults/
 **/__pycache__/
-backend/dist/
-backend/build/
-
-# Secrets / certs
+**/.ipynb_checkpoints/
+**/.avalonia-build-tasks/
+*.pyc
+.build-cache/
+.tools/
+.venv/
+api-output/
+chart.json
 *.pfx
-
-# Build artifacts
-backend/build.log
-backend/installer_output/
-
-# Runtime data
-backend/uploads/
-backend/results/
-backend/models/
-
-# OS junk
-Thumbs.db
+*.key
+.env
+assets/runs/
+assets/test_images/
+testdata/samples/
+dist/
+_ui_stress/
+installer/ffmpeg.exe
+installer/ffprobe.exe
+*.user
+.vs/
+.idea/

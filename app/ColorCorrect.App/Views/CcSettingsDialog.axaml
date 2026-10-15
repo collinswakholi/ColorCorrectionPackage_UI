@@ -1,0 +1,221 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ColorCorrect.App.ViewModels"
+        xmlns:conv="using:ColorCorrect.App.Converters"
+        x:Class="ColorCorrect.App.Views.CcSettingsDialog"
+        x:DataType="vm:MainWindowViewModel"
+        AutomationProperties.AutomationId="ccSettingsDialog"
+        AutomationProperties.Name="Correction settings"
+        Title="Correction settings"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        Width="460" Height="650" MinWidth="300" MinHeight="320"
+        ShowInTaskbar="False"
+        CanResize="True"
+        KeyboardNavigation.TabNavigation="Cycle"
+        Opened="OnOpened">
+
+    <Window.Resources>
+        <conv:NumericToStringConverter x:Key="NumericToString"/>
+    </Window.Resources>
+
+    <Border x:Name="SettingsDialogRoot"
+            Background="{DynamicResource SidebarBrush}"
+            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+            CornerRadius="8"
+            VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+        <DockPanel LastChildFill="True">
+            <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}"
+                    CornerRadius="8,8,0,0" Padding="16,12"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
+                <DockPanel>
+                    <Button x:Name="CcSettingsCloseBtn" DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
+                            Click="Close_Click" FontSize="16" MinWidth="36" MinHeight="36"
+                            AutomationProperties.Name="Close correction settings"/>
+                    <TextBlock Text="Correction settings" Classes="heading" FontSize="15" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Bottom" Padding="16,10"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0">
+                <Button x:Name="CcSettingsDoneBtn" Content="Done" Theme="{StaticResource PrimaryButton}"
+                        Click="Close_Click" HorizontalAlignment="Stretch"
+                        IsEnabled="{Binding NnSettingsValid}"
+                        AutomationProperties.Name="Done"/>
+            </Border>
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="16,12">
+                    <TextBlock Text="Method" Classes="settingsLabel"/>
+                    <ComboBox x:Name="ModelSelect" Classes="config" ItemsSource="{Binding Methods}"
+                              SelectedItem="{Binding SelectedMethod}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="Correction method">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock x:Name="DegreeLabel" Text="{Binding DegreeLabel}" Classes="settingsLabel"
+                               IsVisible="{Binding ShowDegree}"/>
+                    <ComboBox x:Name="DegreeSelect" Classes="config"
+                              ItemsSource="{Binding DegreeOptions}"
+                              SelectedItem="{Binding SelectedDegree}"
+                              IsVisible="{Binding ShowDegree}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="{Binding DegreeLabel}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <CheckBox x:Name="PolyCombinationsToggle" Margin="0,0,0,10"
+                              IsChecked="{Binding IncludeCombinations}"
+                              IsVisible="{Binding ShowPolyCombinations}"
+                              AutomationProperties.Name="Include combination terms">
+                        <TextBlock TextWrapping="Wrap" FontSize="12"
+                                   Text="Include combination terms"/>
+                    </CheckBox>
+
+                    <TextBlock Text="Samples per patch" Classes="settingsLabel"/>
+                    <TextBox x:Name="FitSamples" Classes="config" Margin="0,0,0,10"
+                             Text="{Binding FitSamples, Converter={StaticResource NumericToString}}"
+                             AutomationProperties.Name="Samples per patch"/>
+
+                    <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
+                        <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>
+                        <TextBox Classes="config"
+                                 Text="{Binding PlsComponents, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="PLS components"/>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowNn}">
+                        <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,4,0,10"/>
+                        <TextBlock Text="NEURAL NETWORK" Classes="subheading"
+                                   Foreground="{DynamicResource PrimaryBrush}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Hidden layers" Classes="settingsLabel"/>
+                        <TextBox x:Name="HiddenLayersInput" Classes="config" Margin="0,0,0,4"
+                                 Text="{Binding HiddenLayersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip.Tip="One integer or a comma-separated array of 1–4 widths (4–512 each)"
+                                 AutomationProperties.Name="Hidden layer architecture"
+                                 AutomationProperties.HelpText="Examples: 100, 100 comma 30, or bracket 128 comma 64 comma 32 bracket"/>
+                        <TextBlock Text="One width or an architecture: 100 · 100, 30 · [128, 64, 32]"
+                                   Classes="caption" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   IsVisible="{Binding !HasHiddenLayersError}"/>
+                        <TextBlock Text="{Binding HiddenLayersError}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource ErrorBrush}" FontSize="12" Margin="0,0,0,8"
+                                   IsVisible="{Binding HasHiddenLayersError}"
+                                   AutomationProperties.LiveSetting="Assertive"/>
+                        <TextBlock Text="Optimizer" Classes="settingsLabel"/>
+                        <ComboBox x:Name="NnOptimizerSelect" Classes="config"
+                                  ItemsSource="{Binding NnOptimizers}"
+                                  SelectedItem="{Binding SelectedNnOptimizer}" Margin="0,0,0,10"
+                                  HorizontalAlignment="Stretch" MinWidth="0"
+                                  AutomationProperties.Name="Neural network optimizer">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NamedValue">
+                                    <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <CheckBox IsChecked="{Binding NnBatchNormalization}" Margin="0,0,0,10"
+                                  ToolTip.Tip="Normalizes hidden activations; small charts use full-chart statistics for stable inference"
+                                  AutomationProperties.Name="Use batch normalization"
+                                  AutomationProperties.HelpText="Small charts use full-chart statistics for stable inference">
+                            <TextBlock Text="Batch normalization" FontSize="12"/>
+                        </CheckBox>
+                        <TextBlock Text="Dropout rate (0–0.8)" Classes="settingsLabel"/>
+                        <TextBox Classes="config" Margin="0,0,0,10"
+                                 Text="{Binding NnDropout, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="Dropout rate"
+                                 AutomationProperties.HelpText="Zero disables dropout"/>
+                        <TextBlock Text="Learning rate" Classes="settingsLabel"/>
+                        <TextBox Classes="config" Margin="0,0,0,10"
+                                 Text="{Binding NnLr, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="Learning rate"/>
+                        <TextBlock Text="Epochs" Classes="settingsLabel"/>
+                        <TextBox Classes="config" Margin="0,0,0,10"
+                                 Text="{Binding NnEpochs, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="Epochs"/>
+                        <TextBlock Text="Patience" Classes="settingsLabel"/>
+                        <TextBox Classes="config" Margin="0,0,0,10"
+                                 Text="{Binding NnPatience, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="Patience"/>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowCcIterParams}" Margin="0,0,0,10">
+                        <TextBlock Text="Tolerance" Classes="settingsLabel"/>
+                        <TextBox Classes="config"
+                                 Text="{Binding NnTol, Converter={StaticResource NumericToString}}"
+                                 AutomationProperties.Name="Convergence tolerance"/>
+                    </StackPanel>
+
+                    <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,4,0,10"/>
+                    <TextBlock Text="COLOR SPACES" Classes="subheading"
+                               Foreground="{DynamicResource PrimaryBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="Input space" Classes="settingsLabel"/>
+                    <ComboBox x:Name="InputSpaceSelect" Classes="config" ItemsSource="{Binding RgbSpaces}"
+                              SelectedItem="{Binding SelectedInputSpace}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="Input space">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Input white" Classes="settingsLabel"/>
+                    <ComboBox x:Name="InputWhiteSelect" Classes="config" ItemsSource="{Binding WhitePoints}"
+                              SelectedItem="{Binding SelectedInputWhite}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="Input white">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Target space" Classes="settingsLabel"/>
+                    <ComboBox x:Name="TargetSpaceSelect" Classes="config" ItemsSource="{Binding RgbSpaces}"
+                              SelectedItem="{Binding SelectedTargetSpace}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="Target space">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Target white" Classes="settingsLabel"/>
+                    <ComboBox x:Name="TargetWhiteSelect" Classes="config" ItemsSource="{Binding WhitePoints}"
+                              SelectedItem="{Binding SelectedTargetWhite}" Margin="0,0,0,10"
+                              HorizontalAlignment="Stretch" MinWidth="0"
+                              AutomationProperties.Name="Target white">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="Output format" Classes="settingsLabel"/>
+                    <ComboBox x:Name="OutputFormatSelect" Classes="config" ItemsSource="{Binding OutputFormats}"
+                              SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
+                              AutomationProperties.Name="Output format"/>
+
+                    <CheckBox IsChecked="{Binding Phase2Teacher}" FontSize="12" Margin="0,0,0,10"
+                              AutomationProperties.Name="Phase 2 teacher">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Text="Phase 2 teacher"/>
+                    </CheckBox>
+
+                    <Button x:Name="CcSettingsResetBtn" Content="Reset settings" Theme="{StaticResource SecondaryButton}"
+                            Command="{Binding ResetSettingsCommand}" HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="Reset settings"/>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

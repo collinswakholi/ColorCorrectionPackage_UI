@@ -1,0 +1,36 @@
+[package]
+name = "ccp_bridge"
+version = "0.1.0"
+edition = "2021"
+description = "NDJSON serve binary (ccp-engine) for ColorCorrect Studio"
+license = "MIT"
+
+[lib]
+name = "ccp_bridge"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ccp-engine"
+path = "src/main.rs"
+
+[features]
+default = ["ort-plane"]
+tch = ["ccp_detect/tch"]
+ort-plane = ["ccp_detect/ort-plane"]
+# CUDA is a LibTorch payload / PATH story, not a crate that links CUDA.
+# Enable `tch` and install the CUDA add-on into the single libtorch_root
+# (`%LOCALAPPDATA%\CCP-New\libtorch` on Windows). The engine sets
+# PATH/LIBTORCH/LIBTORCH_PATH to that one root before any tch load.
+# Never place a second torch.dll next to ccp-engine.exe.
+cuda = []
+
+[dependencies]
+ccp_core = { path = "../ccp_core" }
+ccp_detect = { path = "../ccp_detect" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
+jpeg-encoder = "0.7.1"
+ndarray = { version = "0.16", features = ["rayon"] }
+rayon = "1.10"

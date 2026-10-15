@@ -1,0 +1,1472 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ColorCorrect.App.ViewModels"
+        xmlns:models="using:ColorCorrect.App.Models"
+        xmlns:controls="using:ColorCorrect.App.Controls"
+        xmlns:conv="using:ColorCorrect.App.Converters"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1440" d:DesignHeight="900"
+        x:Class="ColorCorrect.App.Views.MainWindow"
+        x:Name="Root"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1440" Height="900" MinWidth="1000" MinHeight="640"
+        Title="ColorCorrect Studio"
+        Icon="avares://ColorCorrect.App/Assets/app.ico"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BackgroundGradientBrush}"
+        FontFamily="{StaticResource DefaultFont}"
+        KeyDown="OnWindowKeyDown">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Window.Resources>
+        <conv:InverseBoolConverter x:Key="InverseBool"/>
+        <conv:DeltaEQualityTextConverter x:Key="DEQualityText"/>
+        <conv:DeltaEQualityBrushConverter x:Key="DEQualityBrush"/>
+        <conv:DeltaEQualityBgBrushConverter x:Key="DEQualityBgBrush"/>
+        <conv:LogLevelToBrushConverter x:Key="LogLevelToBrush"/>
+        <conv:LogLevelToWeightConverter x:Key="LogLevelToWeight"/>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <Border x:Name="TopBar" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="16,8">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Classes="brandMark" VerticalAlignment="Center" ClipToBounds="True">
+                        <Image Source="avares://ColorCorrect.App/Assets/app.png" Stretch="Uniform"
+                               Width="32" Height="32" IsHitTestVisible="False"
+                               AutomationProperties.Name="ColorCorrect Studio logo"/>
+                    </Border>
+                    <Button Theme="{StaticResource GhostLink}" Padding="0" Click="OpenAccel_Click"
+                            ToolTip.Tip="Accelerators — auto-detect CUDA, DirectML, OpenVINO, Metal, MLX, CPU"
+                            AutomationProperties.AutomationId="OpenAccelerators"
+                            AutomationProperties.AcceleratorKey="Ctrl+Alt+A"
+                            AutomationProperties.Name="Open accelerators">
+                        <StackPanel>
+                            <TextBlock Text="ColorCorrect Studio" Classes="heading"/>
+                            <Border Classes="accelChip" ToolTip.Tip="{Binding WorkerLine}">
+                                <TextBlock x:Name="ExeStatus" Text="{Binding WorkerChip}" Classes="caption"
+                                           TextWrapping="Wrap"/>
+                            </Border>
+                        </StackPanel>
+                    </Button>
+                    <Popup x:Name="AccelMenu" Placement="BottomEdgeAlignedLeft" IsLightDismissEnabled="True"
+                           PlacementConstraintAdjustment="SlideX,SlideY">
+                        <Border Background="{DynamicResource PopupBrush}"
+                                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="16" MinWidth="340" MaxWidth="420"
+                                AutomationProperties.Name="Accelerators panel">
+                            <StackPanel>
+                                <TextBlock Text="ACCELERATORS" Classes="subheading" Margin="0,0,0,8"/>
+                                <TextBlock Text="{Binding AccelHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                <ItemsControl ItemsSource="{Binding AccelRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AccelRow">
+                                            <DockPanel Margin="0,0,0,8">
+                                                <Border DockPanel.Dock="Right" Classes="countBadge" Margin="8,0,0,0">
+                                                    <TextBlock Text="{Binding Status}" Classes="caption"/>
+                                                </Border>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="POLICY" Classes="caption" Margin="0,4,0,4"/>
+                                <ComboBox Classes="config" ItemsSource="{Binding AccelPolicies}"
+                                          SelectedItem="{Binding SelectedAccelPolicy}" Margin="0,0,0,8"
+                                          AutomationProperties.Name="Acceleration policy">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:NamedValue">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <CheckBox IsChecked="{Binding ForceCpu}" FontSize="12" Margin="0,0,0,8">
+                                    <TextBlock Text="Force CPU only" FontSize="12" TextWrapping="Wrap"/>
+                                </CheckBox>
+                                <Button Content="Restart worker" Theme="{StaticResource SecondaryButton}"
+                                        Command="{Binding ForceCpuRestartCommand}" HorizontalAlignment="Stretch"
+                                        Margin="0,0,0,8" AutomationProperties.Name="Restart worker"/>
+                                <Button Content="Download CUDA LibTorch (~3.8 GB)" Theme="{StaticResource PrimaryButton}"
+                                        Command="{Binding OpenCudaAddonCommand}"
+                                        IsVisible="{Binding ShowCudaAddon}" HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Install CUDA add-on"/>
+                                <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="Restart the worker after changing policy."/>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Spacing="2">
+                    <Button x:Name="HelpButton" Theme="{StaticResource ToolbarIconButton}"
+                            Click="OpenHelp_Click" Content="?" FontSize="20" FontWeight="SemiBold"
+                            ToolTip.Tip="Guide, color science, and API examples (F1)"
+                            AutomationProperties.AcceleratorKey="F1"
+                            AutomationProperties.Name="Open help and guidance"/>
+                    <Button x:Name="ThemeToggle" Theme="{StaticResource ToolbarIconButton}"
+                            Command="{Binding ToggleThemeCommand}"
+                            ToolTip.Tip="{Binding ThemeHint}"
+                            AutomationProperties.AcceleratorKey="Ctrl+T"
+                            AutomationProperties.Name="{Binding ThemeHint}">
+                        <Panel>
+                            <Path x:Name="MoonThemeIcon" Classes="toolbarGlyph" Data="{StaticResource MoonIconGeometry}"
+                                  IsVisible="{Binding IsLightTheme}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                            <Path x:Name="SunThemeIcon" Classes="toolbarGlyph" Data="{StaticResource SunIconGeometry}"
+                                  IsVisible="{Binding !IsLightTheme}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                        </Panel>
+                    </Button>
+                    <Button x:Name="SaveLink" Theme="{StaticResource ToolbarIconButton}"
+                            Click="SaveButton_Click" IsEnabled="{Binding HasSaveItems}"
+                            ToolTip.Tip="Save corrected, stage, and report files (Ctrl+S)"
+                            AutomationProperties.AcceleratorKey="Ctrl+S"
+                            AutomationProperties.Name="Save corrected images">
+                        <Path Classes="toolbarGlyph" Data="{StaticResource SaveIconGeometry}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
+                    <Popup x:Name="SaveMenu" PlacementTarget="SaveLink" Placement="BottomEdgeAlignedRight"
+                           PlacementConstraintAdjustment="SlideX,SlideY" IsLightDismissEnabled="True">
+                        <Border Background="{DynamicResource PopupBrush}"
+                                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="16" MinWidth="380">
+                            <StackPanel>
+                                <TextBlock Text="SAVE" Classes="subheading" Margin="0,0,0,10"/>
+                                <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Session}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:SessionItemViewModel">
+                                                <CheckBox IsChecked="{Binding IncludeInSave}" Margin="0,0,0,3"
+                                                          IsEnabled="{Binding HasSaveable}">
+                                                    <TextBlock Text="{Binding FileName}" FontSize="12"/>
+                                                </CheckBox>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,8,0,10"/>
+                                <TextBlock Text="INCLUDE" Classes="caption" Margin="0,0,0,6"/>
+                                <CheckBox IsChecked="{Binding SaveCorrected}" IsEnabled="{Binding CanSaveCorrected}"
+                                          FontSize="12" Margin="0,0,0,3">
+                                    <TextBlock Text="Corrected" FontSize="12"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding SaveFfc}" IsEnabled="{Binding CanSaveFfc}"
+                                          FontSize="12" Margin="0,0,0,3">
+                                    <TextBlock Text="FFC" FontSize="12"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding SaveGc}" IsEnabled="{Binding CanSaveGc}"
+                                          FontSize="12" Margin="0,0,0,3">
+                                    <TextBlock Text="GC" FontSize="12"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding SaveWb}" IsEnabled="{Binding CanSaveWb}"
+                                          FontSize="12" Margin="0,0,0,3">
+                                    <TextBlock Text="WB" FontSize="12"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding SaveCc}" IsEnabled="{Binding CanSaveCc}"
+                                          FontSize="12" Margin="0,0,0,3">
+                                    <TextBlock Text="CC" FontSize="12"/>
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding SaveReport}" IsEnabled="{Binding CanSaveReport}"
+                                          FontSize="12" Margin="0,0,0,8">
+                                    <TextBlock Text="Report (JSON)" FontSize="12"/>
+                                </CheckBox>
+                                <TextBlock Text="FORMAT" Classes="caption" Margin="0,0,0,4"/>
+                                <ComboBox Classes="config" ItemsSource="{Binding OutputFormats}"
+                                          SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
+                                          AutomationProperties.Name="Save image format">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:NamedValue">
+                                            <TextBlock Text="{Binding Label}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Text="SAVE TO" Classes="caption" Margin="0,0,0,4"/>
+                                <DockPanel Margin="0,0,0,10">
+                                    <Button DockPanel.Dock="Right" Content="Browse" Theme="{StaticResource SecondaryButton}"
+                                            Command="{Binding BrowseOutputCommand}" Padding="8,5" Margin="4,0,0,0"
+                                            AutomationProperties.Name="Browse save folder"/>
+                                    <TextBox Text="{Binding OutputDir}" Classes="config"/>
+                                </DockPanel>
+                                <StackPanel Margin="0,0,0,10" IsVisible="{Binding ShowSaveProgress}">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding SaveProgress, StringFormat={}{0:0}%}" Classes="caption"/>
+                                        <TextBlock Text="{Binding SaveProgressLabel}" Classes="caption" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                    <ProgressBar Value="{Binding SaveProgress}" Minimum="0" Maximum="100"
+                                                 Theme="{StaticResource ModernProgressBar}" Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <Button Content="Save selected" Theme="{StaticResource PrimaryButton}"
+                                        Command="{Binding ExecuteSaveCommand}" HorizontalAlignment="Stretch"
+                                        IsEnabled="{Binding !IsSaving}"/>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                    <Button x:Name="ReportLink" Theme="{StaticResource ToolbarIconButton}"
+                            Command="{Binding OpenReportCommand}"
+                            ToolTip.Tip="Open the last chart report"
+                            AutomationProperties.Name="Open last chart report">
+                        <Path Classes="toolbarGlyph" Data="{StaticResource ReportIconGeometry}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
+                    <Button x:Name="OutputLink" Theme="{StaticResource ToolbarIconButton}"
+                            Command="{Binding OpenOutputCommand}"
+                            ToolTip.Tip="Open the output folder"
+                            AutomationProperties.Name="Open output folder">
+                        <Path Classes="toolbarGlyph" Data="{StaticResource FolderIconGeometry}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
+                    <Border Classes="toolbarRule"/>
+                    <Button x:Name="ExitLink" Theme="{StaticResource ToolbarIconButton}"
+                            Click="Exit_Click"
+                            ToolTip.Tip="Save settings, clear cache, and exit"
+                            AutomationProperties.Name="Exit">
+                        <Path Classes="toolbarGlyph" Data="{StaticResource ExitIconGeometry}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" MinWidth="240" MaxWidth="520"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*" MinWidth="520"/>
+            </Grid.ColumnDefinitions>
+            <GridSplitter x:Name="SidebarResize" Grid.Column="1" Classes="sidebarSplitter"
+                          AutomationProperties.Name="Resize sidebar"/>
+
+            <Border x:Name="Sidebar" Background="{DynamicResource SidebarBrush}"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,1,0"
+                    ClipToBounds="True" UseLayoutRounding="True">
+                <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer x:Name="SidebarScroll" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  AllowAutoHide="False"
+                                  Padding="0,0,0,10">
+                        <StackPanel>
+                    <Border x:Name="AvailableSection" Classes="sidebarAdd">
+                        <StackPanel>
+                            <DockPanel Classes="sidebarHeader" LastChildFill="False">
+                                <TextBlock Text="Add media" Classes="sectionLabel" VerticalAlignment="Center"/>
+                                <Border Classes="countBadge" DockPanel.Dock="Right" Margin="8,0,0,0"
+                                        ToolTip.Tip="Images available in Catalog">
+                                    <TextBlock x:Name="SampleCount" Text="{Binding SampleCountLabel}" Classes="caption"/>
+                                </Border>
+                            </DockPanel>
+                            <Border x:Name="DropZone" Classes="dropZone" PointerPressed="OnDropZonePressed"
+                                    AutomationProperties.Name="Drop JPEG, PNG, or TIFF still images">
+                                <Grid>
+                                    <Rectangle Classes="dropDash" HorizontalAlignment="Stretch"
+                                               VerticalAlignment="Stretch"/>
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="Drop still images" FontWeight="Medium" FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   HorizontalAlignment="Center" TextWrapping="Wrap"
+                                                   TextAlignment="Center"/>
+                                        <controls:FitWrapPanel HorizontalAlignment="Center">
+                                            <Button x:Name="ImageUpload" Content="Files" Theme="{StaticResource SecondaryButton}"
+                                                    Classes="sourceAction"
+                                                    Command="{Binding OpenImagesCommand}"
+                                                    ToolTip.Tip="Add image files to the working session"
+                                                    AutomationProperties.Name="Open image files"/>
+                                            <Button x:Name="FolderUpload" Content="Folder"
+                                                    Theme="{StaticResource SecondaryButton}"
+                                                    Classes="sourceAction"
+                                                    Command="{Binding OpenFolderCommand}"
+                                                    ToolTip.Tip="Add every still in a folder to the working session"
+                                                    AutomationProperties.Name="Open image folder"/>
+                                        </controls:FitWrapPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="LoadedSection" Classes="sidebarBlock">
+                                <StackPanel>
+                                    <controls:FitWrapPanel Classes="sidebarHeader" HorizontalAlignment="Stretch" Margin="0,0,0,8">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                                    Margin="0,0,12,4">
+                                            <TextBlock Text="Session" Classes="sectionLabel" VerticalAlignment="Center"/>
+                                            <Border Classes="countBadge">
+                                                <TextBlock x:Name="LoadedCount" Text="{Binding SessionCountLabel}" Classes="caption"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                            <Button x:Name="SaveSessionBtn" Theme="{StaticResource SessionIconButton}"
+                                                    Classes="sessionTool"
+                                                    Command="{Binding SaveSessionAsCommand}"
+                                                    ToolTip.Tip="Save this working session for later (Ctrl+Shift+S)"
+                                                    AutomationProperties.AcceleratorKey="Ctrl+Shift+S"
+                                                    AutomationProperties.Name="Save session">
+                                                <Path Classes="toolbarGlyph" Data="{StaticResource SessionSaveIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Button>
+                                            <Button x:Name="LoadSessionBtn" Theme="{StaticResource SessionIconButton}"
+                                                    Classes="sessionTool"
+                                                    Command="{Binding LoadSessionCommand}"
+                                                    ToolTip.Tip="Load a saved working session"
+                                                    AutomationProperties.AcceleratorKey="Ctrl+Alt+O"
+                                                    AutomationProperties.Name="Load session">
+                                                <Path Classes="toolbarGlyph" Data="{StaticResource SessionLoadIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Button>
+                                            <Border Classes="toolbarRule"/>
+                                            <Button x:Name="ClearSelectedBtn" Theme="{StaticResource SessionIconButton}"
+                                                    Classes="sessionTool"
+                                                    Command="{Binding RemoveSelectedCommand}"
+                                                    IsVisible="{Binding HasSelected}"
+                                                    ToolTip.Tip="Remove selected from session (Delete)"
+                                                    AutomationProperties.AcceleratorKey="Delete"
+                                                    AutomationProperties.Name="Remove selected from session">
+                                                <Path Classes="toolbarGlyph" Data="{StaticResource RemoveIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Button>
+                                            <Button x:Name="ClearWorkingBtn" Theme="{StaticResource SessionIconButton}"
+                                                    Classes="sessionTool"
+                                                    Command="{Binding ClearSessionCommand}"
+                                                    ToolTip.Tip="Clear the working session"
+                                                    AutomationProperties.Name="Clear the working session">
+                                                <Path Classes="toolbarGlyph" Data="{StaticResource ClearIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Button>
+                                            <Button x:Name="DeleteRunsBtn" Theme="{StaticResource DangerIconButton}"
+                                                    Classes="sessionTool"
+                                                    Command="{Binding DeletePreviousSessionsCommand}"
+                                                    ToolTip.Tip="Delete the working session and previous run folders. Settings stay."
+                                                    AutomationProperties.Name="Delete previous sessions">
+                                                <Path Classes="toolbarGlyph" Data="{StaticResource TrashIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </controls:FitWrapPanel>
+                                    <TextBlock x:Name="LoadedEmpty" Classes="caption" Margin="0,0,0,6"
+                                               Text="Your working images appear here. Add files or choose from Catalog."
+                                               IsVisible="{Binding !HasSession}"/>
+                                    <Border Classes="sessionScroller" IsVisible="{Binding HasSession}">
+                                    <ScrollViewer x:Name="SessionScroll"
+                                                  AllowAutoHide="False"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Disabled"
+                                                  ToolTip.Tip="Ctrl-click to multi-select. Shift-click for a range. W marks the FFC white still.">
+                                        <ItemsControl x:Name="LoadedThumbs" ItemsSource="{Binding Session}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SessionItemViewModel">
+                                                    <StackPanel Classes="sessionCell" ToolTip.Tip="{Binding SessionTip}"
+                                                          AutomationProperties.Name="{Binding SessionAutomationName}"
+                                                          AutomationProperties.AccessibilityView="Control"
+                                                          Focusable="True"
+                                                          KeyDown="OnSessionThumbKeyDown"
+                                                          PointerPressed="OnSessionThumbPressed" Tag="{Binding}">
+                                                        <Grid Classes="thumbFrame">
+                                                        <Border Classes="thumbTile"
+                                                                Classes.Active="{Binding IsActive}"
+                                                                Classes.Selected="{Binding IsSelected}">
+                                                            <Image Source="{Binding Thumb}" Stretch="UniformToFill"
+                                                                   AutomationProperties.Name="{Binding SessionAutomationName}"/>
+                                                        </Border>
+                                                        <Border Width="8" Height="8" CornerRadius="4" Margin="4,4,0,0"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                Background="{DynamicResource SuccessBrush}"
+                                                                IsVisible="{Binding IsCorrected}"
+                                                                ToolTip.Tip="Corrected"
+                                                                AutomationProperties.Name="Corrected"/>
+                                                        <Border Classes="whiteBadge" IsHitTestVisible="False"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                                Margin="0,0,4,4" IsVisible="{Binding IsWhiteRef}"
+                                                                ToolTip.Tip="FFC white reference"
+                                                                AutomationProperties.Name="FFC white reference">
+                                                            <TextBlock Text="W" FontSize="10" FontWeight="SemiBold"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <Border Classes="detectBadge" IsVisible="{Binding HasDetectBadge}"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                                Margin="4,0,0,4" IsHitTestVisible="False"
+                                                                MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource AncestorType=Grid}}">
+                                                            <TextBlock Text="{Binding DetectLabel}" FontSize="10" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource PrimaryBrush}"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                        </Border>
+                                                        <Button Content="×" Theme="{StaticResource IconButton}" Classes="thumbClose"
+                                                                FontSize="11" Padding="0"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                                Tag="{Binding}" Click="OnRemoveThumbClick"
+                                                                ToolTip.Tip="Remove from session"
+                                                                AutomationProperties.Name="{Binding RemoveAutomationName}"/>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding DisplayName}" Classes="tileName"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                    </Border>
+                    <StackPanel x:Name="ProcessModelHost" Margin="14,8,12,12">
+                            <Expander x:Name="AvailableToggle" Header="Catalog" Classes="section"
+                                      Theme="{StaticResource SectionExpander}"
+                                      IsExpanded="{Binding LibraryExpanded, Mode=TwoWay}"
+                                      Margin="0,0,0,8"
+                                      ToolTip.Tip="Click adds to Session. Ctrl-click selects. Drag to Session or the FFC white well.">
+                                <StackPanel Spacing="8" Margin="0,8,0,0">
+                                    <Button Content="Watch folder"
+                                            Theme="{StaticResource TinyButton}"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding AddCatalogFolderCommand}"
+                                            ToolTip.Tip="Keep another folder of stills in Catalog, including white references"
+                                            AutomationProperties.Name="Add catalog folder"/>
+                                    <ItemsControl ItemsSource="{Binding CatalogFolders}"
+                                                  IsVisible="{Binding HasCatalogFolders}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <controls:FitWrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:CatalogFolderViewModel">
+                                                <Border Classes="folderChip" ToolTip.Tip="{Binding Path}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="{Binding Name}" FontSize="11"
+                                                                   VerticalAlignment="Center"/>
+                                                        <Button Content="×" Theme="{StaticResource IconButton}"
+                                                                MinWidth="28" MinHeight="28" Padding="0"
+                                                                Tag="{Binding}" Click="OnRemoveCatalogFolderClick"
+                                                                ToolTip.Tip="Remove this catalog folder"
+                                                                AutomationProperties.Name="Remove catalog folder"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBox x:Name="SampleSearch" Classes="config"
+                                                 PlaceholderText="Filter by name…" Text="{Binding SampleQuery}"
+                                                 AutomationProperties.Name="Filter catalog by name"/>
+                                        <Border Grid.Column="1" Classes="countBadge" VerticalAlignment="Center"
+                                                ToolTip.Tip="Visible catalog images">
+                                            <TextBlock Text="{Binding SampleCountLabel}" Classes="caption"/>
+                                        </Border>
+                                    </Grid>
+                                    <ComboBox x:Name="SampleGroupFilter" Classes="config"
+                                              ItemsSource="{Binding SampleGroups}"
+                                              SelectedItem="{Binding SelectedGroup}"
+                                              AutomationProperties.Name="Catalog group"/>
+                                    <Border Classes="thumbScroller">
+                                    <ScrollViewer x:Name="CatalogScroll" AllowAutoHide="False"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl x:Name="AvailableThumbs" ItemsSource="{Binding FilteredSamples}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <controls:TileWrapPanel MinTile="76" Gap="8"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:CatalogItemViewModel">
+                                                    <StackPanel Classes="thumbCell"
+                                                                Cursor="Hand"
+                                                                Focusable="True"
+                                                                Tag="{Binding}"
+                                                                KeyDown="OnCatalogThumbKeyDown"
+                                                                PointerPressed="OnCatalogThumbPressed"
+                                                                ToolTip.Tip="{Binding RoleHint}"
+                                                                AutomationProperties.AccessibilityView="Control"
+                                                                AutomationProperties.Name="{Binding Name}">
+                                                        <Grid Classes="thumbFrame">
+                                                            <Border Classes="catalogTile"
+                                                                    Classes.Selected="{Binding IsSelected}">
+                                                                <Image Source="{Binding Thumb}" Stretch="UniformToFill"/>
+                                                            </Border>
+                                                            <Button Classes="whiteBadge" Content="W"
+                                                                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                    Margin="4" IsVisible="{Binding IsWhite}"
+                                                                    Tag="{Binding}" Click="OnCatalogWhiteClick"
+                                                                    ToolTip.Tip="Use as FFC white reference"
+                                                                    AutomationProperties.Name="Use as white reference"/>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding DisplayName}" Classes="tileName"
+                                                                   ToolTip.Tip="{Binding Name}"
+                                                                   AutomationProperties.Name="{Binding Name}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Expander>
+                            <Border Classes="controlSection">
+                                <StackPanel>
+                                    <DockPanel Classes="sidebarHeader" LastChildFill="True">
+                                        <Button x:Name="DetectBtn" DockPanel.Dock="Right" Content="Detect"
+                                                Theme="{StaticResource TinyButton}" Classes="sourceAction"
+                                                Command="{Binding DetectCommand}"
+                                                IsVisible="{Binding ShowChartSection}"
+                                                Margin="8,0,0,0" MinHeight="32" Padding="10,4"
+                                                AutomationProperties.Name="Detect chart"/>
+                                        <TextBlock Text="Chart" Classes="sectionLabel" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                    <TextBlock x:Name="ChartTypeLabel" Text="{Binding DetectSummary}" Classes="caption"
+                                               Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="DetectStatus" Text="{Binding CurrentStage}" Classes="caption"
+                                               Margin="0,0,0,6" IsVisible="{Binding Busy}"/>
+                                    <TextBlock Text="Chart face" Classes="caption" Margin="0,0,0,4"
+                                               IsVisible="{Binding ShowFacePicker}"/>
+                                    <ComboBox x:Name="ChartFaceSelect" Classes="config"
+                                              ItemsSource="{Binding FaceOptions}" SelectedItem="{Binding SelectedFace}"
+                                              IsVisible="{Binding ShowFacePicker}" Margin="0,0,0,6"
+                                              HorizontalAlignment="Stretch" PlaceholderText="Select face"
+                                              AutomationProperties.Name="Chart face selector">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <DockPanel Margin="0,0,0,4">
+                                        <TextBlock x:Name="CropValue" DockPanel.Dock="Left" MinWidth="0"
+                                                   Margin="0,0,8,0"
+                                                   Text="{Binding CropLabel, StringFormat='Crop {0}'}"
+                                                   Classes="caption" VerticalAlignment="Center"/>
+                                        <Slider x:Name="CropInset" Minimum="0.05" Maximum="1" Value="{Binding Crop}"
+                                                MinWidth="0" MinHeight="28" VerticalAlignment="Center"
+                                                ToolTip.Tip="Patch inset for chart detection and fitting."
+                                                AutomationProperties.Name="Patch crop inset"/>
+                                    </DockPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Expander x:Name="ProcessToggle" Header="Process" Classes="section"
+                                      Theme="{StaticResource SectionExpander}"
+                                      IsExpanded="{Binding ProcessExpanded, Mode=TwoWay}" Margin="0,0,0,8"
+                                      AutomationProperties.Name="Process settings">
+                                <StackPanel Spacing="0" Margin="0,8,0,0">
+                                    <Border Classes="stageRow">
+                                        <DockPanel>
+                                            <Button x:Name="FfcSettingsButton" DockPanel.Dock="Right" Theme="{StaticResource TinyIconButton}"
+                                                    Click="OpenFfcSettings_Click"
+                                                    ToolTip.Tip="FFC settings"
+                                                    AutomationProperties.Name="FFC settings">
+                                                <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
+                                                      Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                            </Button>
+                                            <CheckBox IsChecked="{Binding DoFfc}" FontSize="12"
+                                                      MinWidth="0" HorizontalAlignment="Stretch"
+                                                      AutomationProperties.Name="Enable FFC">
+                                                <TextBlock Text="FFC · Flat field" FontSize="12" TextWrapping="Wrap"/>
+                                            </CheckBox>
+                                        </DockPanel>
+                                    </Border>
+                                    <StackPanel IsVisible="{Binding DoFfc}">
+                                    <Border x:Name="WhiteDrop" Classes="whiteChip" Margin="0,0,0,8"
+                                            DragDrop.AllowDrop="True">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
+                                                    Command="{Binding ClearWhiteCommand}"
+                                                    MinWidth="32" MinHeight="32"
+                                                    ToolTip.Tip="Clear white reference"
+                                                    AutomationProperties.Name="Clear white reference"/>
+                                            <TextBlock Text="{Binding WhiteImageLabel}" Classes="caption"
+                                                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        </DockPanel>
+                                    </Border>
+                                    <TextBlock Text="Drop a white still, click W on a catalog tile, or choose a file."
+                                               Classes="caption" Margin="0,0,0,6"
+                                               IsVisible="{Binding !HasWhiteRef}"/>
+                                    <Button Content="White file" Theme="{StaticResource TinyButton}"
+                                            Command="{Binding BrowseWhiteCommand}" HorizontalAlignment="Stretch"
+                                            Margin="0,0,0,10" IsVisible="{Binding !HasWhiteRef}"
+                                            AutomationProperties.Name="Choose white reference"/>
+                                    </StackPanel>
+                                    <Border Classes="stageRow">
+                                        <DockPanel>
+                                            <Button x:Name="GcSettingsButton" DockPanel.Dock="Right" Theme="{StaticResource TinyIconButton}"
+                                                    Click="OpenGcSettings_Click"
+                                                    ToolTip.Tip="About automatic GC"
+                                                    AutomationProperties.Name="About automatic GC">
+                                                <Path Data="{StaticResource InfoIconGeometry}" Width="14" Height="14"
+                                                      Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                            </Button>
+                                            <CheckBox IsChecked="{Binding DoGc}" FontSize="12"
+                                                      MinWidth="0" HorizontalAlignment="Stretch"
+                                                      AutomationProperties.Name="Enable GC">
+                                                <TextBlock Text="GC · Tone response" FontSize="12" TextWrapping="Wrap"/>
+                                            </CheckBox>
+                                        </DockPanel>
+                                    </Border>
+                                    <Border Classes="stageRow">
+                                        <CheckBox IsChecked="{Binding DoWb}" FontSize="12"
+                                                  MinWidth="0" HorizontalAlignment="Stretch"
+                                                  AutomationProperties.Name="Enable WB">
+                                            <TextBlock Text="WB · White balance" FontSize="12" TextWrapping="Wrap"/>
+                                        </CheckBox>
+                                    </Border>
+                                    <Border Classes="stageRow">
+                                        <DockPanel>
+                                            <Button x:Name="CcSettingsButton" DockPanel.Dock="Right" Theme="{StaticResource TinyIconButton}"
+                                                    Click="OpenCcSettings_Click"
+                                                    ToolTip.Tip="CC settings — method, spaces, output format"
+                                                    AutomationProperties.Name="CC settings">
+                                                <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
+                                                      Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
+                                            </Button>
+                                            <CheckBox IsChecked="{Binding DoCc}" FontSize="12"
+                                                      MinWidth="0" HorizontalAlignment="Stretch"
+                                                      AutomationProperties.Name="Enable CC">
+                                                <TextBlock Text="CC · Color fit" FontSize="12" TextWrapping="Wrap"/>
+                                            </CheckBox>
+                                        </DockPanel>
+                                    </Border>
+                                    <TextBlock x:Name="ProcessSummary" Text="{Binding ProcessSummary}" Classes="caption"
+                                               Margin="0,2,0,6" TextWrapping="Wrap"
+                                               AutomationProperties.AutomationId="ProcessSummary"
+                                               AutomationProperties.Name="{Binding ProcessSummary}"/>
+                                    <CheckBox x:Name="NoSatToggle" IsChecked="{Binding SkipSaturated}"
+                                              FontSize="12" Margin="0,0,0,4"
+                                              MinWidth="0" HorizontalAlignment="Stretch"
+                                              AutomationProperties.Name="Skip saturated patches">
+                                        <TextBlock Text="Skip saturated patches" TextWrapping="Wrap" FontSize="12"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander x:Name="ModelToggle" Header="Model" Classes="section"
+                                      Theme="{StaticResource SectionExpander}"
+                                      IsExpanded="{Binding ModelExpanded, Mode=TwoWay}" Margin="0,0,0,8"
+                                      AutomationProperties.Name="Model settings">
+                                <Border Classes="modelCard" Margin="0,8,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding ModelLabel}" Classes="caption" TextWrapping="Wrap"
+                                                       Margin="0,0,0,6"/>
+                                            <TextBlock x:Name="SavedModelSummary" Text="{Binding SavedModelSummary}" Classes="caption"
+                                                       Margin="0,0,0,6" TextWrapping="Wrap"
+                                                       IsVisible="{Binding HasSavedModelSummary}"
+                                                       AutomationProperties.AutomationId="SavedModelSummary"
+                                                       AutomationProperties.Name="{Binding SavedModelSummary}"/>
+                                            <Border Classes="segmented" HorizontalAlignment="Stretch" Margin="0,0,0,6">
+                                                <UniformGrid x:Name="ModelSourceGrid" Columns="2">
+                                                    <RadioButton x:Name="UseLoadedModelRadio" Content="Use loaded"
+                                                                 GroupName="ModelSource"
+                                                                 Theme="{StaticResource StageRadioButton}"
+                                                                 HorizontalAlignment="Stretch" MinWidth="0"
+                                                                 IsChecked="{Binding IsUseLoadedMode}"
+                                                                 IsEnabled="{Binding HasLoadedModel}"
+                                                                 ToolTip.Tip="Apply the loaded GC/WB/CC. Method and degree are ignored until you fit. FFC (if on) uses the white still."
+                                                                 AutomationProperties.Name="Use loaded model"/>
+                                                    <RadioButton x:Name="FitFromImageRadio" Content="Fit from image"
+                                                                 GroupName="ModelSource"
+                                                                 Theme="{StaticResource StageRadioButton}"
+                                                                 HorizontalAlignment="Stretch" MinWidth="0"
+                                                                 IsChecked="{Binding IsFitFromImage}"
+                                                                 ToolTip.Tip="Train a new model from the selected still (needs a detected chart). Replaces the loaded model."
+                                                                 AutomationProperties.Name="Fit from this image"/>
+                                                </UniformGrid>
+                                            </Border>
+                                            <UniformGrid x:Name="ModelActionGrid" Columns="3" Margin="0,0,0,6">
+                                                <Button x:Name="LoadModelInput" Content="Load"
+                                                        Theme="{StaticResource SecondaryButton}"
+                                                        Classes="modelAction"
+                                                        Command="{Binding LoadModelCommand}"
+                                                        AutomationProperties.Name="Load model"/>
+                                                <Button x:Name="SaveModelBtn" Content="Save"
+                                                        Theme="{StaticResource SecondaryButton}"
+                                                        Classes="modelAction"
+                                                        Command="{Binding SaveModelCommand}"
+                                                        AutomationProperties.Name="Save model"/>
+                                                <Button Content=".cube" Theme="{StaticResource SecondaryButton}"
+                                                        Classes="modelAction"
+                                                        Command="{Binding ExportCubeCommand}"
+                                                        AutomationProperties.Name="Export LUT"/>
+                                            </UniformGrid>
+                                            <TextBlock x:Name="ModelIoStatus" Text="{Binding ModelIoStatus}" Classes="caption"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                </Border>
+                            </Expander>
+                            <TextBlock Text="{Binding ModelLabel}" Classes="caption" Margin="0,0,0,8"
+                                       TextWrapping="Wrap" IsVisible="{Binding !ModelExpanded}"/>
+                    </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border x:Name="SidebarDock" Grid.Row="1" Classes="sidebarDock">
+                        <StackPanel>
+                            <Border IsVisible="{Binding HasWorkerError}"
+                                    Background="{DynamicResource DangerLightBrush}"
+                                    BorderBrush="{DynamicResource ErrorBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8"
+                                    AutomationProperties.Name="Engine recovery"
+                                    AutomationProperties.LiveSetting="Assertive">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <StackPanel>
+                                        <TextBlock Text="Engine unavailable" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource ErrorBrush}"/>
+                                        <TextBlock Text="{Binding WorkerStartupError}" Classes="caption"
+                                                   TextWrapping="Wrap" MaxHeight="50"
+                                                   ToolTip.Tip="{Binding WorkerStartupError}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Retry" Theme="{StaticResource SecondaryButton}"
+                                            Command="{Binding ForceCpuRestartCommand}"
+                                            AutomationProperties.Name="Retry engine startup"/>
+                                </Grid>
+                            </Border>
+                            <ItemsControl x:Name="PipelineChips" ItemsSource="{Binding PipelineSteps}"
+                                          IsVisible="{Binding ShowPipeline}"
+                                          Margin="0,0,0,6" HorizontalAlignment="Stretch">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <controls:FitWrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PipelineStepViewModel">
+                                        <Border Classes="pipelineChip"
+                                                Classes.Enabled="{Binding IsEnabled}"
+                                                Classes.Active="{Binding IsActive}"
+                                                Classes.Done="{Binding IsDone}"
+                                                Classes.Skipped="{Binding IsSkipped}">
+                                            <TextBlock Text="{Binding Label}" TextWrapping="Wrap"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ProgressBar Value="{Binding JobProgress}" Minimum="0" Maximum="100"
+                                         Theme="{StaticResource ModernProgressBar}" Margin="0,0,0,8"
+                                         IsVisible="{Binding ShowJobProgress}"
+                                         AutomationProperties.Name="Job progress"/>
+                            <Grid x:Name="ApplyRow" ColumnDefinitions="*,8,Auto">
+                                <Button x:Name="RunButton" Theme="{StaticResource RunButton}"
+                                        Command="{Binding ApplyCommand}" MinWidth="0"
+                                        ToolTip.Tip="Run the active workflow (F5)"
+                                        AutomationProperties.AcceleratorKey="F5"
+                                        AutomationProperties.Name="{Binding ApplyLabel}">
+                                    <Grid>
+                                        <TextBlock Text="{Binding ApplyLabel}" IsVisible="{Binding !Busy}"
+                                                   HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding CurrentStage}" IsVisible="{Binding Busy}"
+                                                   HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </Button>
+                                <Button x:Name="BatchButton" Grid.Column="2" Theme="{StaticResource SecondaryButton}"
+                                        Click="BatchButton_Click" MinHeight="44" MinWidth="72" Content="Batch"
+                                        IsEnabled="{Binding CanOpenBatch}"
+                                        ToolTip.Tip="Open batch actions (Ctrl+B)"
+                                        AutomationProperties.AcceleratorKey="Ctrl+B"
+                                        AutomationProperties.Name="Batch correction"/>
+                            </Grid>
+                            <TextBlock x:Name="RunStatus" Text="{Binding WorkflowHint}" Classes="caption" Margin="0,8,0,0"
+                                       TextWrapping="Wrap"/>
+                            <Button Content="Cancel" Theme="{StaticResource DangerButton}"
+                                    Command="{Binding CancelBatchCommand}" Margin="0,8,0,0"
+                                    HorizontalAlignment="Stretch" IsVisible="{Binding IsBatching}"
+                                    AutomationProperties.Name="Cancel batch"/>
+                            <StackPanel x:Name="BatchProgress" Margin="0,10,0,0" IsVisible="{Binding ShowBatchProgress}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding BatchProgressPct}" Classes="caption"/>
+                                    <TextBlock Text="{Binding BatchLabel}" Classes="caption"/>
+                                </DockPanel>
+                                <ProgressBar Value="{Binding BatchProgress}" Minimum="0" Maximum="100"
+                                             Theme="{StaticResource ModernProgressBar}" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="2" Margin="12,10" RowDefinitions="2*,Auto,*">
+                <Border Classes="card" Margin="0,0,0,10" Padding="10">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <DockPanel>
+                            <StackPanel x:Name="InputSize" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ActivePositionLabel}" Classes="caption" VerticalAlignment="Center"
+                                           IsVisible="{Binding HasSession}" TextTrimming="CharacterEllipsis" MaxWidth="260"
+                                           ToolTip.Tip="{Binding ActivePositionLabel}"/>
+                                <TextBlock Text="{Binding ImageMeta}" Classes="caption" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StageZoomLabel" Text="{Binding #OriginalStage.ScaleLabel}"
+                                           Classes="caption" IsVisible="{Binding ShowStillPreview}" VerticalAlignment="Center"/>
+                                <Button x:Name="StageFitBtn" Content="Fit" Theme="{StaticResource TinyButton}"
+                                        Padding="10,4" MinHeight="32" IsVisible="{Binding ShowStillPreview}"
+                                        Click="OnStageFit" ToolTip.Tip="Fit image to view. Scroll to zoom, drag to pan."
+                                        AutomationProperties.Name="Fit image to view"/>
+                            </StackPanel>
+                            <Border Classes="segmented" HorizontalAlignment="Left" IsVisible="{Binding ShowStillPreview}">
+                                <controls:FitWrapPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="OriginalStageRadio" Content="Original" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageOriginal}"
+                                                 IsEnabled="{Binding HasImage}"
+                                                 AutomationProperties.Name="Original stage"/>
+                                    <RadioButton x:Name="FfcStageRadio" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageFfc}"
+                                                 IsEnabled="{Binding HasStageFfc}"
+                                                 AutomationProperties.Name="FFC stage">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="FFC" FontSize="12" VerticalAlignment="Center"/>
+                                            <Path Classes="spinner" Width="11" Height="11"
+                                                  Data="{StaticResource SpinnerGeometry}"
+                                                  Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
+                                                  IsVisible="{Binding IsFfcPreviewLoading}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="GcStageRadio" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageGc}"
+                                                 IsEnabled="{Binding HasStageGc}"
+                                                 AutomationProperties.Name="GC stage">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="GC" FontSize="12" VerticalAlignment="Center"/>
+                                            <Path Classes="spinner" Width="11" Height="11"
+                                                  Data="{StaticResource SpinnerGeometry}"
+                                                  Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
+                                                  IsVisible="{Binding IsGcPreviewLoading}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="WbStageRadio" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageWb}"
+                                                 IsEnabled="{Binding HasStageWb}"
+                                                 AutomationProperties.Name="WB stage">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="WB" FontSize="12" VerticalAlignment="Center"/>
+                                            <Path Classes="spinner" Width="11" Height="11"
+                                                  Data="{StaticResource SpinnerGeometry}"
+                                                  Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
+                                                  IsVisible="{Binding IsWbPreviewLoading}"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="CcStageRadio" Content="CC" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageCc}"
+                                                 IsEnabled="{Binding HasStageCc}"
+                                                 AutomationProperties.Name="CC stage"/>
+                                    <RadioButton x:Name="CorrectedStageRadio" Content="Corrected" GroupName="StageView"
+                                                 Theme="{StaticResource StageRadioButton}"
+                                                 IsChecked="{Binding IsStageCorrected}"
+                                                 IsEnabled="{Binding HasStageCorrected}"
+                                                 AutomationProperties.Name="Corrected stage"/>
+                                </controls:FitWrapPanel>
+                            </Border>
+                        </DockPanel>
+                        <Border x:Name="ColorPickerReadout" Grid.Row="1" Classes="pickerReadout" Margin="0,8,0,0"
+                                IsVisible="{Binding HasPicker}"
+                                AutomationProperties.Name="Color hover readout">
+                            <Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="6"
+                                            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                            Background="{Binding PickerBrush}" VerticalAlignment="Center"/>
+                                    <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,16,2">
+                                            <TextBlock Text="xy" Classes="pickerLabel"/>
+                                            <TextBlock x:Name="PickerPixel" Text="{Binding PickerPixel}" Classes="pickerValue"/>
+                                            <Border Classes="hoverHex" VerticalAlignment="Center">
+                                                <TextBlock x:Name="PickerRgb" Text="{Binding PickerHex}" Classes="pickerValue"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="R" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding PickerR}" Classes="pickerValue"/>
+                                            <TextBlock Text="G" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding PickerG}" Classes="pickerValue"/>
+                                            <TextBlock Text="B" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding PickerB}" Classes="pickerValue"/>
+                                            <TextBlock Text="L" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding PickerL}" Classes="pickerValue"/>
+                                            <TextBlock Text="a" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding PickerA}" Classes="pickerValue"/>
+                                            <TextBlock Text="b" Classes="pickerLabel"/>
+                                            <TextBlock x:Name="PickerLab" Text="{Binding PickerLabB}" Classes="pickerValue"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        <Grid Grid.Row="2">
+                            <Border x:Name="StageFrame" Classes="stageFrame"
+                                    ToolTip.Tip="Hover for RGB / Lab. Right-click a point to copy. Esc clears.">
+                                <Grid>
+                                    <StackPanel x:Name="InputEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                IsVisible="{Binding !HasImage}">
+                                        <TextBlock Text="Drop a still image to begin" Classes="caption"
+                                                   HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                    <controls:ZoomPanView x:Name="OriginalStage" IsVisible="{Binding ShowStillPreview}">
+                                        <Grid Width="{Binding NaturalWidth}" Height="{Binding NaturalHeight}"
+                                              Cursor="Cross"
+                                              PointerMoved="OnStageMoved"
+                                              PointerExited="OnStageExited"
+                                              PointerReleased="OnStageReleased"
+                                              ContextRequested="OnStageContextRequested">
+                                            <Grid.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Copy RGB"
+                                                              Command="{Binding CopyPickerRgbCommand}"
+                                                              AutomationProperties.Name="Copy RGB"/>
+                                                    <MenuItem Header="Copy Lab"
+                                                              Command="{Binding CopyPickerLabCommand}"
+                                                              AutomationProperties.Name="Copy Lab"/>
+                                                    <MenuItem Header="Copy hex"
+                                                              Command="{Binding CopyPickerHexCommand}"
+                                                              AutomationProperties.Name="Copy hex"/>
+                                                    <MenuItem Header="Copy all"
+                                                              Command="{Binding CopyPickerCommand}"
+                                                              AutomationProperties.Name="Copy pixel color"/>
+                                                </ContextMenu>
+                                            </Grid.ContextMenu>
+                                            <Image x:Name="InputImage" Source="{Binding Preview}" Stretch="Fill"/>
+                                            <controls:ChartOverlay x:Name="QuadOverlay"
+                                                                   Handshake="{Binding OverlayHandshake}"
+                                                                   FaceChoice="{Binding OverlayFaceChoice}"
+                                                                   Crop="{Binding OverlayCrop}"
+                                                                   UseAllFaces="{Binding UseAllFaces}"
+                                                                   ShowLattice="{Binding ShowLattice}"
+                                                                   ShowSample="{Binding ShowSample}"
+                                                                   ShowDim="{Binding ShowDim}"
+                                                                   ShowPlane="{Binding ShowPlane}"
+                                                                   PlaneRect="{Binding OverlayPlaneRect}"
+                                                                   DisplayScale="{Binding #OriginalStage.Scale}"
+                                                                   OverlayScaleX="{Binding OverlayScaleX}"
+                                                                   OverlayScaleY="{Binding OverlayScaleY}"
+                                                                   IsHitTestVisible="False"/>
+                                            <Canvas IsHitTestVisible="False">
+                                                <Border x:Name="PickerPin" Classes="pickerPin"
+                                                        Canvas.Left="{Binding PinX}" Canvas.Top="{Binding PinY}"
+                                                        IsVisible="{Binding ShowPin}"/>
+                                            </Canvas>
+                                        </Grid>
+                                    </controls:ZoomPanView>
+                                    <Button x:Name="PreviousImageButton"
+                                            Theme="{StaticResource PreviewNavButton}"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0"
+                                            IsVisible="{Binding ShowSessionNavigation}"
+                                            IsEnabled="{Binding CanNavigatePrevious}"
+                                            Click="PreviousSession_Click"
+                                            ToolTip.Tip="{Binding PreviousSessionHint}"
+                                            AutomationProperties.AcceleratorKey="Alt+Left"
+                                            AutomationProperties.Name="{Binding PreviousSessionHint}">
+                                        <Path Data="{StaticResource ChevronLeftIconGeometry}" Width="20" Height="20"
+                                              Stretch="Uniform"
+                                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                    </Button>
+                                    <Button x:Name="NextImageButton"
+                                            Theme="{StaticResource PreviewNavButton}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0"
+                                            IsVisible="{Binding ShowSessionNavigation}"
+                                            IsEnabled="{Binding CanNavigateNext}"
+                                            Click="NextSession_Click"
+                                            ToolTip.Tip="{Binding NextSessionHint}"
+                                            AutomationProperties.AcceleratorKey="Alt+Right"
+                                            AutomationProperties.Name="{Binding NextSessionHint}">
+                                        <Path Data="{StaticResource ChevronRightIconGeometry}" Width="20" Height="20"
+                                              Stretch="Uniform"
+                                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                    </Button>
+                                    <Border x:Name="OverlayBadge" Classes="overlayBadge"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"
+                                            IsVisible="{Binding ShowOverlayChrome}">
+                                        <TextBlock Text="{Binding OverlayBadge}" Classes="caption"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    </Border>
+                                    <Border x:Name="OverlayLegend" Classes="overlayStrip"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
+                                            IsVisible="{Binding ShowOverlayChrome}">
+                                        <controls:FitWrapPanel Orientation="Horizontal">
+                                            <ToggleButton x:Name="ToggleDim" Content="Focus" Theme="{StaticResource OverlayToggleButton}"
+                                                          IsChecked="{Binding ShowDim}"
+                                                          IsVisible="{Binding ShowOverlayLegend}"
+                                                          AutomationProperties.Name="Focus chart"/>
+                                            <ToggleButton x:Name="ToggleLattice" Content="Lattice" Theme="{StaticResource OverlayToggleButton}"
+                                                          IsChecked="{Binding ShowLattice}"
+                                                          IsVisible="{Binding ShowOverlayLegend}"
+                                                          AutomationProperties.Name="Show lattice"/>
+                                            <ToggleButton x:Name="ToggleSample" Content="Sample" Theme="{StaticResource OverlayToggleButton}"
+                                                          IsChecked="{Binding ShowSample}"
+                                                          IsVisible="{Binding ShowOverlayLegend}"
+                                                          AutomationProperties.Name="Show sample cells"/>
+                                            <ToggleButton x:Name="TogglePlane" Content="Plane" Theme="{StaticResource OverlayToggleButton}"
+                                                          IsChecked="{Binding ShowPlane}"
+                                                          IsVisible="{Binding ShowPlaneToggle}"
+                                                          AutomationProperties.Name="Show FFC plane"/>
+                                        </controls:FitWrapPanel>
+                                    </Border>
+                                    <Canvas IsHitTestVisible="False">
+                                        <Border x:Name="PickerLoupe" Classes="pickerLoupe"
+                                                Canvas.Left="{Binding LoupeLeft}" Canvas.Top="{Binding LoupeTop}"
+                                                IsVisible="{Binding ShowLoupe}">
+                                            <controls:PickerLoupeControl Source="{Binding Preview}"
+                                                                         PixelX="{Binding LoupePixelX}"
+                                                                         PixelY="{Binding LoupePixelY}"/>
+                                        </Border>
+                                        <Border x:Name="StageHoverCard" Classes="hoverCard"
+                                                Canvas.Left="{Binding HoverCardLeft}" Canvas.Top="{Binding HoverCardTop}"
+                                                IsVisible="False">
+                                            <controls:HoverReadoutControl DataContext="{Binding StageHover}"/>
+                                        </Border>
+                                    </Canvas>
+                                    <Border x:Name="StageLoading" Classes="stageLoading"
+                                            IsVisible="{Binding IsStagePreviewLoading}"
+                                            AutomationProperties.Name="{Binding StagePreviewLoadingLabel}">
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                                            <Path Classes="spinner" Width="32" Height="32"
+                                                  Data="{StaticResource SpinnerGeometry}"
+                                                  Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="3"/>
+                                            <TextBlock Text="{Binding StagePreviewLoadingLabel}" Classes="caption"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <GridSplitter x:Name="AnalysisResize" Grid.Row="1" Height="8" Background="Transparent" ResizeDirection="Rows"/>
+
+                <Border x:Name="AnalysisPanel" Grid.Row="2" Classes="analysisPanel" MinHeight="220">
+                <TabControl x:Name="AnalysisTabs" SelectedIndex="{Binding AnalysisTab}"
+                            Theme="{StaticResource DarkTabControl}">
+                    <TabItem x:Name="TabLog" Header="Log" Theme="{StaticResource DarkTabItem}"
+                             AutomationProperties.Name="Log">
+                        <Grid>
+                            <Border x:Name="PanelLog" Classes="activityLog" Margin="14">
+                                <ScrollViewer x:Name="LogScrollViewer"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl x:Name="ActivityLog" ItemsSource="{Binding LogEntries}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:LogEntry">
+                                                <Grid Margin="{Binding BlockMargin}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="0"
+                                                                IsVisible="{Binding !IsDetail}">
+                                                        <TextBlock Text="{Binding TimeLabel}" Classes="logStamp"/>
+                                                        <TextBlock Classes="logLine" Text="{Binding Message}"
+                                                                   Foreground="{Binding Level, Converter={StaticResource LogLevelToBrush}}"
+                                                                   FontWeight="{Binding Level, Converter={StaticResource LogLevelToWeight}}"/>
+                                                    </StackPanel>
+                                                    <TextBlock Classes="logLine detail" Text="{Binding Message}"
+                                                               IsVisible="{Binding IsDetail}"
+                                                               Foreground="{Binding Level, Converter={StaticResource LogLevelToBrush}}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem x:Name="TabDeltaE" Header="ΔE Analysis" Theme="{StaticResource DarkTabItem}"
+                             AutomationProperties.Name="Delta E Analysis">
+                        <Grid x:Name="PanelDeltaE" RowDefinitions="Auto,*" Margin="14" RowSpacing="8">
+                            <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
+                                       Text="Fit a chart still to see per-stage ΔE."
+                                       TextWrapping="Wrap"/>
+                            <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding HasMetrics}">
+                                <Border Classes="metricTile" Margin="0,0,8,8"
+                                        Background="{Binding MeanAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                        <TextBlock Classes="caption" Text="Fit mean ΔE"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding MeanAfterValue, Converter={StaticResource DEQualityText}}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{Binding MeanAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                        <TextBlock x:Name="MeanMetric" Grid.Row="1" Text="{Binding MeanAfter}"
+                                                   Classes="metricValue"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MeanBefore}" Classes="caption"
+                                                   VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="metricTile" Margin="0,0,8,8"
+                                        Background="{Binding MedianAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                        <TextBlock Classes="caption" Text="Median ΔE"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding MedianAfterValue, Converter={StaticResource DEQualityText}}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{Binding MedianAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                        <TextBlock x:Name="MedianMetric" Grid.Row="1" Text="{Binding MedianAfter}"
+                                                   Classes="metricValue"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MedianBefore}" Classes="caption"
+                                                   VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="metricTile" Margin="0,0,8,8"
+                                        Background="{Binding MaxAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                        <TextBlock Classes="caption" Text="Max ΔE"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding MaxAfterValue, Converter={StaticResource DEQualityText}}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{Binding MaxAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                        <TextBlock x:Name="MaxMetric" Grid.Row="1" Text="{Binding MaxAfter}"
+                                                   Classes="metricValue"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MaxBefore}" Classes="caption"
+                                                   VerticalAlignment="Bottom"/>
+                                    </Grid>
+                                </Border>
+                                <Border Classes="metricTile" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Classes="caption" Text="Transform"/>
+                                        <TextBlock x:Name="ModelMetric" Text="{Binding ModelMetric}"
+                                                   Classes="caption" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"/>
+                                        <TextBlock Text="{Binding FeatureDetail}" Classes="caption" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding ValidationSummary}" Classes="caption" TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+                            <Grid x:Name="DeltaEPlots" Grid.Row="1" ColumnDefinitions="*,12,1.15*"
+                                  IsVisible="{Binding HasMetrics}">
+                                <Border Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <TextBlock Text="Per stage" Classes="caption"
+                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding StageDeltaERows}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:StageDeltaERow">
+                                                        <Border Classes="stageDeltaCard"
+                                                                Background="{Binding MeanAfter, Converter={StaticResource DEQualityBgBrush}}">
+                                                            <Grid ColumnDefinitions="48,*,Auto">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           FontWeight="Bold" FontSize="14"
+                                                                           Foreground="{DynamicResource PrimaryBrush}"
+                                                                           VerticalAlignment="Center"/>
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                                                    <TextBlock Classes="body" Text="{Binding RangeText}"/>
+                                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                                        <Ellipse Width="7" Height="7" Margin="0,0,5,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Fill="{Binding MeanAfter, Converter={StaticResource DEQualityBrush}}"/>
+                                                                        <TextBlock Text="{Binding MeanAfter, Converter={StaticResource DEQualityText}}"
+                                                                                   FontSize="10" FontWeight="SemiBold"
+                                                                                   Foreground="{Binding MeanAfter, Converter={StaticResource DEQualityBrush}}"/>
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                                                                            HorizontalAlignment="Right">
+                                                                    <TextBlock Text="{Binding ImprovementText}"
+                                                                               FontWeight="SemiBold"
+                                                                               Foreground="{Binding ImprovementBrush}"/>
+                                                                    <TextBlock Text="{Binding ElapsedText}" Classes="caption"
+                                                                               IsVisible="{Binding HasElapsed}"/>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="DeltaEStageCard" Grid.Column="2" Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <DockPanel Margin="0,0,0,8">
+                                        <Button DockPanel.Dock="Right" Theme="{StaticResource PlotExportButton}"
+                                                Click="OnSaveDeltaEPlot"
+                                                ToolTip.Tip="Export the ΔE stage plot as an image"
+                                                AutomationProperties.Name="Export Delta E plot">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Path Classes="toolbarGlyph" Width="14" Height="14"
+                                                      Data="{StaticResource PlotSaveIconGeometry}"
+                                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                <TextBlock Text="Export" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                            <TextBlock Text="CIEDE2000 by stage" Classes="caption"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                            <controls:PatchPlotControl x:Name="PlotDeltaE" Kind="StageBars" Report="{Binding Report}"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem x:Name="TabColor" Header="Color Analysis" Theme="{StaticResource DarkTabItem}"
+                             AutomationProperties.Name="Color Analysis">
+                        <Grid x:Name="PanelColor" Margin="14">
+                            <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       Text="Fit a chart still to see color scatter."
+                                       TextWrapping="Wrap"/>
+                            <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding HasMetrics}">
+                                <Border Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <DockPanel Margin="0,0,0,8">
+                                            <Button DockPanel.Dock="Right" Theme="{StaticResource PlotExportButton}"
+                                                    Click="OnSaveColorPlots"
+                                                    ToolTip.Tip="Export color scatter and residual plots"
+                                                    AutomationProperties.Name="Export Color plots">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Path Classes="toolbarGlyph" Width="14" Height="14"
+                                                          Data="{StaticResource PlotSaveIconGeometry}"
+                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                    <TextBlock Text="Export" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+                                            <TextBlock Text="Color scatter — reference vs measured"
+                                                       Classes="caption" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                            <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" Report="{Binding Report}"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="ColorResidualCard" Grid.Column="2" Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <TextBlock Text="Residual" Classes="caption"
+                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                            <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" Report="{Binding Report}"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem x:Name="TabPatches" Header="Chart rendition" Theme="{StaticResource DarkTabItem}"
+                             AutomationProperties.Name="Chart rendition">
+                        <Grid x:Name="PanelPatches" RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="8">
+                            <TextBlock x:Name="PatchSummary" Text="{Binding PatchSummary}" Classes="caption"
+                                       HorizontalAlignment="Right" IsVisible="{Binding HasMetrics}"/>
+                            <TextBlock Grid.Row="1" Classes="caption" IsVisible="{Binding !HasMetrics}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       Text="Fit a chart still to see rendition."
+                                       TextWrapping="Wrap"/>
+                            <Grid x:Name="PlotHoverHost" Grid.Row="1" ColumnDefinitions="*,12,*"
+                                  MinHeight="160" ClipToBounds="True" IsVisible="{Binding HasMetrics}">
+                                <Border Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <DockPanel Margin="0,0,0,8">
+                                            <Button DockPanel.Dock="Right" Theme="{StaticResource PlotExportButton}"
+                                                    Click="OnSaveRenditionPlots"
+                                                    ToolTip.Tip="Export chart rendition plots"
+                                                    AutomationProperties.Name="Export Rendition plots">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Path Classes="toolbarGlyph" Width="14" Height="14"
+                                                          Data="{StaticResource PlotSaveIconGeometry}"
+                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                    <TextBlock Text="Export" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+                                            <TextBlock Text="Original vs reference" Classes="caption"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                            <controls:PatchPlotControl x:Name="PlotRenditionOriginal" Kind="RenditionOriginal"
+                                                                       Report="{Binding Report}"
+                                                                       PlotHoverChanged="OnRenditionHover"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Border x:Name="RenditionCorrectedCard" Grid.Column="2" Classes="plotCard">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <TextBlock Text="Corrected vs reference" Classes="caption"
+                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                            <controls:PatchPlotControl x:Name="PlotRenditionCorrected" Kind="RenditionCorrected"
+                                                                       Report="{Binding Report}"
+                                                                       PlotHoverChanged="OnRenditionHover"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Canvas x:Name="PlotHoverLayer" Grid.ColumnSpan="3" IsHitTestVisible="False">
+                                    <Border x:Name="PlotHoverCard" Classes="hoverCard"
+                                            Canvas.Left="{Binding PlotHover.Left}" Canvas.Top="{Binding PlotHover.Top}"
+                                            IsVisible="{Binding PlotHover.IsVisible}">
+                                        <controls:HoverReadoutControl DataContext="{Binding PlotHover}"/>
+                                    </Border>
+                                </Canvas>
+                            </Grid>
+                            <Expander Grid.Row="2" Header="Patch ΔE table" Classes="section"
+                                      Theme="{StaticResource SectionExpander}"
+                                      IsExpanded="False"
+                                      IsVisible="{Binding HasMetrics}">
+                                <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                        CornerRadius="8" Margin="0,8,0,0" ClipToBounds="True">
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Disabled">
+                                    <Grid RowDefinitions="Auto,*" MinWidth="420">
+                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Background="{DynamicResource CardElevatedBrush}" Margin="10,8,10,8">
+                                            <TextBlock Text="Patch" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="1" Text="Before ΔE₀₀" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="2" Text="After ΔE₀₀" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="3" Text="Sat" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="4" Text="Meas" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="5" Text="Ref" Classes="caption" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="6" Text="Corr" Classes="caption" FontWeight="SemiBold"/>
+                                        </Grid>
+                                        <ScrollViewer Grid.Row="1" MaxHeight="220">
+                                            <ItemsControl x:Name="PatchTable" ItemsSource="{Binding Patches}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:PatchRowViewModel">
+                                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="10,6">
+                                                            <TextBlock Text="{Binding Name}" FontSize="12"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Before}" FontSize="12"/>
+                                                            <TextBlock Grid.Column="2" Text="{Binding After}" FontSize="12"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Sat}" FontSize="12"/>
+                                                            <Border Grid.Column="4" Width="18" Height="18" CornerRadius="4"
+                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                                                    Background="{Binding Measured}"/>
+                                                            <Border Grid.Column="5" Width="18" Height="18" CornerRadius="4"
+                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                                                    Background="{Binding Reference}"/>
+                                                            <Border Grid.Column="6" Width="18" Height="18" CornerRadius="4"
+                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                                                    Background="{Binding Corrected}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Grid>
+                                    </ScrollViewer>
+                                </Border>
+                            </Expander>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Popup x:Name="BatchMenu" PlacementTarget="SidebarDock"
+               Placement="Right"
+               HorizontalOffset="12" VerticalOffset="0"
+               PlacementConstraintAdjustment="SlideY"
+               IsLightDismissEnabled="True">
+            <Border Classes="batchFlyout">
+                <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Batch" Classes="heading" FontSize="14" Margin="0,0,0,8"/>
+                    <TextBlock Text="Add stills to Session first."
+                               Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"
+                               IsVisible="{Binding !HasSession}"/>
+                    <ScrollViewer MaxHeight="160" HorizontalScrollBarVisibility="Disabled"
+                                  IsVisible="{Binding HasSession}" Margin="0,0,0,10">
+                        <ItemsControl ItemsSource="{Binding Session}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SessionItemViewModel">
+                                    <CheckBox IsChecked="{Binding IncludeInBatch}" Margin="0,0,0,4"
+>
+                                        <TextBlock Text="{Binding FileName}" FontSize="12"
+                                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="FFC whites and *_corrected outputs start unchecked."
+                               Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"
+                               IsVisible="{Binding HasSession}"/>
+                    <Button x:Name="BatchProcessAll" Theme="{StaticResource SecondaryButton}"
+                            Command="{Binding BatchFitCommand}" Click="CloseBatchMenu"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Margin="0,0,0,6" Padding="10,8"
+                            AutomationProperties.Name="Batch fit from chart">
+                        <StackPanel>
+                            <TextBlock Text="Fit from chart" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BatchFromModel" Theme="{StaticResource SecondaryButton}"
+                            Command="{Binding BatchApplyCommand}" Click="CloseBatchMenu"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Margin="0,0,0,0" Padding="10,8"
+                            AutomationProperties.Name="Batch apply current model">
+                        <StackPanel>
+                            <TextBlock Text="Apply current model" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
+
+        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0" Padding="16,6">
+            <DockPanel>
+                <ProgressBar DockPanel.Dock="Right" Classes="statusProgress" Width="140"
+                             Value="{Binding JobProgress}" Minimum="0" Maximum="100"
+                             Theme="{StaticResource ModernProgressBar}" VerticalAlignment="Center"
+                             IsVisible="{Binding ShowJobProgress}"
+                             ToolTip.Tip="{Binding CurrentStage}"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0">
+                    <TextBlock Text="{Binding CurrentStage}" Classes="caption" Foreground="{DynamicResource PrimaryBrush}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock x:Name="StatusDeltaE" Text="{Binding StatusDeltaE}" Classes="caption" Margin="12,0,0,0"
+                               Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding HasMetrics}"/>
+                </StackPanel>
+                <Panel x:Name="StatusDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                       DockPanel.Dock="Left" IsHitTestVisible="False">
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Busy}"/>
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Busy}"/>
+                </Panel>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite">
+                    <TextBlock Text="{Binding StatusStateLabel}" Classes="caption" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding ErrorMessage}"
+                               AutomationProperties.AutomationId="StatusBarText"
+                               AutomationProperties.Name="{Binding Status}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border x:Name="ModalScrim" Grid.RowSpan="3"
+                Background="{DynamicResource ModalOverlayBrush}"
+                IsVisible="False" IsHitTestVisible="False"
+                AutomationProperties.AccessibilityView="Raw"/>
+
+        <ItemsControl x:Name="ToastHost" Grid.RowSpan="3"
+                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      Margin="16,16,16,52" MaxWidth="360" MinWidth="0"
+                      IsHitTestVisible="True">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Vertical" VerticalAlignment="Bottom"
+                                HorizontalAlignment="Stretch" Spacing="8"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <Grid x:Name="DragOverlay" Grid.RowSpan="3" IsVisible="False" IsHitTestVisible="False">
+            <Border Background="{DynamicResource DragOverlayBrush}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="Drop still images" FontSize="24" Foreground="White"
+                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="They join the working session" FontSize="14"
+                               Foreground="{DynamicResource DragSubtitleBrush}"
+                               HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </Grid>
+</Window>

@@ -1,0 +1,80 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ColorCorrect.App.ViewModels"
+        xmlns:conv="using:ColorCorrect.App.Converters"
+        x:Class="ColorCorrect.App.Views.FfcSettingsDialog"
+        x:DataType="vm:MainWindowViewModel"
+        Title="FFC settings"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        Width="400" Height="480" MinWidth="280" MinHeight="280"
+        ShowInTaskbar="False"
+        CanResize="True"
+        KeyboardNavigation.TabNavigation="Cycle"
+        Opened="OnOpened">
+
+    <Window.Resources>
+        <conv:NumericToStringConverter x:Key="NumericToString"/>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource SidebarBrush}"
+            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+            CornerRadius="8"
+            VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+        <DockPanel LastChildFill="True">
+            <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}"
+                    CornerRadius="8,8,0,0" Padding="16,12"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
+                            Click="Close_Click" FontSize="16" MinWidth="36" MinHeight="36"
+                            AutomationProperties.Name="Close FFC settings"/>
+                    <TextBlock Text="FFC settings" Classes="heading" FontSize="15" VerticalAlignment="Center"/>
+                </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Bottom" Padding="16,12"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0">
+                <Button Content="Done" Theme="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Click="Close_Click"
+                        AutomationProperties.Name="Done"/>
+            </Border>
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16,12">
+                <TextBlock Text="Fit method" Classes="settingsLabel"/>
+                <ComboBox x:Name="FfcMethodSelect" Classes="config" ItemsSource="{Binding FfcFitMethods}"
+                          SelectedItem="{Binding SelectedFfcFitMethod}" Margin="0,0,0,10"
+                          HorizontalAlignment="Stretch" MinWidth="0"
+                          AutomationProperties.Name="FFC fit method">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="Bins" Classes="settingsLabel"/>
+                <TextBox Classes="config" Text="{Binding FfcBins, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
+                         HorizontalAlignment="Stretch" MinWidth="0"
+                         AutomationProperties.Name="FFC bins"/>
+                <TextBlock Text="Smooth window" Classes="settingsLabel"/>
+                <TextBox Classes="config" Text="{Binding FfcSmoothWindow, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
+                         HorizontalAlignment="Stretch" MinWidth="0"
+                         AutomationProperties.Name="FFC smooth window"/>
+                <TextBlock Text="Degree" Classes="settingsLabel"/>
+                <TextBox Classes="config" Text="{Binding FfcDegree, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
+                         AutomationProperties.Name="FFC degree"/>
+                <StackPanel IsVisible="{Binding ShowFfcIter}" Margin="0,0,0,10">
+                    <TextBlock Text="Tolerance" Classes="settingsLabel"/>
+                    <TextBox Classes="config" Text="{Binding FfcTol, Converter={StaticResource NumericToString}}"
+                             AutomationProperties.Name="FFC tolerance"/>
+                </StackPanel>
+                <StackPanel IsVisible="{Binding ShowFfcNn}" Margin="0,0,0,10">
+                    <TextBlock Text="NN max iterations" Classes="settingsLabel"/>
+                    <TextBox Classes="config" Text="{Binding FfcNnMaxIter, Converter={StaticResource NumericToString}}"
+                             AutomationProperties.Name="FFC NN max iterations"/>
+                </StackPanel>
+            </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

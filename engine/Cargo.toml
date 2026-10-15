@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ccp_core",
+    "crates/ccp_detect",
+    "crates/ccp_bridge",
+]

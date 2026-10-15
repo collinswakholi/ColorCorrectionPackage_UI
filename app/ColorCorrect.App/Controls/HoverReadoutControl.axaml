@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ColorCorrect.App.ViewModels"
+             x:Class="ColorCorrect.App.Controls.HoverReadoutControl"
+             IsHitTestVisible="False">
+    <Grid x:DataType="vm:ColorHoverState">
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" IsVisible="{Binding !IsCompare}">
+            <Border Width="32" Height="32" CornerRadius="6"
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                    Background="{Binding Swatch}" VerticalAlignment="Top"/>
+            <StackPanel Grid.Column="1" Spacing="4">
+                <DockPanel>
+                    <TextBlock Text="{Binding Context}" Classes="hoverMeta" DockPanel.Dock="Right"
+                               Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Title}" Classes="hoverTitle" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+                <Grid ColumnDefinitions="28,48,48,48,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                      ColumnSpacing="0" RowSpacing="1">
+                    <TextBlock Text="RGB" Classes="hoverLabel" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="R" Classes="hoverChan" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Column="2" Text="G" Classes="hoverChan" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Column="3" Text="B" Classes="hoverChan" HorizontalAlignment="Right"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding R}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding G}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding B}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                    <Border Grid.Row="1" Grid.Column="4" Classes="hoverHex" Margin="10,0,0,0"
+                            VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Hex}" Classes="hoverValue"/>
+                    </Border>
+
+                    <TextBlock Grid.Row="2" Text="Lab" Classes="hoverLabel" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="L" Classes="hoverChan" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="a" Classes="hoverChan" HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="2" Grid.Column="3" Text="b" Classes="hoverChan" HorizontalAlignment="Right"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding L}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding A}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                    <TextBlock Grid.Row="3" Grid.Column="3" Text="{Binding LabB}" Classes="hoverValue"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+                <TextBlock Text="{Binding Extra}" Classes="hoverExtra" IsVisible="{Binding HasExtra}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Spacing="6" IsVisible="{Binding IsCompare}" MinWidth="348">
+            <DockPanel>
+                <TextBlock Text="{Binding Extra}" Classes="hoverExtra" DockPanel.Dock="Right"
+                           Margin="10,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Title}" Classes="hoverTitle" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <Grid ColumnDefinitions="28,92,92,52" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="8" RowSpacing="2">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                    <Border Width="18" Height="18" CornerRadius="4"
+                            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                            Background="{Binding Swatch}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding SampleLabel}" Classes="hoverLabel" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                    <Border Width="18" Height="18" CornerRadius="4"
+                            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                            Background="{Binding Swatch2}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Reference" Classes="hoverLabel" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Column="3" Text="Δ" Classes="hoverChan" HorizontalAlignment="Right"
+                           VerticalAlignment="Center"/>
+
+                <TextBlock Grid.Row="1" Text="R" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding R}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding RefR}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding DeltaR}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+
+                <TextBlock Grid.Row="2" Text="G" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding G}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding RefG}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding DeltaG}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+
+                <TextBlock Grid.Row="3" Text="B" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding B}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding RefB}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="3" Grid.Column="3" Text="{Binding DeltaB}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+
+                <Border Grid.Row="4" Grid.Column="1" Classes="hoverHex" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding Hex}" Classes="hoverValue"/>
+                </Border>
+                <Border Grid.Row="4" Grid.Column="2" Classes="hoverHex" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding RefHex}" Classes="hoverValue"/>
+                </Border>
+
+                <TextBlock Grid.Row="5" Text="L" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding L}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding RefL}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="5" Grid.Column="3" Text="{Binding DeltaL}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+
+                <TextBlock Grid.Row="6" Text="a" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding A}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="6" Grid.Column="2" Text="{Binding RefA}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="6" Grid.Column="3" Text="{Binding DeltaA}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+
+                <TextBlock Grid.Row="7" Text="b" Classes="hoverChan" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding LabB}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="{Binding RefLabB}" Classes="hoverValue"/>
+                <TextBlock Grid.Row="7" Grid.Column="3" Text="{Binding DeltaLabB}" Classes="hoverDelta" HorizontalAlignment="Right"/>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>
