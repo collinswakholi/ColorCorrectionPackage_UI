@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 native preview — unreleased
+## 0.1.0 native Windows preview
 
 - Replace browser/Flask source at repository root with reviewed ColorCorrect
   Studio Avalonia/Rust source; preserve history and the legacy branch/tag.
@@ -19,6 +19,8 @@
   cube export; former video API names return explicit unsupported errors.
 - Reject missing or unusable blank references when FFC is explicitly requested;
   do not silently apply an incomplete pipeline.
+- Make NN correction settings independently discoverable in the Windows task
+  switcher and inherit the owner's icon, without changing the dialog layout.
 - Replace automatic release/Docker workflows with read-only PR validation and a
   manual source-matched draft Windows preview workflow. No new Unix binaries.
 

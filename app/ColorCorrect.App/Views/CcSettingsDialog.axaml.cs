@@ -11,6 +11,10 @@ public partial class CcSettingsDialog : Window
     public CcSettingsDialog()
     {
         InitializeComponent();
+        // A separate Windows task-switcher entry keeps this modal discoverable
+        // by assistive/automation clients, instead of activating its owner and
+        // dismissing the optimizer/method popup while it is being selected.
+        ShowInTaskbar = OperatingSystem.IsWindows();
         AddHandler(InputElement.KeyDownEvent, OnKeyDown,
             RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
     }

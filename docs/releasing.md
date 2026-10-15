@@ -1,13 +1,21 @@
 # Windows preview release gates
 
-Current status: **v0.1.0 native preview not published**. Migration PR must be
-reviewed and merged by the maintainer. No main push, tag trigger or scheduled
+The maintainer has authorized a **public Windows v0.1.0 prerelease**, after the
+native migration and the release gates below are complete. Authorization does
+not waive validation or permit substituting an earlier QA installer. Check
+[PR #1](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/1) and the
+[v0.1.0 release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.1.0)
+for the actual migration/publication state. No main push, tag trigger or scheduled
 workflow publishes binaries or Docker images. Old releases/images are preserved.
 
 Only `windows-preview.yml` uses release-write permission, in its final draft job.
 Invoke it from main with the exact 40-character merged main SHA. It rejects an
 unmerged/different/dirty source state and refuses to overwrite an existing v0.1.0.
-It creates a **draft + prerelease**; public publication is a human review step.
+It creates a **draft + prerelease**. Review its final source identity, installer,
+assets, and checksums before explicitly publishing the authorized preview.
+Keep the release marked **prerelease**, and do not change it to stable/latest or
+overwrite existing releases. Publication is a separate, authorized action; the
+workflow never publishes automatically.
 Configure the `native-preview` GitHub environment with required reviewers if your
 repository settings support them. No automatic merge is enabled.
 
@@ -20,7 +28,11 @@ Before entering `APPROVED`, record evidence for every gate:
 - [ ] All six methods, stage previews, saved-model application and exports pass.
   Both clean notebook sources execute against the actual staged/installed worker.
 - [ ] Live UI walkthrough: catalog/session, arrows, overlays, settings, fitting,
-  loaded-model application, exports, help and themes. Former video commands must
+  loaded-model application, exports, help and themes. Include interactive NN
+  editing (single/array layers, optimizer, batch normalization, dropout),
+  persistence of accepted settings, and session save/reload through the actual
+  file pickers. Record outcomes and any cancellation/error behavior; headless
+  coverage alone does not close these live UI gates. Former video commands must
   return an explicit unsupported error, and video controls must not be present.
 - [ ] CPU-only clean Windows 11 x64 install, offline samples, legacy side-by-side,
   reinstall and uninstall without user-data deletion. Hosted `windows-2022`
@@ -43,6 +55,25 @@ Assets: `ColorCorrect-Studio-win-x64.exe`, its `.sha256`, `build-info.json`,
 `NOTICE.md` (model notices), and `LICENSE-AGPL-3.0.txt` (model upstream license).
 No portable ZIP, Linux/macOS binaries or Docker pushes in this first release.
 Local dirty-worktree installers are QA artifacts and are never eligible for release.
+
+## Source-matched publication checklist
+
+1. Complete and review all gates above, including the outstanding live modal
+   checks. Attach sanitized evidence to the migration PR; do not publish private
+   paths, user sessions, attachments, or unrelated desktop captures.
+2. Merge the reviewed native migration into `main` without rewriting legacy
+   history. Record the exact full merged commit SHA, not merely a branch name.
+3. Run the manual workflow with that current `main` SHA and `APPROVED` only when
+   the recorded evidence justifies every gate. Its clean-checkout rebuild, not
+   a previously built local executable, supplies the release assets.
+4. Verify that `build-info.json` records the requested SHA and release eligibility,
+   that the tag resolves to that SHA, and that the uploaded `.exe` SHA-256 agrees
+   with its uploaded `.sha256`. Inspect the final installer and all required
+   asset names before public publication.
+5. Publish the reviewed draft as the authorized public **v0.1.0 prerelease**.
+   Recheck that the explicit release page and download links resolve publicly,
+   that the downloaded installer hash matches, and that `main` contains the
+   native source. Leave old releases and Docker images unchanged.
 
 ## Platform status
 

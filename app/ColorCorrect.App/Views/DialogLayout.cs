@@ -13,6 +13,8 @@ internal static class DialogLayout
             return;
         }
 
+        dialog.Icon ??= owner.Icon;
+
         var maxW = Math.Max(280, owner.ClientSize.Width - 16);
         var maxH = Math.Max(280, owner.ClientSize.Height - 16);
         var width = dialog.Width > 1 ? dialog.Width : 460;

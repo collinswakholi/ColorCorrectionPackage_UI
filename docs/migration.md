@@ -3,8 +3,20 @@
 Repository history, older releases, the repository URL, and MIT attribution are
 retained. The final web commit is `c790f8af459ca522090bfc92519fdd4398ec7545`,
 preserved on `legacy-web` and the annotated `legacy-web-final` tag. Do not move
-that tag. The migration is reviewed on `codex/native-overhaul`; main is not changed
-until its PR is approved and merged by the maintainer.
+that tag. The reviewed migration is recorded in
+[PR #1](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/1).
+It imports the native code at the repository root (`app/`, `engine/`, `api/`,
+`models/`, `refs/`, `notebooks/`, and `test_images/`), not inside a nested
+`CCP_New_UI` directory. The legacy implementation remains available from the
+archive branch and tag rather than as the active native app tree.
+
+For the native Windows installer, use the explicit
+[v0.1.0 preview page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.1.0),
+not `/releases/latest`, which can still identify an older stable web release.
+If the preview page is unavailable, publication is pending. Match its checksum
+and `build-info.json` source commit to the `v0.1.0` tag; the release must be built
+from reviewed, merged native source. An earlier local QA executable is not the
+source-matched release.
 
 | Legacy workflow | Native workflow |
 | --- | --- |

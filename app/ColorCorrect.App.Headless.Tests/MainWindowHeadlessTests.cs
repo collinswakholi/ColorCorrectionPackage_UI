@@ -348,6 +348,8 @@ public sealed class MainWindowHeadlessTests
         {
             dialog.Show(owner);
             Dispatcher.UIThread.RunJobs();
+            Assert.Equal(OperatingSystem.IsWindows(), dialog.ShowInTaskbar);
+            Assert.Same(owner.Icon, dialog.Icon);
             Assert.True(dialog.Bounds.Width <= owner.ClientSize.Width);
             Assert.True(dialog.Bounds.Height <= owner.ClientSize.Height);
             VisualRegression.Match(dialog, "cc-settings-min-dark");

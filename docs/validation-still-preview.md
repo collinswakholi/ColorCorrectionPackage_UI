@@ -52,11 +52,14 @@ Observed successfully:
 - Correction-settings dialog rendering. A stale tooltip referring to a video
   frame was found and corrected in the follow-up source.
 
-The UI automation helper could not reliably operate some owned settings/combo
+At this build's walkthrough, the UI automation helper could not reliably operate some owned settings/combo
 and file-picker controls. Therefore **interactive NN parameter editing, session
-save/reload file pickers, and every modal action are not marked passed**. Their
+save/reload file pickers, and every modal action were not marked passed for this build**. Their
 automated tests are separate evidence, not substitutes for a complete manual
-walkthrough before publication. No video workflow was tested as a supported
+walkthrough before publication. Later follow-up evidence belongs to its own
+source/build identity; consult the [migration PR](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/1)
+and release provenance rather than treating this historical gap list as a current
+certification. No video workflow was tested as a supported
 feature: it has been removed.
 
 ## Installed automation and numerical checks
@@ -97,10 +100,10 @@ legacy localhost UI returned HTTP 200. Native uninstall left the legacy binary
 checksum, a separate QA retention sentinel, and the running legacy UI unchanged.
 This verifies those scoped checks; it is not an audit of every legacy data path.
 
-## Still required before publication
+## Publication gates outstanding at this build's validation
 
-Maintainer review/merge, rebuilding the exact merged source, final installer
+At that time, maintainer review/merge, rebuilding the exact merged source, final installer
 integrity and lifecycle checks, and completion of the outstanding manual modal
-walkthrough. The first release remains an unsigned Windows 11 x64 preview, first
+walkthrough were still required. The first release is an unsigned Windows 11 x64 preview, first
 prepared as a **draft prerelease**, not automatically published. Linux/macOS
 native-host validation and binaries are outside this preview's verified scope.

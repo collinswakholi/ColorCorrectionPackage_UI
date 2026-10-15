@@ -12,23 +12,27 @@ the pictured session has completed calibration.
 
 ## Get the Windows preview
 
-**The native v0.1.0 preview is not published yet.** Development is reviewable in
-[the migration PR](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/1).
-After review and merge, the unsigned Windows 11 x64 installer will appear on the
-[v0.1.0 release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.1.0).
-That link may be unavailable until publication. `/releases/latest` can point to
-the older web application, not this native preview.
+Use the [v0.1.0 Windows preview release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.1.0)
+for the unsigned **Windows 11 x64** installer, release notes, and provenance.
+If that page is unavailable, publication is still pending; local QA installers
+are not the release. `/releases/latest` can point to the older web application,
+not this native preview. The source migration is recorded in
+[PR #1](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/1).
 
-When the release is available:
+From the preview release page:
 
-1. Download `ColorCorrect-Studio-win-x64.exe` and its published SHA-256 checksum.
+1. Download `ColorCorrect-Studio-win-x64.exe`, its `.sha256` file, and
+   `build-info.json` from the same release.
 2. Compare the checksum before running Setup:
 
    ```powershell
    Get-FileHash .\ColorCorrect-Studio-win-x64.exe -Algorithm SHA256
    ```
 
-3. Install and open **ColorCorrect Studio**. The GUI does not require Python or
+3. Check that the source commit in `build-info.json` matches the release's
+   `v0.1.0` tag. The release installer is built from that reviewed, merged commit;
+   development builds can have different hashes even when named identically.
+4. Install and open **ColorCorrect Studio**. The GUI does not require Python or
    a separately installed .NET runtime. An unsigned installer may trigger
    SmartScreen; verify its origin and hash before deciding whether to continue.
 
@@ -121,7 +125,7 @@ build-time LibTorch SDKs are separate from packaged runtime libraries.
 
 | Platform | Native preview availability |
 |---|---|
-| Windows 11 x64 | First installer target; v0.1.0 awaits review/publication |
+| Windows 11 x64 | Unsigned v0.1.0 preview; use its explicit release page above |
 | Linux x64 | Source and packaging scripts retained; native-host validation pending |
 | macOS arm64 | Source and packaging scripts retained; native-host validation pending |
 
