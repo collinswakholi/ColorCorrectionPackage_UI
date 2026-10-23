@@ -3,6 +3,7 @@ from pathlib import Path
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -12,13 +13,37 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from package_support import check_runtime_manifest, check_model_manifest, pe_details, dependency_audit, digest
-from native_ci_acceptance import clean_environment
+from native_ci_acceptance import clean_environment, rust_component_test_command
 from package_wsl_addon import validate_addon
 from collect_dependency_notices import collect, validate_notices
 import test_package_native as fixtures
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_native_rust_component_checks_cover_every_shipping_crate(self):
+        root = SCRIPTS.parent
+        workspace = set(re.findall(r'"crates/([^"]+)"', (root / "engine/Cargo.toml").read_text()))
+        detector = (root / "engine/crates/ccp_detect/Cargo.toml").read_text()
+        linux_dependencies = re.search(
+            r'(?ms)^\[target\.\'cfg\(target_os = "linux"\)\'\.dependencies\]\s*\n(.*?)(?=^\[|\Z)', detector)
+        self.assertIsNotNone(linux_dependencies)
+        self.assertIn("ccp_wgpu_infer =", linux_dependencies[1])
+        shipping = {"ccp_core", "ccp_detect", "ccp_bridge"}
+        self.assertEqual(workspace, shipping | {"ccp_wgpu_infer"})
+        for rid in ("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64"):
+            with self.subTest(rid=rid):
+                command = rust_component_test_command(root, rid)
+                packages = [command[index + 1] for index, value in enumerate(command) if value == "-p"]
+                expected = workspace if rid.startswith("linux-") else shipping
+                self.assertEqual(set(packages), expected)
+                self.assertEqual(len(packages), len(expected))
+                self.assertEqual(command[:6], ["cargo", "test", "--release", "--locked", "--manifest-path", root / "engine/Cargo.toml"])
+                self.assertNotIn("--workspace", command)
+                self.assertNotIn("--lib", command)  # Keep integration and documentation tests.
+                self.assertIn("--no-default-features", command)
+                self.assertEqual(set(command[command.index("--features") + 1].split(",")),
+                                 {"ccp_bridge/ort-plane", "ccp_bridge/wgpu-lut", "ccp_bridge/rust-inference"})
+
     def test_runtime_missing_provider_or_notice_is_rejected(self):
         helper = fixtures.NativePackageTests()
         with tempfile.TemporaryDirectory() as folder:

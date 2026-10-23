@@ -19,6 +19,22 @@ from fetch_gpu_runtime import fetch, fetch_vc_redist
 from package_support import native_version, source_identity
 
 
+def rust_component_test_command(root: Path, rid: str) -> list:
+    """Test every shipping crate; the Rust inference fallback ships only on Linux."""
+    system = TARGETS[rid][0]
+    packages = ["ccp_core", "ccp_detect", "ccp_bridge"]
+    if system == "Linux":
+        packages.append("ccp_wgpu_infer")
+    command = ["cargo", "test", "--release", "--locked", "--manifest-path", root / "engine/Cargo.toml"]
+    for package in packages:
+        command += ["-p", package]
+    # Match the worker features explicitly without selecting target-inactive
+    # workspace packages as standalone binaries on Windows and macOS.
+    command += ["--no-default-features", "--features",
+                "ccp_bridge/ort-plane,ccp_bridge/wgpu-lut,ccp_bridge/rust-inference"]
+    return command
+
+
 def emitted_package_versions(package: Path, payload: Path, rid: str, version: str) -> dict:
     """Check emitted OS metadata rather than inferring versions from filenames."""
     if rid.startswith("win-"):
@@ -179,8 +195,10 @@ def main():
         # Component tests are distinct from interactive UI/hardware acceptance.
         report["component_tests"] = {}
         component_failures = []
+        rust_tests = rust_component_test_command(root, args.rid)
+        report["rust_component_packages"] = [rust_tests[index + 1] for index, value in enumerate(rust_tests) if value == "-p"]
         component_commands = {
-            "rust_workspace": ["cargo", "test", "--release", "--locked", "--manifest-path", root / "engine/Cargo.toml", "--workspace"],
+            "rust_workspace": rust_tests,
             "dotnet_engine": ["dotnet", "test", root / "app/ColorCorrect.Engine.Tests/ColorCorrect.Engine.Tests.csproj", "-c", "Release",
                 "-p:RestoreLockedMode=true", "--logger", "trx;LogFileName=engine.trx", "--results-directory", evidence],
             "dotnet_headless": ["dotnet", "test", root / "app/ColorCorrect.App.Headless.Tests/ColorCorrect.App.Headless.Tests.csproj", "-c", "Release",
