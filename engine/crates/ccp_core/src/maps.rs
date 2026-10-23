@@ -856,6 +856,7 @@ mod tests {
 
     fn patch(name: &str, index: usize, lab: Lab, measured: Vec3) -> ChartPatch {
         ChartPatch {
+            provenance: None,
             name: name.into(),
             index,
             reference_lab_d50: lab,

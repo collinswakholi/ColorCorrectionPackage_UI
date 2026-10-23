@@ -36,7 +36,7 @@ public static class EnginePaths
             return root;
         }
 
-        throw new DirectoryNotFoundException("Could not find the ColorCorrect Studio folder (models/opt2 + refs/neutrals.json).");
+        throw new DirectoryNotFoundException("Could not find CCP_New_UI (models/opt2 + refs/neutrals.json).");
     }
 
     public static bool TryFindExecutable(out string exePath)
@@ -51,7 +51,9 @@ public static class EnginePaths
 
         var names = OperatingSystem.IsWindows()
             ? new[] { "ccp-engine.exe" }
-            : new[] { "ccp-engine", "ccp-engine.exe" };
+            : OperatingSystem.IsLinux()
+                ? new[] { "ccp-engine-launch", "ccp-engine", "ccp-engine.exe" }
+                : new[] { "ccp-engine", "ccp-engine.exe" };
 
         var starts = CandidateStarts().ToList();
         if (TryFindRepoRoot(out var repoRoot))
@@ -101,37 +103,6 @@ public static class EnginePaths
             "The ColorCorrect processing engine was not found. Build it with scripts/start_desktop.ps1 or set CCP_ENGINE_EXE.");
     }
 
-    public static string LibTorchRoot(string? baseDirectory = null, string? cudaRoot = null)
-    {
-        var env = Environment.GetEnvironmentVariable("CCP_LIBTORCH_ROOT")
-                  ?? Environment.GetEnvironmentVariable("LIBTORCH_PATH");
-        if (!string.IsNullOrWhiteSpace(env))
-        {
-            return env;
-        }
-
-        var addon = cudaRoot ?? LibTorchCudaInstaller.DestRoot();
-        if (LibTorchCudaInstaller.HasCudaTree(addon)) return addon;
-
-        // Portable packages keep their CPU runtime beside the published app.
-        // Explicit environment configuration still wins for CUDA/custom trees.
-        var appBase = baseDirectory ?? AppContext.BaseDirectory;
-        foreach (var bundled in new[]
-                 {
-                     Path.Combine(appBase, "libtorch"),
-                     Path.GetFullPath(Path.Combine(appBase, "..", "libtorch")),
-                 })
-        {
-            if (File.Exists(Path.Combine(bundled, "libtorch.json")))
-            {
-                return bundled;
-            }
-        }
-
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(local, "CCP-New", "libtorch");
-    }
-
     private static IEnumerable<string> CandidateStarts()
     {
         var seen = new HashSet<string>(OperatingSystem.IsWindows()
@@ -155,6 +126,9 @@ public static class EnginePaths
             }
         }
 
+        // Launchers identify the extracted package explicitly. Honor that root
+        // before a source checkout in the launch directory.
+        Add(Environment.GetEnvironmentVariable("CCP_NEW_UI_ROOT"));
         Add(Directory.GetCurrentDirectory());
         Add(AppContext.BaseDirectory);
         try

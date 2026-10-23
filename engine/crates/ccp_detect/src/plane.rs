@@ -178,7 +178,8 @@ pub fn detect_plane(
 }
 
 #[cfg(feature = "ort-plane")]
-fn resize_rgb_to_nchw(rgb: &[u8], width: u32, height: u32, size: i32) -> Vec<f32> {
+/// Shared bilinear preprocessing for production inference and isolated benchmarks.
+pub fn resize_rgb_to_nchw(rgb: &[u8], width: u32, height: u32, size: i32) -> Vec<f32> {
     let size = size.max(1) as u32;
     let mut chw = vec![0.0f32; (3 * size * size) as usize];
     for y in 0..size {
@@ -219,7 +220,7 @@ fn parse_yolo_output(data: &[f32], dims: &[i64], img_w: i32, img_h: i32) -> Vec<
         [n, c] if *c <= 64 => (*c as usize, *n as usize, false),
         _ => return Vec::new(),
     };
-    if channels < 5 || num_preds == 0 {
+    if channels < 5 || num_preds == 0 || channels.checked_mul(num_preds) != Some(data.len()) {
         return Vec::new();
     }
     let num_classes = channels - 4;
@@ -269,150 +270,54 @@ fn parse_yolo_output(data: &[f32], dims: &[i64], img_w: i32, img_h: i32) -> Vec<
     nms_boxes(dets, PLANE_NMS)
 }
 
+/// Decode and select the same largest/shrunken plane used by production.
 #[cfg(feature = "ort-plane")]
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PlaneEp {
-    Cuda,
-    DirectMl,
-    OpenVino,
-    CoreMl,
-    Cpu,
+pub fn plane_box_from_output(data: &[f32], dims: &[i64], width: i32, height: i32) -> Option<Rect> {
+    select_plane_box(&parse_yolo_output(data, dims, width, height), PLANE_SHRINK)
 }
 
 #[cfg(feature = "ort-plane")]
-impl PlaneEp {
-    fn key(self) -> &'static str {
-        match self {
-            Self::Cuda => "cuda",
-            Self::DirectMl => "directml",
-            Self::OpenVino => "openvino",
-            Self::CoreMl => "coreml",
-            Self::Cpu => "cpu",
-        }
-    }
-}
-
-#[cfg(feature = "ort-plane")]
-fn plane_ep_order() -> Vec<PlaneEp> {
-    use crate::probe::{runtime_assignment, runtime_policy, DevicePolicy};
-    let policy = runtime_policy();
-    let want = runtime_assignment().plane;
-    let mut order = match policy {
-        DevicePolicy::Cpu => vec![PlaneEp::Cpu],
-        DevicePolicy::Cuda => vec![PlaneEp::Cuda, PlaneEp::DirectMl, PlaneEp::Cpu],
-        DevicePolicy::DirectMl => vec![PlaneEp::DirectMl, PlaneEp::Cpu],
-        DevicePolicy::OpenVino => vec![PlaneEp::OpenVino, PlaneEp::Cpu],
-        DevicePolicy::Mlx => vec![PlaneEp::CoreMl, PlaneEp::Cpu],
-        DevicePolicy::Auto => vec![
-            PlaneEp::Cuda,
-            PlaneEp::OpenVino,
-            PlaneEp::DirectMl,
-            PlaneEp::CoreMl,
-            PlaneEp::Cpu,
-        ],
-    };
-    if let Some(pref) = match want.as_str() {
-        "cuda" => Some(PlaneEp::Cuda),
-        "directml" => Some(PlaneEp::DirectMl),
-        "openvino" => Some(PlaneEp::OpenVino),
-        "coreml" => Some(PlaneEp::CoreMl),
-        "cpu" => Some(PlaneEp::Cpu),
-        _ => None,
-    } {
-        order.retain(|e| *e != pref);
-        order.insert(0, pref);
-    }
-    let mut seen = Vec::new();
-    order.retain(|e| {
-        if seen.contains(e) {
-            false
-        } else {
-            seen.push(*e);
-            true
-        }
-    });
-    order
-}
-
-#[cfg(feature = "ort-plane")]
-fn commit_plane_session(
-    model_path: &std::path::Path,
-    ep: PlaneEp,
-) -> Result<ort::session::Session, String> {
-    use ort::ep::ExecutionProvider;
-    use ort::session::Session;
-
-    let mut builder = Session::builder().map_err(|e| e.to_string())?;
-    let threads = crate::probe::runtime_assignment().threads.max(1) as usize;
-    builder = builder
-        .with_intra_threads(threads)
-        .map_err(|e| e.to_string())?;
-    match ep {
-        PlaneEp::Cpu => {}
-        PlaneEp::Cuda => {
-            ort::ep::CUDA::default()
-                .register(&mut builder)
-                .map_err(|e| e.to_string())?;
-        }
-        PlaneEp::DirectMl => {
-            ort::ep::DirectML::default()
-                .register(&mut builder)
-                .map_err(|e| e.to_string())?;
-        }
-        PlaneEp::OpenVino => {
-            ort::ep::OpenVINO::default()
-                .register(&mut builder)
-                .map_err(|e| e.to_string())?;
-        }
-        PlaneEp::CoreMl => {
-            ort::ep::CoreML::default()
-                .register(&mut builder)
-                .map_err(|e| e.to_string())?;
-        }
-    }
-    builder
-        .commit_from_file(model_path)
-        .map_err(|e| e.to_string())
-}
+use crate::gpu_inference::{provider_order as plane_ep_order, commit_inference_session as commit_plane_session, InferenceSession};
 
 #[cfg(feature = "ort-plane")]
 struct CachedPlane {
-    path: std::path::PathBuf,
+    model_identity: String,
     policy: String,
     ep: String,
-    session: ort::session::Session,
+    session: InferenceSession,
 }
 
 #[cfg(feature = "ort-plane")]
 static PLANE_SESSION: std::sync::Mutex<Option<CachedPlane>> = std::sync::Mutex::new(None);
 
-/// Execution provider last used for plane crop (`cuda`, `directml`, `openvino`, `coreml`, `cpu`).
+#[cfg(feature = "ort-plane")]
+pub(crate) fn clear_session() {
+    if let Ok(mut cache) = PLANE_SESSION.lock() { *cache = None; }
+}
+
+static PLANE_EXECUTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn reset_plane_execution() {
+    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = None; }
+}
+
+/// Provider that actually completed inference in the current processing request.
 pub fn last_plane_ep() -> Option<String> {
-    #[cfg(feature = "ort-plane")]
-    {
-        PLANE_SESSION
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|c| c.ep.clone()))
-    }
-    #[cfg(not(feature = "ort-plane"))]
-    {
-        None
-    }
+    PLANE_EXECUTION.lock().ok().and_then(|used| used.clone())
 }
 
 #[cfg(feature = "ort-plane")]
 fn plane_session_mut(
     model_path: &std::path::Path,
 ) -> Result<std::sync::MutexGuard<'static, Option<CachedPlane>>, PlaneError> {
-    use crate::probe::runtime_policy;
-    let policy = runtime_policy().as_str().to_string();
+    let policy = crate::cache_key::runtime_cache_identity();
+    let model_identity = crate::cache_key::model_cache_identity(model_path);
     let mut guard = PLANE_SESSION
         .lock()
         .map_err(|e| PlaneError::Message(e.to_string()))?;
     let reuse = guard
         .as_ref()
-        .is_some_and(|c| c.path == model_path && c.policy == policy);
+        .is_some_and(|c| c.model_identity == model_identity && c.policy == policy);
     if reuse {
         return Ok(guard);
     }
@@ -420,24 +325,18 @@ fn plane_session_mut(
     for ep in plane_ep_order() {
         match commit_plane_session(model_path, ep) {
             Ok(session) => {
-                if ep != PlaneEp::Cpu {
-                    eprintln!("ccp_detect: plane ONNX on {}", ep.key());
-                } else if last_err != "no plane execution provider" {
-                    eprintln!("ccp_detect: plane ONNX fell back to CPU ({last_err})");
-                }
+                eprintln!("ccp_detect: plane ONNX on {}", ep.key());
                 *guard = Some(CachedPlane {
-                    path: model_path.to_path_buf(),
+                    model_identity: model_identity.clone(),
                     policy,
-                    ep: ep.key().into(),
+                    ep: session.backend(ep),
                     session,
                 });
                 return Ok(guard);
             }
             Err(err) => {
-                if ep != PlaneEp::Cpu {
-                    eprintln!("ccp_detect: plane {} unavailable: {err}", ep.key());
-                }
-                last_err = err;
+                eprintln!("ccp_detect: plane {} unavailable: {err}", ep.key());
+                last_err.push_str(&format!("; {}: {err}", ep.key()));
             }
         }
     }
@@ -451,39 +350,36 @@ fn detect_plane_ort(
     height: u32,
     model_path: &std::path::Path,
 ) -> Result<Option<Rect>, PlaneError> {
-    use ort::value::Tensor;
-
     let chw = resize_rgb_to_nchw(rgb, width, height, PLANE_INPUT);
-    let input = Tensor::from_array((
-        [1i64, 3, i64::from(PLANE_INPUT), i64::from(PLANE_INPUT)],
-        chw,
-    ))
-    .map_err(|e| PlaneError::Message(e.to_string()))?;
     let mut guard = plane_session_mut(model_path)?;
     let session = guard
         .as_mut()
         .ok_or_else(|| PlaneError::Message("plane session missing".into()))?;
-    let outputs = session
-        .session
-        .run(ort::inputs![input])
-        .map_err(|e| PlaneError::Message(e.to_string()))?;
-    let (dims, data) = extract_first_f32(&outputs)?;
-    let dets = parse_yolo_output(&data, &dims, width as i32, height as i32);
-    Ok(select_plane_box(&dets, PLANE_SHRINK))
+    let (dims,data)=session.session.forward(chw,PLANE_INPUT as usize).map_err(PlaneError::Message)?;
+    validate_output(&dims,&data)?;
+    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = Some(session.ep.clone()); }
+    Ok(plane_box_from_output(
+        &data,
+        &dims,
+        width as i32,
+        height as i32,
+    ))
 }
 
 #[cfg(feature = "ort-plane")]
-fn extract_first_f32(
-    outputs: &ort::session::SessionOutputs<'_>,
-) -> Result<(Vec<i64>, Vec<f32>), PlaneError> {
-    let (_name, value) = outputs
-        .iter()
-        .next()
-        .ok_or_else(|| PlaneError::Message("empty plane output".into()))?;
-    let (shape, data) = value
-        .try_extract_tensor::<f32>()
-        .map_err(|e| PlaneError::Message(e.to_string()))?;
-    Ok((shape.iter().copied().collect(), data.to_vec()))
+fn validate_output(dims: &[i64], data: &[f32]) -> Result<(), PlaneError> {
+    let valid = matches!(dims, [1, c, n] | [c, n] if (5..=64).contains(c) && *n > 0)
+        || matches!(dims, [1, n, c] | [n, c] if (5..=64).contains(c) && *n > 0);
+    let count = dims.iter().try_fold(1usize, |a, &d| {
+        usize::try_from(d).ok().and_then(|v| a.checked_mul(v))
+    });
+    if !valid || count != Some(data.len()) || !data.iter().all(|v| v.is_finite()) {
+        return Err(PlaneError::Message(format!(
+            "malformed plane output: shape {dims:?}, length {}",
+            data.len()
+        )));
+    }
+    Ok(())
 }
 
 /// Detect the plane or fall back to the full frame (FFC miss path).

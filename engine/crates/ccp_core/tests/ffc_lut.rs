@@ -42,6 +42,7 @@ fn cube_has_lut_size_and_no_ffc() {
 
 fn dummy_patch(index: usize, name: &str, rgb: [f64; 3]) -> ChartPatch {
     ChartPatch {
+        provenance: None,
         name: name.into(),
         index,
         reference_lab_d50: Lab::new(50.0, 0.0, 0.0),

@@ -3,19 +3,13 @@
 Requires nbformat, nbclient and ipykernel (QA only, not SDK dependencies).
 """
 from pathlib import Path
-import argparse
-import os
 import tempfile
 import time
 
 import nbformat
 from nbclient import NotebookClient
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[2])
-args = parser.parse_args()
-root = args.root.resolve()
-os.environ['COLORCORRECT_ROOT'] = str(root)
+root = Path(__file__).resolve().parents[2]
 out = Path(tempfile.mkdtemp(prefix="colorcorrect-notebook-qa-"))
 print("Executed notebook copies:", out, flush=True)
 for path in sorted((root / "notebooks").glob("*.ipynb")):

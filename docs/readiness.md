@@ -1,0 +1,50 @@
+# Readiness ledger
+
+This ledger distinguishes corrected source from validated packages. No commit, push, remote workflow or publication is part of the local readiness run.
+
+## Current 0.2.0 source
+
+The native app and internal Rust packages are now version 0.2.0; the independently versioned Python SDK remains 2.2.1. Current source adds cancellation before input preparation, background preparation with captured chart-face/rendering inputs, verified atomic repair of interrupted session assets, and responsive session disk operations guarded against stale asynchronous completion. Previous successful results and sessions remain available when an operation fails or is canceled.
+
+Host checks pass: 126 headless UI tests, 63 engine component tests with one explicit real-worker skip, and 51 source/packaging tests. Related 29-test and focused 13-test/one-test checks overlap those suites and are not additional totals. The unchanged SDK has 48 host contract tests. These component results do not establish installed application acceptance.
+
+Fresh Windows Sandbox and WSL acceptance for the final 0.2.0 packages is pending and will be recorded separately in ignored `_implementation/retest-ten` evidence. Native ARM64 and Apple-silicon macOS validation remains outstanding; prepared workflows have not been run.
+
+## Historical candidate evidence
+
+The table and installed-run records below describe the earlier native 0.1.0 candidates through RC8. They preserve earlier failures and their verified corrections; they are not results for the new 0.2.0 packages. Exact package identities and chronology remain in ignored `_implementation/release-readiness` evidence.
+
+| Finding | Action / evidence | Recorded state for earlier candidates |
+| --- | --- | --- |
+| Private paths in detector metadata | Original bytes retained privately; whole-model equality excluding metadata; portable hashes match pinned upstream | Corrected; packaged model/worker identities verified separately from later UI fixes |
+| Missing model notices and plane attribution | Three-model manifest, AGPL text and notices; plane metadata identifies Ultralytics 8.4.12 | Source corrected; redistribution limitations disclosed |
+| Stale Torch/video/ICC instructions | Current guides rewritten; historical research preserved locally | Local documentation links and current-source inventory pass |
+| Confusing processing choices | Auto/CPU/GPU use Fast by default; detection GPU requirement explicit | Installed correction/provider checks pass; every advanced control is not independently certified |
+| High-DPI placement and actual minimum window | Dialog coordinate handling and scaling matrix under review | In progress |
+| Installer dependencies and native architecture targets | Windows/Linux x64/ARM64 packaging, prerequisite detection and optional setup | Final x64 candidates install and verify in Sandbox/WSL; ARM64 jobs prepared but not run |
+| Method/FFC and focused interaction coverage | Component tests on host; final installed app/API in Sandbox and WSL | Five suites per guest pass, including 25 correction/FFC combinations and 100 full-resolution applications per guest; exhaustive native control coverage remains incomplete |
+| Identical-content relink terminates the UI | Correct bitmap ownership across displayed/cached/pending images; preserve unresolved session state | Original native WSL reproduction fixed and retested, including GC/Original previews and saved unresolved session |
+| Batch cancellation and queue/session changes | Capture queued items/settings and retain completed results | Both guests complete native 80-item and 20-item queues with zero failures; cancellation retains completed results; installed SDK partial-failure/recovery is separate evidence |
+| Batch progress and optional previews | Capture preview choice per batch/result; reuse stage/job indicators for the current image and the batch bar for the queue; preview-off writes owned full-resolution output for Save | Worker callbacks describe actual FFC, combined LUT and writes; four new release regressions and the full 42-test bridge library pass; final installed feature checks are separate from the earlier 100-preview soak |
+| Completed preview writer threads retain Windows handles | Reap completed preview encoders, join outside the registry lock, preserve writes still in progress | Six release-mode preview regressions pass (four new); final Windows native worker stays at 466 handles from warmup through 80 and 100 previews, with one completed encoder retained |
+| WSL native GTK file picker can terminate the process | Use the already bundled managed dialogs only on Linux identified as WSL; preserve native dialogs elsewhere | Twelve policy cases pass; final native picker evidence is separate from the preceding application soak |
+| Managed WSL picker opens too wide and does not cancel on Escape | Register the bounded window through the provider's required options service; close only on unhandled Escape through existing cancellation | Nine provider/layout cases pass; actual application startup reproduced the discarded custom factory before the fix; final native checks remain separate |
+| Missing private runtime could borrow a development dependency | Explicit SDK roots pin the selected runtime even when missing | Negative dependency tests verify actionable failure; installed modules and runtime locations are recorded |
+| Intermittent Windows atomic model-save denial | Retry only WinError 5/32/33 for at most five delays totaling 310 ms; retain atomic replacement and permanent errors | Original failure reproduced in 1/20 repeated cases; real reader-lock/read-only regressions pass and 100 repeated workflows pass after the fix |
+| Installer manifest included a build-only file | Keep installer metadata outside the application payload/manifest | Fresh offline Windows Setup verifies all 381 installed files and three wheel modules without exceptions |
+| Mac source build and SDK resolved different runtime locations | Stage a checked private local build root used by GUI and explicit SDK discovery | Four host regressions pass; native Mac execution remains pending, with source-only delivery |
+| Large local build caches and private experiments | Manifest-based current-source export; exact cache allowlist with containment/reparse checks; nested diagnostics hash-archived | An interruption after 22 targets is retained in the cleanup history; final removed/regenerated targets and evidence are recorded in the local handoff |
+| Historical probes requiring private outputs | Five bridge research examples hash-archived locally; current Fast LUT tests and benchmarks retain the relevant modern coverage | No production code/regression tests removed; Cargo metadata validates remaining examples |
+| Git-ready history and unstaged changes | Full history fetched; preparation branch attached at the pinned upstream commit without checking out files | Attached; staging empty; no commit/push |
+| Portable example fixtures | Five public photographs restored byte-identically to their Git blobs; notebook/API/Rust example paths use this corpus; sixth private corpus item explicitly excluded | Source closure and notebook syntax checks pass; private layout fixtures require an explicit directory and missing fixtures exit skipped, not passed |
+| Native ARM/physical Linux/macOS GPU coverage | CI and native evidence remain separately recorded | Outstanding; macOS source-only |
+
+Detailed raw evidence stays in ignored `_implementation/release-readiness` and earlier validation folders. Missing fixtures, failed attempts and unavailable hardware must remain explicit in the final report.
+
+The older upstream `integration_all_methods.py` CPU-inference sweep is replaced by the installed-package CC/FFC stress matrix plus RPCC3/multilayer-NN cross-validation cases. The earlier video-stub integration script is replaced by Python API-absence coverage and native case-insensitive command rejection/no-artifact/recovery checks. These preserve the relevant behavior checks without restoring removed APIs.
+
+Source/cache-safety tests cover protection of Rust `src/bin` source, retained `TestResults` evidence, POSIX line endings, private-content scanning and junction/reparse-point rejection on Python versions without `Path.is_junction`. Missing-private-fixture and hash-mismatch preflight checks produce explicit skipped/failed records before launching a worker. Both notebooks parse as JSON with all ten code cells syntactically valid and no saved execution outputs. The public identity fixture passes the host CPU-only regression in both processing methods. Final guest package hashes and installed edge-case outcomes are recorded separately; syntax checks are not acceptance evidence.
+
+The earlier 23 October handoff retains immutable source manifests and artifact checksums. Its full 42-test bridge library passed after actual stage callbacks, including four new progress cases and six preview/reaper regressions. Earlier workspace-wide Rust totals, 49-test engine results and 43-test source/packaging results describe those snapshots; current 0.2.0 host counts are listed above. Export integrity and installed package evidence remain separate from component tests.
+
+Those earlier installed Sandbox and WSL runs passed bootstrap, inference, API, edge and stress suites. Native relink, cancellation, restart and 100 UI-preview applications were recorded for their specified candidates; the full-resolution SDK workload, native UI work, final dialog checks and performance observations are distinct evidence. These historical successes do not erase failed attempts or certify the later 0.2.0 source changes. Per-platform package identities, remaining UI/display gaps and native interaction records are retained in the local handoff and [historical native validation status](native-validation.md).

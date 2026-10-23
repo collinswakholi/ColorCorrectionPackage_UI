@@ -594,6 +594,20 @@ pub fn lab_d50_to_srgb(lab: Lab) -> Result<Vec3> {
     )?)))
 }
 
+/// Reference conversion for fitting. Display swatches use the clipped helper
+/// above; clipping an out-of-gamut reference here would change its target.
+pub fn lab_d50_to_srgb_unclipped(lab: Lab) -> Result<Vec3> {
+    let d65 = parse_white_point("d65")?;
+    let srgb = parse_rgb_color_space("srgb", &d65)?;
+    Ok(lab_d50_to_target_linear(lab, &srgb, &d65)?.map(|v| {
+        if v <= 0.0031308 {
+            12.92 * v
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        }
+    }))
+}
+
 pub fn convert_encoded_rgb(
     value: Vec3,
     source_space: &RgbColorSpace,

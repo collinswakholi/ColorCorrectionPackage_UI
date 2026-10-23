@@ -27,7 +27,20 @@ public sealed class SpeedyWorker : IAsyncDisposable
     public string Policy { get; set; } = "auto";
     public string RepoRoot => _repoRoot;
     public string ExePath => _exePath;
+    public IReadOnlySet<string> Capabilities { get; private set; } = new HashSet<string>();
     public event Action<string>? Progress;
+
+    public async Task RequireCapabilityAsync(string capability, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!IsAlive()) await StartLockedAsync(cancellationToken).ConfigureAwait(false);
+            if (!Capabilities.Contains(capability))
+                throw new NotSupportedException($"This worker does not support {capability}. Build or install the matching ColorCorrect engine before using custom references.");
+        }
+        finally { _gate.Release(); }
+    }
 
     public SpeedyWorker(string? exePath = null, string? repoRoot = null)
     {
@@ -54,7 +67,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }
     }
 
-    /// <summary>Recycle the worker (forced-CPU or CUDA add-on just installed). Do not call on a single timeout.</summary>
+    /// <summary>Recycle the worker after a runtime or backend change. Do not call on a single timeout.</summary>
     public async Task RestartAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -89,7 +102,13 @@ public sealed class SpeedyWorker : IAsyncDisposable
             JsonElement result;
             try
             {
-                result = await ReadResultAsync(_process.StandardOutput, timeout.Value, Progress).ConfigureAwait(false);
+                result = await ReadResultAsync(_process.StandardOutput, timeout.Value, Progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                LastError = "Processing cancelled. The worker will restart for the next operation.";
+                await StopLockedAsync().ConfigureAwait(false);
+                throw;
             }
             catch (TimeoutException)
             {
@@ -166,6 +185,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
 
             return new DetectOutcome(ok, json, handshakePath, chartType, charts, error);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             return new DetectOutcome(false, "", "", "", 0, ex.Message);
@@ -224,10 +244,6 @@ public sealed class SpeedyWorker : IAsyncDisposable
             StandardErrorEncoding = Encoding.UTF8,
         };
         psi.Environment["CCP_NEW_UI_ROOT"] = _repoRoot;
-        psi.Environment["CCP_LIBTORCH_ROOT"] = EnginePaths.LibTorchRoot();
-        psi.Environment["LIBTORCH"] = EnginePaths.LibTorchRoot();
-        psi.Environment["LIBTORCH_PATH"] = EnginePaths.LibTorchRoot();
-        psi.Environment["KMP_DUPLICATE_LIB_OK"] = "TRUE";
         var extras = new List<string>();
         var engineDir = Path.GetDirectoryName(_exePath);
         if (!string.IsNullOrWhiteSpace(engineDir))
@@ -238,12 +254,6 @@ public sealed class SpeedyWorker : IAsyncDisposable
             {
                 psi.Environment["ORT_DYLIB_PATH"] = ortDll;
             }
-        }
-        var torch = EnginePaths.LibTorchRoot();
-        if (Directory.Exists(torch))
-        {
-            extras.Add(torch);
-            extras.Add(Path.Combine(torch, "lib"));
         }
         if (extras.Count > 0)
         {
@@ -279,6 +289,11 @@ public sealed class SpeedyWorker : IAsyncDisposable
             await StopLockedAsync().ConfigureAwait(false);
             throw new TimeoutException(LastError);
         }
+        catch (OperationCanceledException)
+        {
+            await StopLockedAsync().ConfigureAwait(false);
+            throw;
+        }
 
         if (string.IsNullOrWhiteSpace(ready))
         {
@@ -289,6 +304,9 @@ public sealed class SpeedyWorker : IAsyncDisposable
 
         using var doc = JsonDocument.Parse(ready);
         var root = doc.RootElement;
+        Capabilities = root.TryGetProperty("capabilities", out var capabilities) && capabilities.ValueKind == JsonValueKind.Array
+            ? capabilities.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>();
         var ok = root.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
         Device = root.TryGetProperty("device", out var dev) ? dev.GetString() ?? "" : "";
         Warmed = root.TryGetProperty("warmed", out var warm) && warm.GetBoolean();
@@ -303,10 +321,10 @@ public sealed class SpeedyWorker : IAsyncDisposable
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(LastError) ? "worker ready failed" : LastError);
         }
 
-        await TryWarmupLockedAsync().ConfigureAwait(false);
+        await TryWarmupLockedAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task TryWarmupLockedAsync()
+    private async Task TryWarmupLockedAsync(CancellationToken cancellationToken)
     {
         if (_process is not { HasExited: false })
         {
@@ -322,7 +340,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         {
             await _process.StandardInput.WriteLineAsync(line.AsMemory(), CancellationToken.None).ConfigureAwait(false);
             await _process.StandardInput.FlushAsync(CancellationToken.None).ConfigureAwait(false);
-            var result = await ReadResultAsync(_process.StandardOutput, TimeSpan.FromMinutes(8), Progress).ConfigureAwait(false);
+            var result = await ReadResultAsync(_process.StandardOutput, TimeSpan.FromMinutes(8), Progress, cancellationToken).ConfigureAwait(false);
             var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
             Device = result.TryGetProperty("device", out var dev) ? dev.GetString() ?? Device : Device;
             Warmed = result.TryGetProperty("warmed", out var warm) && warm.GetBoolean();
@@ -335,6 +353,11 @@ public sealed class SpeedyWorker : IAsyncDisposable
             {
                 LastError = err.GetString() ?? LastError;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            await StopLockedAsync().ConfigureAwait(false);
+            throw;
         }
         catch (Exception ex)
         {
@@ -429,7 +452,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }, cancellationToken);
     }
 
-    private static async Task<JsonElement> ReadResultAsync(StreamReader reader, TimeSpan timeout, Action<string>? progress)
+    private static async Task<JsonElement> ReadResultAsync(StreamReader reader, TimeSpan timeout, Action<string>? progress, CancellationToken cancellationToken = default)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (true)
@@ -440,7 +463,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
                 throw new TimeoutException("timed out waiting for the worker");
             }
 
-            var line = await ReadLineAsync(reader, remain, CancellationToken.None).ConfigureAwait(false);
+            var line = await ReadLineAsync(reader, remain, cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(line))
             {
                 throw new InvalidOperationException("worker returned an empty line");

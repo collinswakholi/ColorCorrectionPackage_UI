@@ -1,8 +1,0 @@
-@{
-    # SHA-256 values are pinned to the exact official artifacts used by ColorCorrect Studio.
-    # Updating a runtime version requires an explicit hash review here.
-    'libtorch-win-cpu-2.9.1' = 'D97DF5305942160020067B553243FC2845B83549A6FEC27C7FDB7957A9AA4A23'
-    'libtorch-win-cuda-2.9.1-cu126' = '459B701BDDBFB470E71AAFDC9EF17A6854DFD1784B8378CCB9F28D4D8E5BDED3'
-    'Microsoft.ML.OnnxRuntime.DirectML.1.22.1' = '210823F9932F81F222E2D05D04531D948A4D75DBF527DFB94195AD61371AB728'
-    'Microsoft.AI.DirectML.1.15.4' = '4E7CB7DDCE8CF837A7A75DC029209B520CA0101470FCDF275C1F49736A3615B9'
-}

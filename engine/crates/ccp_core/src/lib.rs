@@ -12,6 +12,7 @@ pub mod mlp;
 pub mod phase2;
 pub mod pls;
 pub mod refs;
+pub mod reference_profile;
 pub mod sample;
 pub mod stages;
 

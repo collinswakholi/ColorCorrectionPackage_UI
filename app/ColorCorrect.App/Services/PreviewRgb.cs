@@ -16,7 +16,7 @@ internal static class PreviewRgb
         height = 0;
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             return TryReadHeader(stream, out width, out height);
         }
         catch
@@ -45,7 +45,7 @@ internal static class PreviewRgb
     {
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             if (!TryReadHeader(stream, out var width, out var height))
             {
                 return null;

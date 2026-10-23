@@ -9,7 +9,7 @@ public partial class SplashWindow : Window
     {
         InitializeComponent();
         var version = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = version is null ? "0.1.0" : $"Version {version.Major}.{version.Minor}.{version.Build}";
+        VersionText.Text = version is null ? "Version unavailable" : $"Version {version.Major}.{version.Minor}.{version.Build}";
     }
 
     public void SetStatus(string message)

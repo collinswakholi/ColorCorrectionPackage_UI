@@ -1,18 +1,31 @@
 //! Speedy Opt2 assemble, OBB decode, plane crop, and accelerator probe.
 
 pub mod assemble;
+pub mod cache_key;
 pub mod decode;
 pub mod geom;
-pub mod gpu_lut;
+#[cfg(feature = "ort-plane")]
+pub mod gpu_inference;
 pub mod handshake;
 pub mod infer;
 #[cfg(feature = "ort-plane")]
 pub mod infer_ort;
-#[cfg(feature = "ort-plane")]
-pub mod lut_ort;
+pub mod lut_chunks;
+pub mod lut_wgpu;
 pub mod paths;
 pub mod plane;
 pub mod probe;
+
+/// Release native sessions and GPU plugin resources before process teardown.
+pub fn shutdown_inference() -> Result<(), String> {
+    #[cfg(feature = "ort-plane")]
+    {
+        infer_ort::clear_sessions();
+        plane::clear_session();
+        gpu_inference::shutdown()?;
+    }
+    Ok(())
+}
 
 use std::path::PathBuf;
 
@@ -30,13 +43,10 @@ pub use geom::{
     CHART_ROWS, CHART_TYPES, DECODE_IOU, DEFAULT_CONF, DEFAULT_CROP, DEFAULT_MAX_DET,
     LETTERBOX_PAD, NMS_CHARTS_IOU, NUM_CLASSES, PRIMARY_SIZE, RECALL_SIZE,
 };
-pub use gpu_lut::apply_encoded_lut_gpu;
 pub use handshake::make_handshake;
-pub use infer::{detect_chart, libtorch_required_error, warmup_detector, LIBTORCH_DISABLED};
+pub use infer::{detect_chart, warmup_detector};
 #[cfg(feature = "ort-plane")]
 pub use infer_ort::last_detect_ep;
-#[cfg(feature = "ort-plane")]
-pub use lut_ort::apply_encoded_lut_ort;
 pub use paths::{default_deploy_dir, find_ccp_new_ui_root};
 pub use plane::{
     last_plane_ep, parse_crop_rect, plane_or_full, Rect as PlaneRect, PLANE_CONF, PLANE_INPUT,
@@ -106,8 +116,8 @@ impl Default for DetectResult {
             quad: String::new(),
             chart_type: String::new(),
             recall_source: "none".into(),
-            backend: "torchscript".into(),
-            runtime: "libtorch".into(),
+            backend: "onnx".into(),
+            runtime: "ort".into(),
             device: String::new(),
             n_dets: 0,
             n_charts: 0,

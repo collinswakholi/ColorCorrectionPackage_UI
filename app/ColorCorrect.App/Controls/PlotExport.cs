@@ -3,7 +3,6 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
-using ColorCorrect.App.Services;
 using ColorCorrect.Engine;
 
 namespace ColorCorrect.App.Controls;
@@ -34,7 +33,7 @@ internal static class PlotExport
 
         using var bitmap = new RenderTargetBitmap(new PixelSize(w, h), new Vector(96, 96));
         bitmap.Render(visual);
-        BitmapExport.Save(bitmap, path);
+        ColorCorrect.App.Services.BitmapExport.Save(bitmap, path);
     }
 
     public static string WithSuffix(string path, string suffix)

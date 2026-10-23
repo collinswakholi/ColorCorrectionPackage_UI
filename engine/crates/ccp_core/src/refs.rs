@@ -50,6 +50,8 @@ impl Quad {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChartPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<crate::reference_profile::PatchProvenance>,
     pub name: String,
     pub index: usize,
     pub reference_lab_d50: Lab,
@@ -1239,7 +1241,7 @@ pub fn embedded_neutrals_table() -> HashMap<String, Vec<String>> {
 }
 
 pub fn neutrals_json_path() -> PathBuf {
-    if let Ok(root) = std::env::var("CCP_NEW_UI_ROOT") {
+    if let Some(root) = std::env::var_os("CCP_NEW_UI_ROOT") {
         return PathBuf::from(root).join("refs/neutrals.json");
     }
     #[cfg(debug_assertions)]

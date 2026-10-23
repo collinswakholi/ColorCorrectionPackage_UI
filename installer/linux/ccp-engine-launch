@@ -1,0 +1,25 @@
+#!/bin/sh
+# This process becomes the worker. No GPU environment reaches the desktop process.
+set -eu
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export CCP_NEW_UI_ROOT="$APP_DIR"
+: "${ORT_DYLIB_PATH:=$APP_DIR/libonnxruntime.so}"
+export ORT_DYLIB_PATH
+export LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+setting=${CCP_WSL_GPU_ADDON:-}
+if [ -z "$setting" ]; then
+    setting=0
+    if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/colorcorrect/wsl-gpu.enabled" ]; then setting=1; fi
+fi
+case "$setting" in
+    0) export CCP_WSL_GPU_ADDON_ACTIVE=0 ;;
+    1)
+        "$APP_DIR/wsl-gpu-setup" check >&2
+        export VK_DRIVER_FILES="$APP_DIR/addons/wsl-gpu/icd/dzn_icd.json"
+        export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
+        export LD_LIBRARY_PATH="$APP_DIR/addons/wsl-gpu/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
+        export CCP_WSL_GPU_ADDON_ACTIVE=1
+        ;;
+    *) echo 'CCP_WSL_GPU_ADDON must be 0 or 1.' >&2; exit 64 ;;
+esac
+exec "$APP_DIR/ccp-engine" "$@"

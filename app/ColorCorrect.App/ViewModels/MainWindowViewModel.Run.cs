@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -13,6 +14,23 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private sealed record BatchFitSnapshot(HandshakeDocument? Handshake, CorrectionOptions? Options,
+        int FaceChoice, bool UseAllFaces, int ApplyGeneration, string? Error);
+
+    private static BatchFitSnapshot CaptureBatchFit(SessionItemViewModel item, CorrectionOptions options, bool useAll)
+    {
+        var generation = ++item.ApplyGeneration;
+        try
+        {
+            return new(item.Handshake, WithItemReferences(options, item), item.FaceChoice,
+                item.UseAllFaces || useAll, generation, null);
+        }
+        catch (Exception ex)
+        {
+            return new(item.Handshake, null, item.FaceChoice, item.UseAllFaces || useAll, generation, ex.Message);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanDetect))]
     private Task DetectAsync()
     {
@@ -29,16 +47,14 @@ public partial class MainWindowViewModel
         await _run.WaitAsync().ConfigureAwait(false);
         var seq = ++item.DetectGeneration;
         var cancel = BeginJob();
+        var elapsed = Stopwatch.StartNew();
         await OnUi(() =>
         {
             Busy = true;
             BeginPipeline("detect");
             CurrentStage = "Detect";
             Status = $"Detecting {item.Name}…";
-            Log("Detect", $"Detect {item.Name}…", LogLevel.Info, [
-                $"Crop inset {Crop:0.00}",
-                $"Path {item.Path}",
-            ]);
+            Log("Detect", $"{item.Name}…");
         }).ConfigureAwait(false);
         try
         {
@@ -48,7 +64,11 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            await OnUi(() => ApplyDetect(item, result)).ConfigureAwait(false);
+            await OnUi(() =>
+            {
+                ApplyDetect(item, result);
+                if (result.Ok) Log("Time", $"Detection {elapsed.Elapsed.TotalSeconds:0.00} s");
+            }).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -62,10 +82,10 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                item.ApplyHandshake(null);
-                item.DetectLabel = ex.Message;
+                if (!Session.Contains(item)) return;
+                if (item == Active) OnPropertyChanged(nameof(ReferenceSummary));
                 RefreshDetectSummary();
-                Status = "Detect failed.";
+                Status = "Detection failed. Previous results are kept.";
                 Log("Detect", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
                 RefreshOverlay();
             }).ConfigureAwait(false);
@@ -85,13 +105,16 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanApply))]
     private async Task ApplyAsync()
     {
-        if (Active is null || !CanApply())
+        var item = Active;
+        if (item is null || !CanApply())
         {
             return;
         }
 
+
+
         var fit = !WillUseLoadedModel;
-        if (fit && Active.Handshake is not { Ok: true })
+        if (fit && item.Handshake is not { Ok: true })
         {
             Status = "Detect the chart on this image before fitting.";
             return;
@@ -109,7 +132,13 @@ public partial class MainWindowViewModel
         }
 
         await _run.WaitAsync().ConfigureAwait(false);
-        var item = Active;
+        var present = false;
+        await OnUi(() => present = Session.Contains(item)).ConfigureAwait(false);
+        if (!present)
+        {
+            _run.Release();
+            return;
+        }
         var seq = ++item.ApplyGeneration;
         var handshake = item.Handshake;
         var options = BuildOptions();
@@ -118,6 +147,7 @@ public partial class MainWindowViewModel
         var crop = Crop;
         var modelPath = LoadedModelPath;
         var cancel = BeginJob();
+        var elapsed = Stopwatch.StartNew();
         await OnUi(() =>
         {
             Busy = true;
@@ -134,14 +164,18 @@ public partial class MainWindowViewModel
         try
         {
             var outcome = fit
-                ? await _client.FitAsync(item.Path, handshake!, options, face, useAll, crop, cancel).ConfigureAwait(false)
+                ? await _client.FitAsync(item.Path, handshake!, WithItemReferences(options, item), face, useAll, crop, cancel).ConfigureAwait(false)
                 : await _client.ApplyModelAsync(item.Path, modelPath, options, cancel).ConfigureAwait(false);
             if (item.ApplyGeneration != seq)
             {
                 return;
             }
 
-            await OnUi(() => ApplyOutcome(item, outcome, fitted: fit)).ConfigureAwait(false);
+            await OnUi(() =>
+            {
+                ApplyOutcome(item, outcome, fitted: fit);
+                if (outcome.Ok) Log("Time", $"{(fit ? "Fit and apply" : "Apply")} {elapsed.Elapsed.TotalSeconds:0.00} s");
+            }).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -181,10 +215,8 @@ public partial class MainWindowViewModel
     private void CancelBatch()
     {
         _jobCts?.Cancel();
-        Status = CurrentStage.Contains("Apply", StringComparison.OrdinalIgnoreCase)
-            ? "Cancel waits for this batch to finish…"
-            : "Cancel after this image…";
-        Log("Batch", Status + " The warm worker stays up.", LogLevel.Warning);
+        Status = "Cancelling current operation… Completed results are kept.";
+        Log("Processing", Status, LogLevel.Warning);
         ToastService.ShowWarning(Status);
     }
 
@@ -212,23 +244,60 @@ public partial class MainWindowViewModel
         {
             Status = Session.Count > 0
                 ? "Select at least one still in Batch. FFC whites and corrected outputs start unchecked."
-                : "Batch needs still images.";
+                : "Add images to the session before running a batch.";
             ToastService.ShowWarning(Status);
             return;
         }
 
         await _run.WaitAsync().ConfigureAwait(false);
         var cancel = BeginJob();
-        var options = BuildOptions();
-        options.WriteOutput = false;
+        var options = CaptureBatchOptions(BuildOptions(), BatchPreviewResults);
         var modelPath = LoadedModelPath;
         var crop = Crop;
         var useAll = UseAllFaces;
+        Dictionary<SessionItemViewModel, BatchFitSnapshot> fitSnapshots = [];
+        // One batch captures one set of assets, even if files are replaced while later
+        // images wait in the queue. Per-image results then own their own replay copies.
+        await OnUi(() =>
+        {
+            Busy = true;
+            if (!applyModel)
+                fitSnapshots = items.ToDictionary(item => item, item => CaptureBatchFit(item, options, useAll));
+            BeginCapturedPipeline(applyModel ? "apply" : "fit", options);
+            CurrentStage = "Preparing";
+            Status = "Preparing batch assets…";
+        }).ConfigureAwait(false);
+        try
+        {
+            (options, modelPath) = await CaptureBatchAssetsAsync(_worker.RepoRoot, options, modelPath, applyModel, cancel).ConfigureAwait(false);
+            foreach (var snapshot in fitSnapshots.Values)
+                if (snapshot.Options is { DoFfc: true } capturedOptions)
+                    capturedOptions.WhiteImagePath = options.WhiteImagePath;
+        }
+        catch (Exception ex)
+        {
+            _run.Release();
+            await OnUi(() =>
+            {
+                Busy = false;
+                EndPipeline();
+                Status = ex is OperationCanceledException ? "Batch cancelled. Previous results are kept." : $"Could not prepare batch assets: {ex.Message}";
+                Log("Batch", Status, ex is OperationCanceledException ? LogLevel.Warning : LogLevel.Error);
+                NotifyRunCommands();
+            }).ConfigureAwait(false);
+            return;
+        }
         await OnUi(() =>
         {
             Busy = true;
             IsBatching = true;
-            BeginPipeline(applyModel ? "apply" : "fit");
+            BeginCapturedPipeline(applyModel ? "apply" : "fit", options);
+            foreach (var queued in items)
+            {
+                queued.HasProcessingProgress = true; queued.IsProcessing = false;
+                queued.ProcessingProgress = 0; queued.ProcessingStage = "Queued"; queued.ProcessingStatus = "Queued";
+            }
+            BatchProgressSummary = $"0 complete · 0 failed · {items.Length} queued";
             CurrentStage = applyModel ? "Apply model" : "Fit";
             ShowBatchProgress = true;
             ShowJobProgress = true;
@@ -237,8 +306,8 @@ public partial class MainWindowViewModel
             BatchLabel = applyModel ? "Apply current model" : "Fit from chart";
             Status = applyModel ? "Batch apply model…" : "Batch fit from chart…";
             Log("Batch", applyModel
-                ? $"Apply current model · {items.Length} image(s) · preview only · Save writes full JPEG"
-                : $"Fit from chart · {items.Length} image(s) · preview only · {options.Summary()}",
+                ? $"Apply current model · {items.Length} image(s) · {(options.BatchPreviewResults ? "previews on" : "previews off · full images kept for Save")}"
+                : $"Fit from chart · {items.Length} image(s) · {(options.BatchPreviewResults ? "previews on" : "previews off · full images kept for Save")} · {options.Summary()}",
                 LogLevel.Info,
                 applyModel
                     ? CorrectionSettingsDetails(applyOnly: true).Concat([$"Model file {modelPath}"]).ToList()
@@ -258,50 +327,42 @@ public partial class MainWindowViewModel
                     CurrentStage = "Apply model";
                 }).ConfigureAwait(false);
 
-                IReadOnlyList<CorrectionOutcome> outcomes;
-                try
-                {
-                    outcomes = await _client.ApplyManyAsync(
-                        items.Select(item => item.Path).ToArray(),
-                        modelPath,
-                        options,
-                        cancel).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    await OnUi(() => Log("Batch", "Apply cancelled before a reply arrived.", LogLevel.Warning))
-                        .ConfigureAwait(false);
-                    outcomes = [];
-                }
-
-                if (cancel.IsCancellationRequested && outcomes.Count > 0)
-                {
-                    await OnUi(() => Log(
-                        "Batch",
-                        "Cancel waited for this batch. Keeping the results that already finished.",
-                        LogLevel.Warning)).ConfigureAwait(false);
-                }
                 for (var i = 0; i < items.Length; i++)
                 {
+                    if (cancel.IsCancellationRequested) break;
                     var item = items[i];
-                    var outcome = i < outcomes.Count
-                        ? outcomes[i]
-                        : new CorrectionOutcome { Ok = false, Error = "apply failed" };
+                    if (!Session.Contains(item)) continue;
+                    var generation = item.ApplyGeneration;
                     await OnUi(() =>
                     {
-                        BatchLabel = $"{i + 1} / {items.Length} · {item.Name}";
-                        BatchProgress = 100.0 * (i + 1) / Math.Max(1, items.Length);
-                        JobProgress = BatchProgress;
-                        ApplyOutcome(item, outcome, fitted: false, fromBatch: true);
+                        BeginBatchImage(item, i, items.Length, options, applyModel: true);
                     }).ConfigureAwait(false);
-                    if (outcome.Ok)
+                    try
                     {
-                        done++;
+                        var outcome = await _client.ApplyModelAsync(item.Path, modelPath, options, cancel).ConfigureAwait(false);
+                        await OnUi(() =>
+                        {
+                            if (item.ApplyGeneration == generation)
+                                ApplyOutcome(item, outcome, fitted: false, fromBatch: true);
+                            FinishBatchImage(item, outcome.Ok);
+                        }).ConfigureAwait(false);
+                        if (outcome.Ok) done++; else failed++;
                     }
-                    else
+                    catch (OperationCanceledException)
+                    {
+                        await OnUi(() => FinishBatchImage(item, false, "Cancelled")).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (Exception ex)
                     {
                         failed++;
+                        await OnUi(() => { FinishBatchImage(item, false); Log("Batch", $"{item.Name}: {WithWorkerStderr(ex.Message)}", LogLevel.Error); }).ConfigureAwait(false);
                     }
+                    await OnUi(() =>
+                    {
+                        BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
+                        BatchProgress = 100.0 * (i + 1) / items.Length;
+                    }).ConfigureAwait(false);
                 }
             }
             else
@@ -315,18 +376,22 @@ public partial class MainWindowViewModel
                     }
 
                     var item = items[i];
+                    var snapshot = fitSnapshots[item];
+                    var present = false;
                     await OnUi(() =>
                     {
-                        BeginPipeline("fit");
-                        BatchLabel = $"{i + 1} / {items.Length} · {item.Name}";
-                        BatchProgress = 100.0 * i / Math.Max(1, items.Length);
-                        JobProgress = BatchProgress;
+                        present = Session.Contains(item);
+                        if (!present) return;
+                        BeginBatchImage(item, i, items.Length, snapshot.Options ?? options, applyModel: false);
                         Status = BatchLabel;
                     }).ConfigureAwait(false);
+                    if (!present) continue;
 
                     try
                     {
-                        if (item.Handshake is not { Ok: true })
+                        if (snapshot.Error is not null) throw new InvalidOperationException(snapshot.Error);
+                        var handshake = snapshot.Handshake;
+                        if (handshake is not { Ok: true })
                         {
                             var detectSeq = ++item.DetectGeneration;
                             var detected = await _worker.DetectAsync(item.Path, crop, cancellationToken: cancel).ConfigureAwait(false);
@@ -335,24 +400,37 @@ public partial class MainWindowViewModel
                                 continue;
                             }
 
-                            await OnUi(() => ApplyDetect(item, detected, quiet: true)).ConfigureAwait(false);
-                            if (item.Handshake is not { Ok: true })
+                            await OnUi(() =>
+                            {
+                                present = Session.Contains(item);
+                                if (!present) return;
+                                ApplyDetect(item, detected, quiet: true);
+                                handshake = item.Handshake;
+                            }).ConfigureAwait(false);
+                            if (!present) continue;
+                            if (handshake is not { Ok: true })
                             {
                                 failed++;
+                                await OnUi(() => FinishBatchImage(item, false)).ConfigureAwait(false);
                                 continue;
                             }
                         }
 
                         var outcome = await _client.FitAsync(
                             item.Path,
-                            item.Handshake,
-                            options,
-                            item.FaceChoice,
-                            item.UseAllFaces || useAll,
+                            handshake,
+                            snapshot.Options!,
+                            snapshot.FaceChoice,
+                            snapshot.UseAllFaces,
                             crop,
                             cancel).ConfigureAwait(false);
 
-                        await OnUi(() => ApplyOutcome(item, outcome, fitted: true, fromBatch: true)).ConfigureAwait(false);
+                        await OnUi(() =>
+                        {
+                            if (item.ApplyGeneration == snapshot.ApplyGeneration)
+                                ApplyOutcome(item, outcome, fitted: true, fromBatch: true);
+                            FinishBatchImage(item, outcome.Ok);
+                        }).ConfigureAwait(false);
                         if (outcome.Ok)
                         {
                             done++;
@@ -364,14 +442,19 @@ public partial class MainWindowViewModel
                     }
                     catch (OperationCanceledException)
                     {
-                        await OnUi(() => Log("Batch", $"{item.Name}: cancelled.", LogLevel.Warning)).ConfigureAwait(false);
+                        await OnUi(() => { FinishBatchImage(item, false, "Cancelled"); Log("Batch", $"{item.Name}: cancelled.", LogLevel.Warning); }).ConfigureAwait(false);
                         break;
                     }
                     catch (Exception ex)
                     {
                         failed++;
-                        await OnUi(() => Log("Batch", WithWorkerStderr($"{item.Name}: {ex.Message}"), LogLevel.Error, WorkerErrorDetails())).ConfigureAwait(false);
+                        await OnUi(() => { FinishBatchImage(item, false); Log("Batch", WithWorkerStderr($"{item.Name}: {ex.Message}"), LogLevel.Error, WorkerErrorDetails()); }).ConfigureAwait(false);
                     }
+                    await OnUi(() =>
+                    {
+                        BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
+                        BatchProgress = 100.0 * (i + 1) / items.Length;
+                    }).ConfigureAwait(false);
                 }
             }
         }
@@ -379,8 +462,14 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                BatchProgress = 100;
-                JobProgress = 100;
+                if (!cancel.IsCancellationRequested) BatchProgress = 100;
+                foreach (var queued in items.Where(item => item.ProcessingStatus == "Queued"))
+                {
+                    queued.ProcessingStatus = cancel.IsCancellationRequested ? "Cancelled" : "Removed";
+                    queued.ProcessingStage = queued.ProcessingStatus;
+                }
+                if (_batchCurrentItem is { } unfinished) FinishBatchImage(unfinished, false, cancel.IsCancellationRequested ? "Cancelled" : "Failed");
+                BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total" + (cancel.IsCancellationRequested ? " · Cancelled" : "");
                 IsBatching = false;
                 Busy = false;
                 EndPipeline();
@@ -402,14 +491,31 @@ public partial class MainWindowViewModel
 
     private void ApplyDetect(SessionItemViewModel item, DetectOutcome result, bool quiet = false)
     {
+        if (!Session.Contains(item)) return;
+        if (!result.Ok && item.Handshake is { Ok: true })
+        {
+            Status = "Detection did not complete. Previous detection and results are kept.";
+            Log("Detect", WithWorkerStderr(result.Error), LogLevel.Warning);
+            NotifyRunCommands();
+            return;
+        }
+        if (item.ReferenceAssignments.Count > 0)
+        {
+            InvalidateCalibration(item);
+            item.ReferenceAssignments.Clear();
+            item.ReferencesNeedAssignment = true;
+            if (item == Active) OnPropertyChanged(nameof(ReferenceSummary));
+        }
         if (result.Ok && !string.IsNullOrWhiteSpace(result.HandshakeJson))
         {
             var handshake = new HandshakeDocument(result.HandshakeJson);
             item.ApplyHandshake(handshake);
+            RememberJobAccel(null, null, handshake.Device);
             var charts = Math.Max(1, result.ChartCount > 0 ? result.ChartCount : handshake.ChartCount);
             var summary = $"{item.DetectLabel} · {charts} chart(s)";
             if (item == Active)
             {
+                OnPropertyChanged(nameof(ReferenceSummary));
                 DetectSummary = summary;
                 RebuildFaces(item);
                 RefreshOverlay();
@@ -446,7 +552,7 @@ public partial class MainWindowViewModel
         else
         {
             item.ApplyHandshake(null);
-            item.DetectLabel = string.IsNullOrWhiteSpace(result.Error) ? "detect failed" : result.Error;
+            item.DetectLabel = string.IsNullOrWhiteSpace(result.Error) ? "Detection failed" : ConciseProcessingError(result.Error);
             if (item == Active)
             {
                 RebuildFaces(item);
@@ -482,7 +588,7 @@ public partial class MainWindowViewModel
         }
 
         var error = result.Error ?? "";
-        if (error.Contains("LibTorch", StringComparison.OrdinalIgnoreCase)
+        if (error.Contains("inference unavailable", StringComparison.OrdinalIgnoreCase)
             || error.Contains("image not found", StringComparison.OrdinalIgnoreCase)
             || error.Contains("requires image", StringComparison.OrdinalIgnoreCase)
             || error.Contains("cancelled", StringComparison.OrdinalIgnoreCase))
@@ -498,13 +604,10 @@ public partial class MainWindowViewModel
 
     private void ApplyOutcome(SessionItemViewModel item, CorrectionOutcome outcome, bool fitted, bool fromBatch = false)
     {
+        if (!Session.Contains(item)) return;
         if (!outcome.Ok)
         {
-            var error = string.IsNullOrWhiteSpace(outcome.Error) ? "correction failed" : outcome.Error.Trim();
-            if (error.Length > 280)
-            {
-                error = error[..280] + "…";
-            }
+            var error = string.IsNullOrWhiteSpace(outcome.Error) ? "Correction failed." : outcome.Error.Trim();
 
             Status = fitted ? "Apply failed." : "Model apply failed.";
             var details = new List<string>(CorrectionSettingsDetails(item.Handshake, applyOnly: !fitted));
@@ -522,11 +625,16 @@ public partial class MainWindowViewModel
         item.ReportPath = outcome.ReportPath;
         item.PreviewDir = Directory.Exists(outcome.PreviewDir) ? outcome.PreviewDir : item.PreviewDir;
         item.IsCorrected = true;
+        item.ModelPath = outcome.ModelPath;
+        item.CompletedContext = outcome.CompletedContext;
+        item.PreviewSuppressed = outcome.CompletedContext?.Options().PreviewMode == "none";
+        item.SourceIdentity = outcome.CompletedContext?.Source ?? item.SourceIdentity;
         item.IncludeInSave = true;
         item.NotifyOutputs();
         if (fitted)
         {
-            item.ModelPath = outcome.ModelPath;
+            if (item.Handshake is { Ok: true } handshake)
+                item.DetectLabel = ColorSpaces.ChartLabel(handshake.ChartType);
             item.Report = outcome.HasChartMetrics ? outcome.Report : null;
             item.FfcPlane = outcome.Report?.FfcPlane ?? FfcPlane.TryLoad(outcome.ModelPath);
             if (item.FfcPlane is { } fittedPlane)
@@ -552,7 +660,7 @@ public partial class MainWindowViewModel
         {
             item.Report = null;
             item.ReportPath = "";
-            item.FfcPlane ??= _loadedModelPlane;
+            item.FfcPlane = FfcPlane.TryLoad(outcome.ModelPath);
         }
 
         if (item == Active)
@@ -565,8 +673,15 @@ public partial class MainWindowViewModel
             ApplyReport(item.Report);
             RefreshOverlay();
             AnalysisTab = 1;
-            _ = LoadCorrectedPreviewAsync(item);
-            if (!string.IsNullOrWhiteSpace(LastPreviewDir))
+            OnPropertyChanged(nameof(IsResultPreviewSuppressed));
+            if (item.PreviewSuppressed)
+            {
+                _previewGeneration++;
+                SetPreview(OriginalPreview, null);
+                HasCorrected = false; ShowCorrected = false; StageName = "Original";
+            }
+            else _ = LoadCorrectedPreviewAsync(item);
+            if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(LastPreviewDir))
             {
                 StageName = "Corrected";
                 ApplyStagePreview();
@@ -574,11 +689,7 @@ public partial class MainWindowViewModel
             }
         }
 
-        var detail = fitted && item.Report?.HasMetrics == true
-            ? $"{item.Name} · {BuildOptions().Summary()} · {item.Report.StatusLine()}"
-            : fitted
-                ? $"{item.Name} · {BuildOptions().Summary()}"
-                : $"{item.Name} · apply-only · no chart ΔE";
+        var detail = $"{item.Name} · {(fitted ? "fit complete" : "model applied")}";
         if (!fromBatch)
         {
             Status = fitted ? "Apply complete." : "Model applied.";
@@ -586,16 +697,26 @@ public partial class MainWindowViewModel
         }
 
         RememberJobAccel(outcome.PlaneBackend, outcome.ApplyBackend);
-        var extra = new List<string>(CorrectionSettingsDetails(item.Handshake, applyOnly: !fitted));
+        var extra = new List<string>();
         extra.AddRange(DeltaEDetails(item.Report));
-        if (!string.IsNullOrWhiteSpace(outcome.OutputPath))
+        if (File.Exists(outcome.OutputPath))
         {
-            extra.Add($"Output {outcome.OutputPath}");
+            extra.Add($"Saved {Path.GetFileName(outcome.OutputPath)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(outcome.ApplyBackend) || !string.IsNullOrWhiteSpace(outcome.PlaneBackend))
+        if (!string.IsNullOrWhiteSpace(outcome.PlaneBackend))
         {
-            extra.Add($"Backends · plane {outcome.PlaneBackend} · apply {outcome.ApplyBackend}");
+            extra.Add($"Plane inference: {LabelStage(outcome.PlaneBackend)}");
+        }
+        if (!string.IsNullOrWhiteSpace(outcome.ApplyBackend))
+        {
+            var backend = outcome.ApplyBackend;
+            var label = backend.StartsWith("wgpu:", StringComparison.OrdinalIgnoreCase)
+                ? backend.Contains("+cpu", StringComparison.OrdinalIgnoreCase)
+                    ? "GPU with CPU recovery"
+                    : $"GPU ({backend.Split(':')[1].ToUpperInvariant()})"
+                : LabelStage(backend);
+            extra.Add($"LUT: {label}");
         }
 
         if (!string.IsNullOrWhiteSpace(outcome.FfcSkipped))

@@ -1,0 +1,111 @@
+name: Native release candidates and source checks
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['engine/**', 'app/**', 'api/**', 'scripts/**', 'installer/**', 'models/**', 'refs/**', 'docs/**', 'notebooks/**', 'licenses/**', 'test_images/**', 'testdata/acceptance/**', '.github/**', '*']
+permissions:
+  contents: read
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_BUILD_JOBS: 2
+  CARGO_INCREMENTAL: '0'
+jobs:
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2025, rid: win-x64, architecture: x64, rust: x86_64-pc-windows-msvc}
+          - {runner: windows-11-arm, rid: win-arm64, architecture: arm64, rust: aarch64-pc-windows-msvc}
+          - {runner: ubuntu-24.04, rid: linux-x64, architecture: x64, rust: x86_64-unknown-linux-gnu}
+          - {runner: ubuntu-24.04-arm, rid: linux-arm64, architecture: arm64, rust: aarch64-unknown-linux-gnu}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.10'
+          architecture: ${{ matrix.architecture }}
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+      - name: Native Rust toolchain and wheel build tooling
+        shell: bash
+        run: |
+          rustup toolchain install '1.95.0-${{ matrix.rust }}' --profile minimal
+          rustup default '1.95.0-${{ matrix.rust }}'
+          python -m pip install setuptools==78.1.0 wheel==0.45.1
+          python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-ci.txt
+      - name: Pinned Windows installer compiler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/setup_ci_windows.ps1 -Output "${{ runner.temp }}/colorcorrect-build-tools"
+      - name: Ubuntu build and desktop libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-0t64 libfontconfig1 libx11-6 libxrandr2 libxi6 libice6 libsm6 libgl1 libvulkan1 libicu74 libssl3t64 libkrb5-3 zlib1g xvfb
+      - name: Native package and installed SDK smoke (GPU gate remains separate)
+        shell: bash
+        run: |
+          if [ '${{ runner.os }}' = Linux ]; then
+            xvfb-run -a python scripts/native_ci_acceptance.py --rid '${{ matrix.rid }}' --install-package
+          else
+            python scripts/native_ci_acceptance.py --rid '${{ matrix.rid }}' --install-package
+          fi
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: evidence-${{ matrix.rid }}-${{ github.sha }}
+          path: |
+            artifacts/native-ci/${{ matrix.rid }}/evidence/**/*.json
+            artifacts/native-ci/${{ matrix.rid }}/evidence/**/*.log
+            artifacts/native-ci/${{ matrix.rid }}/evidence/**/*.txt
+            artifacts/native-ci/${{ matrix.rid }}/evidence/**/*.trx
+            artifacts/native-ci/${{ matrix.rid }}/evidence/**/*.png
+          if-no-files-found: error
+      - name: Upload unsigned candidates (never a GitHub release)
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-${{ matrix.rid }}-${{ github.sha }}
+          path: |
+            artifacts/native-ci/${{ matrix.rid }}/package/*.zip
+            artifacts/native-ci/${{ matrix.rid }}/package/*.tar.gz
+            artifacts/native-ci/${{ matrix.rid }}/package/*.deb
+            artifacts/native-ci/${{ matrix.rid }}/package/*-Setup.exe
+            artifacts/native-ci/${{ matrix.rid }}/package/SHA256SUMS
+            artifacts/native-ci/${{ matrix.rid }}/package/package-manifest.json
+          if-no-files-found: error
+  macos_source:
+    name: Apple-silicon source build and tests (no binary distribution)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: '3.12.10', architecture: arm64}
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with: {global-json-file: global.json}
+      - name: Native source build tools
+        run: |
+          rustup toolchain install 1.95.0-aarch64-apple-darwin --profile minimal
+          rustup default 1.95.0-aarch64-apple-darwin
+          python -m pip install setuptools==78.1.0 wheel==0.45.1
+          python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-ci.txt
+      - name: Build source and test local app/API
+        run: python scripts/native_ci_acceptance.py --rid osx-arm64
+      - name: Upload text evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: source-evidence-osx-arm64-${{ github.sha }}
+          path: |
+            artifacts/native-ci/osx-arm64/evidence/*.json
+            artifacts/native-ci/osx-arm64/evidence/*.log
+            artifacts/native-ci/osx-arm64/evidence/*.txt
+            artifacts/native-ci/osx-arm64/evidence/*.trx
+            artifacts/native-ci/osx-arm64/evidence/sdk-smoke/result.json
+          if-no-files-found: error

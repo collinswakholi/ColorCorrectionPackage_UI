@@ -36,8 +36,9 @@ public partial class CatalogItemViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _loadGen++;
-        Thumb?.Dispose();
+        var old = Thumb;
         Thumb = null;
+        old?.Dispose();
     }
 
     private async Task LoadThumbAsync()
@@ -70,7 +71,9 @@ public partial class CatalogItemViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            var old = Thumb;
             Thumb = bmp;
+            old?.Dispose();
         });
     }
 }

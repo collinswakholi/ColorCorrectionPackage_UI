@@ -1,7 +1,7 @@
 """ColorCorrect Studio's dependency-free, local Python API (Python 3.10+).
 
-Use Engine as a context manager. Every operation uses the same native worker as
-the desktop app; no GUI, web server, network listener or Python ML stack needed.
+Use Client for typed workflows or Engine for the full NDJSON protocol. Both use
+the desktop app's native worker without a GUI, server, or Python ML stack.
 """
 from __future__ import annotations
 
@@ -20,15 +20,9 @@ import time
 import tempfile
 from typing import Any, Callable
 
-__version__ = "1.1.0"
-SUPPORTED_COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage", "export_cube")
-# Historical SDK/CLI names are recognized only to return a clear compatibility error.
-UNSUPPORTED_COMMANDS = ("video", "video_grade")
-COMMANDS = SUPPORTED_COMMANDS + UNSUPPORTED_COMMANDS
-VIDEO_UNSUPPORTED = (
-    "Video processing has been removed from ColorCorrect Studio. This app supports still images only; "
-    "use detect, run, apply, preview_stage, or export_cube for still-image workflows."
-)
+__version__ = "2.2.1"
+COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage",
+            "export_cube")
 
 
 class EngineError(RuntimeError):
@@ -65,7 +59,11 @@ class Engine:
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
         self.timeout, self.policy, self.progress = timeout, policy, progress
-        exe = executable or os.environ.get("CCP_ENGINE_EXE") or os.environ.get("COLORCORRECT_EXE")
+        self._explicit_root = root is not None
+        # An explicit package root must not borrow a worker from the developer's
+        # shell. An explicit executable remains the protocol escape hatch.
+        exe = executable or (None if root is not None else
+                             os.environ.get("CCP_ENGINE_EXE") or os.environ.get("COLORCORRECT_EXE"))
         located = Path(root or os.environ.get("CCP_NEW_UI_ROOT", "")).resolve() if root or os.environ.get("CCP_NEW_UI_ROOT") else None
         self.root = located or (_root(Path(exe).resolve().parent) if exe else None) or _root(Path(__file__).resolve().parent) or _root(Path.cwd())
         if self.root is None or not (self.root / "refs/neutrals.json").is_file():
@@ -74,10 +72,12 @@ class Engine:
             self.executable = Path(exe).resolve()
         else:
             name = "ccp-engine.exe" if os.name == "nt" else "ccp-engine"
-            candidates = [self.root / name, self.root / "engine/target/release" / name,
-                          self.root / "dist/win-cpu" / name,
-                          self.root / "dist/linux-x64/payload" / name,
-                          self.root / "dist/macos-arm64/payload" / name]
+            candidates = ([self.root / "ccp-engine-launch"] if sys.platform.startswith("linux") else [])
+            candidates += [self.root / name, self.root / "engine/target/release" / name,
+                          self.root / "dist/win-cpu" / name]
+            for target in ("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64", "macos-arm64"):
+                candidates.extend((self.root / "dist" / target / "payload" / name,
+                                   self.root / "dist" / target / name))
             self.executable = next((p for p in candidates if p.is_file()), candidates[0])
         if not self.executable.is_file():
             raise FileNotFoundError(f"Worker not found: {self.executable}. Use an extracted app package or build the engine.")
@@ -91,29 +91,19 @@ class Engine:
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
         env["CCP_NEW_UI_ROOT"] = str(self.root)
-        explicit = env.get("CCP_LIBTORCH_ROOT") or env.get("LIBTORCH_PATH")
-        candidates = [self.executable.parent / "libtorch", self.executable.parent.parent / "libtorch",
-                      self.root / "libtorch"]
-        if os.name == "nt":
-            local = Path(env.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "CCP-New"
-            addon = local / "libtorch-cuda"
-            if (addon / "lib/torch_cuda.dll").is_file():
-                candidates.insert(0, addon)
-            candidates.append(local / "libtorch")
-        runtime = Path(explicit).resolve() if explicit else next((p for p in candidates if (p / "libtorch.json").is_file()), None)
         extras = [self.executable.parent]
-        if runtime:
-            env.update(CCP_LIBTORCH_ROOT=str(runtime), LIBTORCH=str(runtime), LIBTORCH_PATH=str(runtime))
-            extras.extend([runtime, runtime / "lib", runtime / "libtorch/lib"])
-        env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
         for variable in ("PATH", "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"):
             if variable != "PATH" and os.name == "nt":
                 continue
             env[variable] = os.pathsep.join([*(str(p) for p in extras if p.is_dir()), env.get(variable, "")])
-        ort_names = ["onnxruntime.dll", "libonnxruntime.dylib", "libonnxruntime.so"]
-        for name in ort_names:
-            if (self.executable.parent / name).is_file():
-                env.setdefault("ORT_DYLIB_PATH", str(self.executable.parent / name))
+        name = "onnxruntime.dll" if os.name == "nt" else (
+            "libonnxruntime.dylib" if sys.platform == "darwin" else "libonnxruntime.so")
+        runtime = self.executable.parent / name
+        if self._explicit_root or runtime.is_file():
+            # Keep an explicit package authoritative even when incomplete. ORT
+            # consumers then report its missing library instead of borrowing an
+            # inherited development runtime. Rust/wgpu-only work remains usable.
+            env["ORT_DYLIB_PATH"] = str(runtime)
         return env
 
     def _start(self) -> None:
@@ -171,21 +161,12 @@ class Engine:
 
     def request(self, command: str, *, timeout: float | None = None,
                 check: bool = True, **parameters: Any) -> dict:
-        """Send a still-image operation; check=True raises even for partial batches.
-
-        Retired video/video_grade names return unsupported_feature without starting
-        the worker, validating old video options, or accessing media files.
-        """
+        """Send any documented operation. check=True raises even for partial batches."""
         duration = self.timeout if timeout is None else timeout
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("timeout must be finite and positive")
         if "cmd" in parameters or "command" in parameters:
             raise ValueError("Pass the operation as the first argument, not cmd/command")
-        if command.lower() in UNSUPPORTED_COMMANDS:
-            reply = {"ok": False, "code": "unsupported_feature", "feature": "video", "error": VIDEO_UNSUPPORTED}
-            if check:
-                raise EngineError(VIDEO_UNSUPPORTED, reply)
-            return reply
         if parameters.get("do_ffc") and not parameters.get("white"):
             raise ValueError("FFC requires an explicit white image (Blank.JPG in the example corpus)")
         nn = parameters.get("nn")
@@ -207,6 +188,14 @@ class Engine:
         payload = json.dumps({"cmd": command, "policy": self.policy, **parameters}, default=_json_default, allow_nan=False)
         with self._lock:
             self._start()
+            if parameters.get("reference_profiles") or parameters.get("reference_assignments"):
+                missing = {"custom_references_v1", "chart_identity_v1"} - set(self.ready.get("capabilities") or [])
+                if missing:
+                    reply = {"ok": False, "code": "unsupported_capability",
+                             "error": "Worker cannot apply custom references; missing " + ", ".join(sorted(missing))}
+                    if check:
+                        raise EngineError(reply["error"], reply)
+                    return reply
             try:
                 self._process.stdin.write(payload + "\n")
                 self._process.stdin.flush()
@@ -273,14 +262,6 @@ class Engine:
             raise ValueError("LUT size must be an integer from 2 to 129")
         return self.request("export_cube", model=model, path=path, size=size, **options)
 
-    def video(self, input, output, **options):
-        """Compatibility stub: video processing was removed; raises EngineError."""
-        return self.request("video", input=input, output=output, **options)
-
-    def video_grade(self, model, input, output, **options):
-        """Compatibility stub: video processing was removed; raises EngineError."""
-        return self.request("video_grade", model=model, input=input, output=output, **options)
-
     def _stop(self):
         process, self._process = self._process, None
         if process:
@@ -342,7 +323,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", default="{}", help="JSON parameters, @file.json, or - for stdin")
     parser.add_argument("--engine", help="Path to ccp-engine executable")
     parser.add_argument("--root", help="App resource folder with models/ and refs/")
-    parser.add_argument("--policy", default="cpu", help="cpu (default), auto, cuda, directml, openvino, mlx")
+    parser.add_argument("--policy", default="auto", help="auto (default), directml, webgpu, vulkan; cpu selects CPU LUTs with GPU inference")
     parser.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args(argv)
     try:
@@ -358,6 +339,18 @@ def main(argv=None) -> int:
     except (EngineError, OSError, ValueError, TypeError, TimeoutError) as exc:
         print(json.dumps(exc.reply if isinstance(exc, EngineError) and exc.reply else {"ok": False, "error": str(exc)}), file=sys.stdout)
         return 1
+
+
+# Additive high-level API. Keeping this module and all original names preserves
+# imports, python -m colorcorrect, and direct api/colorcorrect.py invocations.
+from colorcorrect_sdk import (
+    Client, CalibrationModel, ReferenceProfile, DetectionOptions, CalibrationOptions,
+    ApplyOptions, FFCOptions, NeuralNetworkOptions, DetectionResult, DetectedChart,
+    BackendInfo, ImageResult, ApplyResult, LUTResult, ColorCorrectError,
+    InvalidInputError, MissingRuntimeError, UnsupportedCapabilityError,
+    ProcessingError, ProcessingTimeoutError, ClosedClientError, BatchProcessingError,
+)
+from colorcorrect_pipeline import ColorCorrection, Config
 
 
 if __name__ == "__main__":

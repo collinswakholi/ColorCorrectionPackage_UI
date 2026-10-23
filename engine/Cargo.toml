@@ -4,4 +4,5 @@ members = [
     "crates/ccp_core",
     "crates/ccp_detect",
     "crates/ccp_bridge",
+    "crates/ccp_wgpu_infer",
 ]

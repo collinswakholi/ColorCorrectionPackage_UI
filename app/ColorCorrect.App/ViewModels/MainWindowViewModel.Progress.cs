@@ -15,8 +15,6 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    private static readonly string[] PipelineOrder = ["ffc", "sat", "gc", "wb", "cc", "write"];
-
     private void HookWorkerProgress()
     {
         _worker.Progress += OnWorkerProgress;
@@ -29,10 +27,17 @@ public partial class MainWindowViewModel
 
     private void OnWorkerProgress(string message)
     {
-        Dispatcher.UIThread.Post(() => ApplyEngineProgress(message));
+        var generation = _batchProgressGeneration;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (IsBatching && generation != _batchProgressGeneration) return;
+            ApplyEngineProgress(message);
+        });
     }
 
-    private void BeginPipeline(string mode)
+    private void BeginPipeline(string mode) => BeginCapturedPipeline(mode, BuildOptions());
+
+    private void BeginCapturedPipeline(string mode, CorrectionOptions options)
     {
         foreach (var step in PipelineSteps)
         {
@@ -46,19 +51,20 @@ public partial class MainWindowViewModel
         }
         else if (mode is "apply")
         {
-            AddStep("ffc", "FFC", DoFfc);
-            AddStep("gc", "GC", DoGc);
-            AddStep("wb", "WB", DoWb);
-            AddStep("cc", CcChipLabel(), DoCc);
+            AddStep("ffc", "FFC", options.DoFfc);
+            AddStep("gc", "GC", options.DoGc);
+            AddStep("wb", "WB", options.DoWb);
+            AddStep("cc", "CC", options.DoCc);
+            AddStep("write", "Save result", true);
         }
         else
         {
-            AddStep("ffc", "FFC", DoFfc);
-            AddStep("sat", "SAT", !SkipSaturated);
-            AddStep("gc", "GC", DoGc);
-            AddStep("wb", "WB", DoWb);
-            AddStep("cc", CcChipLabel(), DoCc);
-            AddStep("write", "Write", true);
+            AddStep("ffc", "FFC", options.DoFfc);
+            AddStep("sat", "SAT", !options.SkipSaturated);
+            AddStep("gc", "GC", options.DoGc);
+            AddStep("wb", "WB", options.DoWb);
+            AddStep("cc", "CC", options.DoCc);
+            AddStep("write", "Save result", true);
         }
 
         ShowPipeline = PipelineSteps.Count > 0;
@@ -77,7 +83,6 @@ public partial class MainWindowViewModel
         foreach (var step in PipelineSteps.Where(s => s.IsEnabled && !s.IsSkipped))
         {
             step.IsActive = false;
-            step.IsDone = true;
         }
 
         ShowJobProgress = IsBatching || IsSaving;
@@ -133,12 +138,16 @@ public partial class MainWindowViewModel
         }
 
         var key = ClassifyProgress(message);
+        var completed = message.TrimEnd().EndsWith(" complete", StringComparison.OrdinalIgnoreCase);
         CurrentStage = FormatStage(message);
-        MarkPipeline(key, skipped: message.Contains("skipped", StringComparison.OrdinalIgnoreCase));
-        JobProgress = EstimateProgress(key);
+        if (key == "combined" && !completed)
+            _combinedProgressKeys = new[] { "gc", "wb", "cc" }.Where(stage => message.Contains(stage, StringComparison.OrdinalIgnoreCase)).ToArray();
+        MarkPipeline(key, skipped: message.Contains("skipped", StringComparison.OrdinalIgnoreCase), completed: completed);
+        JobProgress = Math.Max(JobProgress, EstimateProgress(key, completed));
+        if (IsBatching) UpdateBatchStageProgress();
         if (Busy && !IsSaving)
         {
-            var name = Active?.Name;
+            var name = IsBatching ? BatchLabel : Active?.Name;
             Status = string.IsNullOrWhiteSpace(name) ? CurrentStage : $"{CurrentStage} · {name}";
         }
     }
@@ -146,14 +155,17 @@ public partial class MainWindowViewModel
     private static string ClassifyProgress(string message)
     {
         var m = message.ToLowerInvariant();
+        if (m.StartsWith("combined lut")) return "combined";
+        // Apply messages include arbitrary user filenames; those names must not
+        // be interpreted as FFC/CC events or completion confirmations.
+        if (m.StartsWith("apply") || m.StartsWith("applying")) return "apply";
+        if (m.Contains("writ")) return "write";
         if (m.Contains("detect")) return "detect";
         if (m.Contains("ffc")) return "ffc";
         if (m.Contains("sat")) return "sat";
         if (m.StartsWith("gc") || m.Contains("gamma")) return "gc";
         if (m.StartsWith("wb") || m.Contains("white balance")) return "wb";
         if (m.StartsWith("cc") || m.Contains("color correct")) return "cc";
-        if (m.Contains("writ")) return "write";
-        if (m.Contains("apply")) return "apply";
         if (m.Contains("load")) return "load";
         return "";
     }
@@ -161,8 +173,9 @@ public partial class MainWindowViewModel
     private string FormatStage(string message)
     {
         var m = message.Trim();
+        if (m.StartsWith("Combined LUT", StringComparison.OrdinalIgnoreCase)) return m.Replace("Combined LUT", "Color correction", StringComparison.OrdinalIgnoreCase);
         if (m.StartsWith("Saturation", StringComparison.OrdinalIgnoreCase)) return "SAT";
-        if (m.Equals("CC", StringComparison.OrdinalIgnoreCase)) return CcChipLabel();
+        if (m.Equals("CC", StringComparison.OrdinalIgnoreCase)) return IsBatching ? "CC" : CcChipLabel();
         if (m.StartsWith("Writing", StringComparison.OrdinalIgnoreCase)) return "Writing";
         if (m.StartsWith("Loading", StringComparison.OrdinalIgnoreCase)) return "Load";
         if (m.StartsWith("Detecting", StringComparison.OrdinalIgnoreCase)) return "Detect";
@@ -170,86 +183,62 @@ public partial class MainWindowViewModel
         return m;
     }
 
-    private void MarkPipeline(string key, bool skipped)
+    private void MarkPipeline(string key, bool skipped, bool completed)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
             return;
         }
 
-        if (key == "apply")
+        if (key == "combined")
         {
             foreach (var step in PipelineSteps.Where(s => s.IsEnabled))
             {
-                step.IsActive = true;
+                if (_combinedProgressKeys.Contains(step.Key))
+                {
+                    step.IsActive = !completed;
+                    step.IsDone = completed;
+                }
             }
-
             return;
         }
+        if (key == "apply") return;
 
-        var reached = false;
-        foreach (var orderKey in PipelineOrder)
+        var current = PipelineSteps.FirstOrDefault(s => s.Key == key);
+        if (current is not null)
         {
-            var step = PipelineSteps.FirstOrDefault(s => s.Key == orderKey);
-            if (step is null)
-            {
-                if (orderKey == key) reached = true;
-                continue;
-            }
-
-            if (orderKey == key)
-            {
-                reached = true;
-                step.IsActive = step.IsEnabled;
-                step.IsDone = false;
-                step.IsSkipped = skipped;
-                continue;
-            }
-
-            if (!reached && step.IsEnabled)
-            {
-                step.IsActive = false;
-                step.IsDone = !step.IsSkipped;
-            }
-            else if (orderKey != key)
-            {
-                step.IsActive = false;
-            }
-        }
-
-        var detect = PipelineSteps.FirstOrDefault(s => s.Key == "detect");
-        if (detect is not null && key == "detect")
-        {
-            detect.IsActive = true;
+            current.IsActive = current.IsEnabled && !completed && !skipped;
+            current.IsDone = current.IsEnabled && completed && !skipped;
+            current.IsSkipped = skipped;
         }
     }
 
-    private double EstimateProgress(string key)
+    private double EstimateProgress(string key, bool completed = false)
     {
-        if (IsBatching && BatchProgress > 0)
-        {
-            return Math.Min(99, BatchProgress);
-        }
-
         var enabled = PipelineSteps.Where(s => s.IsEnabled).Select(s => s.Key).ToList();
         if (enabled.Count == 0)
         {
             return Math.Max(JobProgress, 8);
         }
 
-        var idx = enabled.IndexOf(key);
+        var idx = key == "combined"
+            ? enabled.FindIndex(stage => _combinedProgressKeys.Contains(stage))
+            : enabled.IndexOf(key);
         if (idx < 0)
         {
             return Math.Max(JobProgress, 10);
         }
 
-        return Math.Clamp(10 + (idx + 0.55) * 80.0 / enabled.Count, 8, 96);
+        var end = key == "combined" ? enabled.FindLastIndex(stage => _combinedProgressKeys.Contains(stage)) + 1 : idx + 1;
+        return Math.Clamp(8 + (completed ? end : idx + 0.15) * 88.0 / enabled.Count, 8, 96);
     }
 
-    [RelayCommand]
+    private bool CanEditSession() => !Busy && !IsSaving;
+
+    [RelayCommand(CanExecute = nameof(CanEditSession))]
     private async Task SaveSessionAsAsync()
     {
-        if (Dialogs is null)
+        if (Dialogs is null || !CanEditSession())
         {
             return;
         }
@@ -260,7 +249,13 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!SessionStore.Write(path, BuildSessionState(includeItems: true)))
+        var state = BuildSessionState(includeItems: true);
+        IsSaving = true;
+        Status = "Saving session…";
+        bool saved;
+        try { saved = await Task.Run(() => SessionStore.Write(path, state)); }
+        finally { IsSaving = false; }
+        if (!saved)
         {
             Status = "Session could not be saved. Check folder permissions and free space.";
             Log("Session", Status, LogLevel.Error, [path]);
@@ -273,10 +268,10 @@ public partial class MainWindowViewModel
         ToastService.ShowSuccess(Status);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditSession))]
     private async Task LoadSessionAsync()
     {
-        if (Dialogs is null)
+        if (Dialogs is null || !CanEditSession())
         {
             return;
         }
@@ -298,7 +293,12 @@ public partial class MainWindowViewModel
             }
         }
 
-        var (state, error) = SessionStore.TryLoadFrom(path);
+        IsSaving = true;
+        Status = "Loading session…";
+        SessionState state;
+        string? error;
+        try { (state, error) = await Task.Run(() => SessionStore.TryLoadFrom(path)); }
+        finally { IsSaving = false; }
         if (!string.IsNullOrWhiteSpace(error))
         {
             Status = "Could not load session.";
@@ -307,12 +307,11 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var skipped = RestoreWorkingItems(state);
-        Status = $"Session loaded · {Session.Count} image(s)"
-            + (skipped > 0 ? $" · skipped {skipped} unsupported item(s); video is not supported." : "");
-        Log("Session", Status, skipped > 0 ? LogLevel.Warning : LogLevel.Success);
-        if (skipped > 0) ToastService.ShowWarning(Status);
-        else ToastService.ShowSuccess(Status);
+        RestoreWorkingItems(state);
+        var missing = Session.Count(item => item.IsMissing);
+        Status = $"Session loaded · {Session.Count} image(s)" + (missing > 0 ? $" · {missing} unavailable — select an item and Relink image" : "");
+        Log("Session", Status, LogLevel.Success);
+        ToastService.ShowSuccess(Status);
     }
 
     internal void ClearTransientCache()

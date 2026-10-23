@@ -1,101 +1,98 @@
-"""Remove local export/training paths without modifying graph or tensor data.
+"""Remove private ONNX metadata paths, preserving original bytes and all computation.
 
-Maintenance tooling only: requires onnx; it is not an application dependency.
-TorchScript debug pickles are never deserialized. Their path prefixes are replaced
-with equal-length portable markers; all inference code/storage entries must stay
-byte-identical. Original supplied files remain recoverable in CCP_New_UI/history.
+Maintenance-only dependency: ONNX. No ML runtime is installed by the app or SDK.
+Run explicitly with --apply; originals and the equivalence audit stay private.
 """
+from __future__ import annotations
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import re
-import zipfile
+import shutil
 
-USER_PREFIX = re.compile(rb"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\x00\r\n]+[\\/]", re.I)
-TEXT_PREFIX = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\r\n]+[\\/]", re.I)
-
-
-def redact_bytes(value):
-    def marker(match):
-        size = len(match[0])
-        replacement = b"/model/source/"
-        assert size >= len(replacement)
-        return replacement + b"_" * (size - len(replacement))
-    return USER_PREFIX.sub(marker, value)
+MODELS = ("models/opt2/best_assemble_fp32_1280.onnx", "models/opt2/best_assemble_fp32_1536.onnx", "models/plane/plane_det_model_YOLO_512_n.onnx")
+PREFIX = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\r\n]+[\\/]", re.I)
 
 
-def redact_config(value):
-    if isinstance(value, str):
-        return TEXT_PREFIX.sub("/model/source/", value)
-    if isinstance(value, list):
-        return [redact_config(item) for item in value]
-    if isinstance(value, dict):
-        return {key: redact_config(item) for key, item in value.items()}
-    return value
+def sha(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
 
 
-def sanitize_torchscript(source, destination):
-    with zipfile.ZipFile(source) as original:
-        entries = []
-        immutable = {}
-        for info in original.infolist():
-            value = original.read(info)
-            if info.filename.endswith(".debug_pkl"):
-                value = redact_bytes(value)
-            elif info.filename.endswith("/extra/config.txt"):
-                config = json.loads(value)
-                value = json.dumps(redact_config(config), separators=(",", ":")).encode()
-                assert json.loads(value) == redact_config(config)
-            else:
-                # Includes all data, constants, bytecode, generated code and IDs.
-                immutable[info.filename] = hashlib.sha256(value).hexdigest()
-            entries.append((info, value))
-    with zipfile.ZipFile(destination, "w") as output:
-        for info, value in entries:
-            output.writestr(info, value)
-    with zipfile.ZipFile(destination) as output:
-        for name, expected in immutable.items():
-            assert hashlib.sha256(output.read(name)).hexdigest() == expected, name
-        assert not any(USER_PREFIX.search(output.read(name)) for name in output.namelist())
-    return len(immutable)
-
-
-def sanitize_onnx(source, destination):
+def portable_model(source: bytes) -> tuple[bytes, dict]:
     import onnx
-    original = onnx.load_model(source)
+    original = onnx.load_model_from_string(source)
     portable = onnx.ModelProto()
     portable.CopyFrom(original)
-    for metadata in portable.metadata_props:
-        metadata.value = TEXT_PREFIX.sub("/model/source/", metadata.value)
+    changed = []
+    for item in portable.metadata_props:
+        replacement = PREFIX.sub("/model/source/", item.value)
+        if replacement != item.value:
+            if item.key.lower() not in {"description", "args", "path", "data"}:
+                raise ValueError(f"unreviewed private metadata key: {item.key}")
+            changed.append(item.key)
+            item.value = replacement
     onnx.checker.check_model(portable)
-    onnx.save_model(portable, destination)
-    reloaded = onnx.load_model(destination)
-    original.ClearField("metadata_props")
-    reloaded.ClearField("metadata_props")
-    assert original.SerializeToString(deterministic=True) == reloaded.SerializeToString(deterministic=True)
-    assert not USER_PREFIX.search(destination.read_bytes())
-    return len(portable.graph.initializer)
+    for model in (original, portable):
+        # Whole-proto comparison below covers all nested graphs/functions too.
+        for tensor in model.graph.initializer:
+            if tensor.data_location == onnx.TensorProto.EXTERNAL or tensor.external_data:
+                raise ValueError("external detector data needs an explicit companion-file contract")
+    before = onnx.ModelProto(); before.CopyFrom(original); before.ClearField("metadata_props")
+    after = onnx.ModelProto(); after.CopyFrom(portable); after.ClearField("metadata_props")
+    immutable = before.SerializeToString(deterministic=True)
+    if immutable != after.SerializeToString(deterministic=True):
+        raise ValueError("model computation changed")
+    result = portable.SerializeToString() if changed else source
+    if PREFIX.search(result.decode("latin1")):
+        raise ValueError("private model path remains outside reviewed metadata")
+    return result, {
+        "original_sha256": sha(source), "portable_sha256": sha(result),
+        "immutable_model_sha256": sha(immutable), "only_metadata_changed": True,
+        "changed_metadata_keys": changed,
+        "ir_version": original.ir_version,
+        "opsets": [{"domain": item.domain, "version": item.version} for item in original.opset_import],
+        "graph_sha256": sha(original.graph.SerializeToString(deterministic=True)),
+        "input_signatures_sha256": [sha(item.SerializeToString(deterministic=True)) for item in original.graph.input],
+        "output_signatures_sha256": [sha(item.SerializeToString(deterministic=True)) for item in original.graph.output],
+        "initializers": [{"name": tensor.name, "data_type": tensor.data_type, "dimensions": list(tensor.dims),
+                          "tensor_sha256": sha(tensor.SerializeToString(deterministic=True))} for tensor in original.graph.initializer],
+        "external_data": False,
+    }
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-root", type=Path, required=True)
-    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--backup", type=Path, required=True, help="new private directory, never overwritten")
+    parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    evidence = []
-    for name in ("best_assemble_fp16_1280.torchscript", "best_assemble_fp16_1536.torchscript",
-                 "best_assemble_fp32_1280.onnx", "best_assemble_fp32_1536.onnx"):
-        source, destination = args.source_root / name, args.output_root / name
-        if source.resolve() == destination.resolve():
-            raise ValueError("Use a separate original source folder; in-place redaction is not allowed.")
-        before = hashlib.sha256(source.read_bytes()).hexdigest()
-        count = (sanitize_onnx if source.suffix == ".onnx" else sanitize_torchscript)(source, destination)
-        evidence.append({"path": name, "original_sha256": before,
-                         "sanitized_sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
-                         "immutable_entries_or_tensors_checked": count})
-    print(json.dumps(evidence, indent=2))
+    root = args.root.resolve(strict=True)
+    originals = {name: (root / name).read_bytes() for name in MODELS}
+    candidates = {name: portable_model(value) for name, value in originals.items()}
+    if args.backup.exists():
+        parser.error("backup directory already exists")
+    args.backup.mkdir(parents=True, exist_ok=False)
+    for name, value in originals.items():
+        destination = args.backup / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(value)
+        if sha(destination.read_bytes()) != sha(value):
+            raise ValueError("backup verification failed")
+    if args.apply:
+        for name, (value, _) in candidates.items():
+            if (root / name).read_bytes() != originals[name]:
+                raise ValueError("model changed during maintenance")
+        for name, (value, _) in candidates.items():
+            if value != originals[name]:
+                temporary = (root / name).with_suffix(".portable.tmp")
+                temporary.write_bytes(value)
+                temporary.replace(root / name)
+    audit = {"schema": 1, "applied": args.apply, "files": [{"path": name, **item[1]} for name, item in candidates.items()]}
+    (args.backup / "metadata-equivalence.json").write_text(json.dumps(audit, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"applied": args.apply, "models": len(candidates), "metadata_changes": sum(bool(item[1]["changed_metadata_keys"]) for item in candidates.values()), "backup": str(args.backup)}))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

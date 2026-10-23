@@ -130,6 +130,8 @@ public sealed class WindowDialogs : IAppDialogs
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
 
+
+
     public async Task<string?> SaveCubeAsync(string suggestedName)
     {
         var file = await _window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions

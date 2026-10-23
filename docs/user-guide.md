@@ -19,10 +19,8 @@ application reuses GC rather than fitting a new curve without a chart.
 2. Add the chart-bearing image to the session and press **Detect**. Verify the
    detected chart type and patch overlay. If several faces are found, choose the
    intended **Chart face**.
-3. Load the blank field in the FFC section. In `test_images`,
+3. Load the blank field in the FFC section. In the public sample set,
    `Blank.JPG` is the flat-field input, **not** the chart.
-   If FFC is enabled, a missing or unusable blank reference fails the operation
-   instead of silently proceeding without flat-field correction.
 4. Start with encoded sRGB/D65 input. Enable the stages needed for your setup:
    FFC → GC → WB → CC. GC is automatic and has no degree setting.
 5. Choose **Fit + apply**; inspect stage previews, per-patch ΔE00, and held-out validation. Do not
@@ -33,8 +31,10 @@ application reuses GC rather than fitting a new curve without a chart.
    but does not automatically switch from **Fit from image** to **Use loaded**.
    Apply to images captured under matching conditions. They need no chart,
    but have no measurable chart ΔE unless a chart is independently evaluated.
-7. Press **Ctrl+S**, choose outputs, and **Save selected** to write full-resolution
-   images. Preview completion alone does not export those files. Save model JSON,
+7. Press **Ctrl+S**, choose an output folder and outputs, then **Save selected**.
+   Corrected images keep the source resolution; optional stage previews keep
+   their preview resolution. Existing destinations require overwrite confirmation.
+   Preview completion alone does not export these files. Save model JSON,
    reports, and the configuration too. Keep originals and outputs separate.
 
 ## Color interpretation matters
@@ -81,8 +81,6 @@ not establish generalization to another camera or lighting setup.
 ![Updated light-theme workbench showing a populated session and preview navigation](images/session-workbench.png)
 
 In this layout example, the left panel holds your working images and settings.
-Screenshots are native Avalonia/Skia regression renders using only the five public
-samples, not evidence of a completed calibration or an interactive release gate.
 The large arrows browse session images; the tabs above the preview select
 processing stages. The bottom-left action area stays reachable while settings scroll.
 
@@ -101,8 +99,37 @@ not a completed calibration.
   calibrates every selected chart-bearing image separately.
 - Session, catalog, and process areas scroll when their content exceeds the panel.
 - Model JSON preserves a reusable pipeline; cube LUTs exclude spatial FFC.
-- The app processes still images, not video. Cube export is a reusable global
-  model transform; it does not turn the app into a video processor or include FFC.
+
+## Batch processing and previews
+
+Open **Batch** or press **Ctrl+B**, choose **Apply current model** or **Fit from chart**,
+then start the batch. **Preview results** is on by default. The choice is captured
+when the batch starts; changing the next batch's setting does not change completed results.
+
+With previews on, corrected previews appear as images finish. With previews off,
+the app writes full-resolution corrected images into each result's own run folder
+and skips creating or loading corrected previews. Choose **Save** to export those
+images to your selected destination. **Show preview** explicitly opens an individual
+completed result without enabling previews for the rest of the batch. Saved sessions
+retain each result's preview choice.
+
+The existing stage indicators and job bar track the current image, and the batch
+bar tracks the whole queue. The overall bar includes completed images and the
+current image's completed stages. Different stages take different
+amounts of time, so the percentage is not an estimate of time remaining. A result
+reaches 100% only after its output and captured settings are accepted.
+
+Only applicable stages run. Spatial **FFC** runs separately. Fast mode applies the
+enabled **GC**, **WB** and **CC** transforms together through one combined LUT;
+their indicators run together during that pass. They are not three separate GPU
+operations. Fitting can also show separate GC/WB/CC work while learning the model.
+**Save result** covers the output or preview actually being created. Cancellation keeps
+completed results, and a failed image does not erase earlier successes.
+
+On WSL, file and folder selection uses a managed picker to avoid a native GTK
+failure observed during testing. It opens over the app at a bounded size; press
+Escape to cancel. Other desktop platforms retain their native
+dialog selection.
 
 ## Automation and notebooks
 

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+"$APP_DIR/check-system" >&2
+export CCP_NEW_UI_ROOT="$APP_DIR" CCP_ENGINE_EXE="$APP_DIR/ccp-engine-launch"
+export ORT_DYLIB_PATH="$APP_DIR/libonnxruntime.so"
+export LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$APP_DIR/app/ColorCorrect.App" "$@"

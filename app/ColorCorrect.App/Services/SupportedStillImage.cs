@@ -18,7 +18,7 @@ internal static class SupportedStillImage
 
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             Span<byte> header = stackalloc byte[8];
             var length = stream.Read(header);
             var jpeg = length >= 3 && header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff;

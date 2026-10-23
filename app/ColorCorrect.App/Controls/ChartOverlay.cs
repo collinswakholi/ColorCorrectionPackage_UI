@@ -9,6 +9,9 @@ namespace ColorCorrect.App.Controls;
 
 public sealed class ChartOverlay : Control
 {
+    public static readonly StyledProperty<int> HighlightedPatchProperty =
+        AvaloniaProperty.Register<ChartOverlay, int>(nameof(HighlightedPatch), -1);
+    public int HighlightedPatch { get => GetValue(HighlightedPatchProperty); set => SetValue(HighlightedPatchProperty, value); }
     public static readonly StyledProperty<HandshakeDocument?> HandshakeProperty =
         AvaloniaProperty.Register<ChartOverlay, HandshakeDocument?>(nameof(Handshake));
 
@@ -91,7 +94,7 @@ public sealed class ChartOverlay : Control
         AffectsRender<ChartOverlay>(
             HandshakeProperty, FaceChoiceProperty, CropProperty, UseAllFacesProperty,
             ShowLatticeProperty, ShowSampleProperty, ShowDimProperty, DisplayScaleProperty,
-            OverlayScaleXProperty, OverlayScaleYProperty, ShowPlaneProperty, PlaneRectProperty);
+            OverlayScaleXProperty, OverlayScaleYProperty, ShowPlaneProperty, PlaneRectProperty, HighlightedPatchProperty);
     }
 
     public HandshakeDocument? Handshake
@@ -194,6 +197,10 @@ public sealed class ChartOverlay : Control
         {
             RefreshCache();
             EnsureGeometries(sx, sy);
+            if (HighlightedPatch >= 0 && HighlightedPatch < _latticeGeo.Count)
+            {
+                context.DrawGeometry(new SolidColorBrush(Color.FromArgb(80, 255, 170, 30)), new Pen(Brushes.Orange, 4 * unit), _latticeGeo[HighlightedPatch]);
+            }
 
             if (ShowDim && _dimGeo is not null)
             {

@@ -1,19 +1,9 @@
-ColorCorrect Studio v0.1.0 preview is unsigned.
+This Windows build is unsigned.
 
-Verify the installer SHA-256 and trusted source before continuing. SmartScreen
-may warn. Do not treat a checksum as publisher identity or disable Windows security.
+SmartScreen may show "Windows protected your PC". That is expected until the installer is signed. Choose More info → Run anyway only if you built or received this package yourself.
 
-CPU LibTorch, .NET 10 and native runtime DLLs ship app-locally. Setup does not
-replace per-user installed CPU/CUDA libraries. CPU is the default on all hardware.
-Offline CPU sample workflows require no download.
 
-Optional CUDA reuses or downloads official LibTorch 2.9.1/cu126 (~3.8 GB) into
-the separate CCP-New/libtorch-cuda folder. Existing invalid folders are refused,
-not deleted. Each worker loads one compatible LibTorch tree.
 
-DirectML is bundled for supported Windows graphics drivers. CUDA/DirectML can
-accelerate selected detector/LUT operations; NN training and many stages remain
-CPU work. Check actual backend telemetry; policy selection alone is not evidence.
 
-Silent CPU: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LIBTORCH=cpu
-Silent CUDA (explicit opt-in download): /SILENT /LIBTORCH=cuda
+
+Silent: ColorCorrect-Studio-win-x64.exe /SILENT

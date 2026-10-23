@@ -26,9 +26,9 @@ public sealed class StillOnlyWorkflowTests
             Assert.Null(window.FindControl<Button>("VideoPlayBtn"));
             var fitMode = window.FindControl<RadioButton>("FitFromImageRadio");
             Assert.NotNull(fitMode);
-            Assert.Equal("Train a new model from the selected still (needs a detected chart). Replaces the loaded model.",
+            Assert.Equal("Train a new model from the selected image and its detected chart. Replaces the loaded model.",
                 ToolTip.GetTip(fitMode));
-            Assert.Equal("Add a still image, then Fit + apply.", vm.WorkflowHint);
+            Assert.Equal("Add a still, then Fit + apply.", vm.WorkflowHint);
         }
         finally
         {
@@ -129,9 +129,10 @@ public sealed class StillOnlyWorkflowTests
     private static string Sample()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "test_images")))
-            root = root.Parent;
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "testdata", "acceptance"))) root = root.Parent;
         Assert.NotNull(root);
-        return Path.Combine(root.FullName, "test_images", "ColorCard_Big.JPG");
+        var image = Path.Combine(root.FullName, "testdata", "acceptance", "chart.jpg");
+        Assert.True(File.Exists(image), "Required still-image acceptance fixture is missing.");
+        return image;
     }
 }

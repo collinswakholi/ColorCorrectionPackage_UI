@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.0 — Unreleased local candidate
+
+- Increment the native app and internal Rust packages from 0.1.0 to 0.2.0.
+  The independently versioned Python SDK remains 2.2.1; protocol and saved-data
+  schemas retain their existing versions.
+- Include the native version in Windows installers/portable archives and Linux
+  archives/Debian packages, with checks for emitted installer/package metadata.
+- Custom chart references and typed/familiar Python calibration workflows.
+- GPU inference without Torch; CPU/wgpu correction with combined 65³ LUT default.
+- Still-image-only app, clarified processing choices and portable package preparation.
+- Model metadata paths sanitized with exact computation equivalence and original backups.
+- Windows/Linux x64 and ARM64 build targets; Apple-silicon macOS source-only instructions.
+- Current test/package evidence remains separate from historical release notes below.
+- Native CI pins Python 3.12.10, locks component restores, reuses release Rust
+  builds, checks packaging/source contracts and retains explicit artifact allowlists.
+- Honor cancellation before preparing inputs and move expensive preparation off
+  the UI thread; canceled operations retain the previous successful result.
+- Capture the selected chart face and rendering inputs before background
+  preparation so later control changes cannot alter an operation already started.
+- Verify saved result assets and repair interrupted session copies atomically;
+  failed recovery preserves the previous session and rejects changed source assets.
+- Keep session save/load disk work off the UI thread and guard asynchronous
+  completion against changes to the current session.
+
 ## Documentation and release designation — 15 October 2026
 
 - Promote the existing v0.1.0 Windows build to the main GitHub release (Latest),

@@ -381,7 +381,15 @@ public partial class MainWindow : Window
 
     private void BatchButton_Click(object? sender, RoutedEventArgs e)
     {
-        BatchMenu.IsOpen = !BatchMenu.IsOpen;
+        ShowBatchMenu(!BatchMenu.IsOpen);
+    }
+
+    private void ShowBatchMenu(bool open)
+    {
+        BatchMenuScroll.MaxHeight = Math.Max(120, Math.Min(420, ClientSize.Height - 48));
+        BatchMenuScroll.MaxWidth = Math.Max(160, Math.Min(320, ClientSize.Width - 32));
+        BatchMenu.IsOpen = open;
+        if (open) Dispatcher.UIThread.Post(() => BatchProcessAll.Focus(NavigationMethod.Tab));
     }
 
     private void CloseBatchMenu(object? sender, RoutedEventArgs e)
@@ -407,6 +415,15 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    private void RelinkImage_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm && sender is MenuItem { DataContext: SessionItemViewModel item })
+        {
+            vm.HandleSessionClick(item, false, false);
+            vm.RelinkImageCommand.Execute(null);
+        }
     }
 
     private async void OnSessionThumbPressed(object? sender, PointerPressedEventArgs e)
@@ -761,7 +778,7 @@ public partial class MainWindow : Window
 
         if (control && !shift && e.Key == Key.B && vm.CanOpenBatch)
         {
-            BatchMenu.IsOpen = true;
+            ShowBatchMenu(true);
             e.Handled = true;
             return;
         }
@@ -953,9 +970,7 @@ public partial class MainWindow : Window
         e.DataTransfer.TryGetText() is { } text && text.StartsWith("ccp-files", StringComparison.Ordinal);
 
     private static bool CanAcceptPaths(DragEventArgs e) =>
-        IsInternalPaths(e) || _internalPathDrag
-        || (e.DataTransfer.Contains(DataFormat.File)
-            && ReadDropPaths(e).Any(SupportedStillImage.IsSupportedFile));
+        e.DataTransfer.Contains(DataFormat.File) || IsInternalPaths(e) || _internalPathDrag;
 
     private static List<string> ReadDropPaths(DragEventArgs e)
     {

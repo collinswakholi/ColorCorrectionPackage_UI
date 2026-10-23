@@ -10,7 +10,7 @@ internal static class ImageSizeReader
         height = 0;
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             Span<byte> header = stackalloc byte[24];
             var n = stream.Read(header);
             if (n >= 16 && header[..8].SequenceEqual(PreviewRgb.Magic))

@@ -11,10 +11,6 @@ public partial class CcSettingsDialog : Window
     public CcSettingsDialog()
     {
         InitializeComponent();
-        // A separate Windows task-switcher entry keeps this modal discoverable
-        // by assistive/automation clients, instead of activating its owner and
-        // dismissing the optimizer/method popup while it is being selected.
-        ShowInTaskbar = OperatingSystem.IsWindows();
         AddHandler(InputElement.KeyDownEvent, OnKeyDown,
             RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
     }
@@ -28,6 +24,16 @@ public partial class CcSettingsDialog : Window
     }
 
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    private async void References_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ViewModels.MainWindowViewModel { Active.Handshake: { Ok: true } } vm || vm.Busy || vm.IsSaving)
+        {
+            if (DataContext is ViewModels.MainWindowViewModel current) current.Status = "Detect a chart image before editing its references.";
+            return;
+        }
+        await new ReferenceEditorDialog(vm).ShowDialog(this);
+    }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {

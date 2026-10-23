@@ -14,6 +14,20 @@ namespace ColorCorrect.App.Headless.Tests;
 public sealed class HelpWindowTests
 {
     [AvaloniaFact]
+    public void Guide_UsesValidColorScienceSymbolsAndMatchingTopicNames()
+    {
+        var topics = HelpWindow.LoadTopics();
+        Assert.Contains(topics, topic => topic.Title == "FFC · illumination");
+        Assert.Contains(topics, topic => topic.Title == "Color spaces & ΔE");
+        foreach (var text in topics.SelectMany(topic => topic.Paragraphs.Prepend(topic.Title)))
+        {
+            Assert.DoesNotContain("\u00c2", text);
+            Assert.DoesNotContain("\u00e2\u20ac", text);
+            Assert.DoesNotContain("\u00ce\u201d", text);
+        }
+    }
+
+    [AvaloniaFact]
     public void MainWindow_F1OpensGuide_EscapeReturnsFocus()
     {
         var window = new MainWindow

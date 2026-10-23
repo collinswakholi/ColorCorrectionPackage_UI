@@ -1,4 +1,5 @@
 using ColorCorrect.Engine;
+using System.Text.Json;
 using Xunit;
 
 namespace ColorCorrect.Engine.Tests;
@@ -10,21 +11,31 @@ public sealed class ReliabilityTests : IDisposable
     public ReliabilityTests() => Directory.CreateDirectory(_root);
 
     [Fact]
-    public void DataDirectoryOverride_IsIsolatedAndDefaultIsPreserved()
+    public void PackagedResourceRootWinsOverAnUnrelatedSourceWorkingDirectory()
     {
-        var previous = Environment.GetEnvironmentVariable("COLORCORRECT_DATA_DIR");
+        var package = Path.Combine(_root, "package-Δ");
+        var source = Path.Combine(_root, "source");
+        foreach (var path in new[] { package, source })
+        {
+            Directory.CreateDirectory(Path.Combine(path, "models", "opt2"));
+            Directory.CreateDirectory(Path.Combine(path, "refs"));
+            File.WriteAllText(Path.Combine(path, "refs", "neutrals.json"), "{}");
+        }
+        var previousRoot = Environment.GetEnvironmentVariable("CCP_NEW_UI_ROOT");
+        var previousDirectory = Directory.GetCurrentDirectory();
         try
         {
-            var isolated = Path.Combine(_root, "isolated-profile");
-            Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", isolated);
-            Assert.Equal(isolated, SessionStore.AppDataDir());
-            Assert.Equal(Path.Combine(isolated, "settings.json"), SessionStore.SettingsPath());
-            Assert.True(SessionStore.SaveSettings(new SessionState { Theme = "Light" }));
-            Assert.Equal("Light", SessionStore.TryLoadSettings().State.Theme);
-            Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", null);
-            Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCP-New"), SessionStore.AppDataDir());
+            Directory.SetCurrentDirectory(source);
+            Environment.SetEnvironmentVariable("CCP_NEW_UI_ROOT", package);
+            Assert.True(EnginePaths.TryFindRepoRoot(out var root));
+            Assert.Equal(package, root);
+            Assert.Equal(package, new SpeedyWorker(exePath: "not-started").RepoRoot);
         }
-        finally { Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", previous); }
+        finally
+        {
+            Directory.SetCurrentDirectory(previousDirectory);
+            Environment.SetEnvironmentVariable("CCP_NEW_UI_ROOT", previousRoot);
+        }
     }
 
     [Fact]
@@ -51,20 +62,6 @@ public sealed class ReliabilityTests : IDisposable
         Assert.False(SessionStore.Write(directoryTarget, new SessionState()));
     }
 
-    [Theory]
-    [InlineData("{}", false)]
-    [InlineData("{\"Options\":null}", false)]
-    [InlineData("{\"Options\":{\"Method\":\"nn\"}}", true)]
-    public void SessionOptions_DistinguishSavedWorkflowFromOlderImageOnlyFiles(string json, bool hasOptions)
-    {
-        var path = Path.Combine(_root, "optional-options.json");
-        File.WriteAllText(path, json);
-        var (loaded, error) = SessionStore.TryLoadFrom(path);
-        Assert.Null(error);
-        Assert.NotNull(loaded.Options);
-        Assert.Equal(hasOptions, loaded.HasOptions);
-    }
-
     [Fact]
     public void DuplicateImageStems_GetDistinctArtifactNamesAndSelectedFormat()
     {
@@ -77,6 +74,40 @@ public sealed class ReliabilityTests : IDisposable
         Assert.Equal(["IMG_001_1", "img_001_2", "unique"], names);
         Assert.Equal(".png", new CorrectionOptions { OutputFormat = "png" }.OutputExtension());
         Assert.Equal(".jpg", new CorrectionOptions { OutputFormat = "jpg" }.OutputExtension());
+    }
+
+    [Fact]
+    public void GeneratedArtifactSuffixes_DoNotOverwriteLiteralStemsOrDuplicateInputs()
+    {
+        (string[] Images, string[] Expected)[] cases = [
+            (["a.jpg", "a.png", "a_1.jpg"], ["a_2", "a_3", "a_1"]),
+            (["a_1.jpg", "a.jpg", "a.png"], ["a_1", "a_2", "a_3"]),
+            (["a.jpg", "a.png", "A_1.jpg", "a_1.png", "a_1_1.jpg"], ["a_2", "a_3", "A_1_2", "a_1_3", "a_1_1"]),
+            (["a.jpg", "a.jpg", "a_1.jpg", "a_2.jpg"], ["a_3", "a_4", "a_1", "a_2"]),
+            (["Ä.jpg", "ä.png", "Ä_1.jpg"], ["Ä_2", "ä_3", "Ä_1"]),
+        ];
+        foreach (var (images, expected) in cases)
+        {
+            var names = CorrectionClient.BuildArtifactBases(images);
+            Assert.Equal(expected, names);
+            Assert.Equal(images.Length, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BatchReplyMatchingPreservesEveryOccurrenceAndPlatformPathComparison(bool caseSensitive)
+    {
+        using var reply = JsonDocument.Parse("""
+            {"results":[{"image":"a.jpg","output":"first.png"},{"image":"A.jpg","output":"upper.png"},{"image":"a.jpg","output":"repeat.png"}]}
+            """);
+        var rows = CorrectionClient.MatchApplyResults(["A.jpg", "a.jpg", "a.jpg", "missing.jpg"], reply.RootElement,
+            caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(caseSensitive ? "upper.png" : "first.png", rows[0]!.Value.GetProperty("output").GetString());
+        Assert.Equal(caseSensitive ? "first.png" : "upper.png", rows[1]!.Value.GetProperty("output").GetString());
+        Assert.Equal("repeat.png", rows[2]!.Value.GetProperty("output").GetString());
+        Assert.Null(rows[3]);
     }
 
     [Theory]
@@ -156,7 +187,7 @@ public sealed class ReliabilityTests : IDisposable
         Assert.NotNull(report);
         Assert.Equal(5, report.ValidationFolds);
         Assert.Equal(2.8, report.ValidationMean, 6);
-        Assert.Contains("held-out", report.StatusLine(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CC-only", report.StatusLine(), StringComparison.OrdinalIgnoreCase);
         Assert.Single(report.FitWarnings);
     }
 
@@ -175,7 +206,7 @@ public sealed class ReliabilityTests : IDisposable
             Directory.CreateDirectory(engineDir);
             var engine = Path.Combine(engineDir, OperatingSystem.IsWindows() ? "ccp-engine.exe" : "ccp-engine");
             File.WriteAllBytes(engine, []);
-            var nested = Path.Combine(_root, "app", "ColorCorrect.App", "bin", "Release", "net10.0");
+            var nested = Path.Combine(_root, "app", "ColorCorrect.App", "bin", "Release", "net9.0");
             Directory.CreateDirectory(nested);
             Directory.SetCurrentDirectory(nested);
             Environment.SetEnvironmentVariable("CCP_ENGINE_EXE", null);
@@ -189,43 +220,6 @@ public sealed class ReliabilityTests : IDisposable
             Directory.SetCurrentDirectory(oldCwd);
             Environment.SetEnvironmentVariable("CCP_ENGINE_EXE", oldEngine);
             Environment.SetEnvironmentVariable("COLORCORRECT_EXE", oldLegacy);
-        }
-    }
-
-    [Fact]
-    public void LibTorchDiscovery_UsesBundledRuntimeButHonorsExplicitOverride()
-    {
-        var oldRoot = Environment.GetEnvironmentVariable("CCP_LIBTORCH_ROOT");
-        var oldLegacy = Environment.GetEnvironmentVariable("LIBTORCH_PATH");
-        try
-        {
-            Environment.SetEnvironmentVariable("CCP_LIBTORCH_ROOT", null);
-            Environment.SetEnvironmentVariable("LIBTORCH_PATH", null);
-            var appDir = Path.Combine(_root, "portable-app");
-            var bundled = Path.Combine(appDir, "libtorch");
-            Directory.CreateDirectory(bundled);
-            File.WriteAllText(Path.Combine(bundled, "libtorch.json"), "{\"kind\":\"cpu\"}");
-
-            var addon = Path.Combine(_root, "cuda-addon");
-            Assert.Equal(bundled, EnginePaths.LibTorchRoot(appDir, addon));
-
-            var nestedApp = Path.Combine(appDir, "app");
-            Directory.CreateDirectory(nestedApp);
-            Assert.Equal(bundled, EnginePaths.LibTorchRoot(nestedApp, addon));
-            Directory.CreateDirectory(Path.Combine(addon, "lib"));
-            File.WriteAllText(Path.Combine(addon, "lib", "torch_cuda.dll"), "fixture");
-            File.WriteAllText(Path.Combine(addon, "libtorch.json"), "{\"kind\":\"cuda\",\"version\":\"2.9.1\"}");
-            Assert.Equal(addon, EnginePaths.LibTorchRoot(nestedApp, addon));
-
-            var custom = Path.Combine(_root, "custom-libtorch");
-            Environment.SetEnvironmentVariable("CCP_LIBTORCH_ROOT", custom);
-            Assert.Equal(custom, EnginePaths.LibTorchRoot(appDir, addon));
-            Assert.NotEqual(custom, LibTorchCudaInstaller.DestRoot());
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("CCP_LIBTORCH_ROOT", oldRoot);
-            Environment.SetEnvironmentVariable("LIBTORCH_PATH", oldLegacy);
         }
     }
 

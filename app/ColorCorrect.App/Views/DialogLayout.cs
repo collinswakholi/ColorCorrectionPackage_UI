@@ -13,8 +13,6 @@ internal static class DialogLayout
             return;
         }
 
-        dialog.Icon ??= owner.Icon;
-
         var maxW = Math.Max(280, owner.ClientSize.Width - 16);
         var maxH = Math.Max(280, owner.ClientSize.Height - 16);
         var width = dialog.Width > 1 ? dialog.Width : 460;
@@ -28,8 +26,9 @@ internal static class DialogLayout
         dialog.Width = Math.Min(width, maxW);
         dialog.Height = Math.Min(height, maxH);
 
-        var x = owner.Position.X + (int)Math.Round((owner.Bounds.Width - dialog.Width) / 2);
-        var y = owner.Position.Y + (int)Math.Round((owner.Bounds.Height - dialog.Height) / 2);
+        // Window positions use physical pixels; widths and client sizes use DIPs.
+        var x = owner.Position.X + (int)Math.Round((owner.Bounds.Width - dialog.Width) * owner.RenderScaling / 2);
+        var y = owner.Position.Y + (int)Math.Round((owner.Bounds.Height - dialog.Height) * owner.RenderScaling / 2);
         dialog.Position = new PixelPoint(x, y);
 
         if (dialog.FindControl<ScrollViewer>("SettingsScroll") is { } scroll)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ColorCorrect.Engine;
 
@@ -6,8 +7,18 @@ public sealed class HandshakeDocument
 {
     public HandshakeDocument(string json)
     {
-        Json = json;
-        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        var node = JsonNode.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json) as JsonObject
+            ?? throw new ArgumentException("Chart geometry must be a JSON object.");
+        var snapshot = node["snapshot_id"]?.GetValue<string>() ?? Guid.NewGuid().ToString("N");
+        node["snapshot_id"] = snapshot;
+        if (node["charts"] is JsonArray charts)
+        {
+            for (var i = 0; i < charts.Count; i++)
+                if (charts[i] is JsonObject face) face["chart_id"] ??= $"{snapshot}:{i}";
+        }
+        node["chart_id"] ??= $"{snapshot}:0";
+        Json = node.ToJsonString();
+        using var doc = JsonDocument.Parse(Json);
         Root = doc.RootElement.Clone();
     }
 
@@ -21,6 +32,8 @@ public sealed class HandshakeDocument
     public string Runtime => Str("runtime");
     public string Backend => Str("backend");
     public string Device => Str("device");
+    public string SnapshotId => Str("snapshot_id");
+    public string ChartId(int choice) => GetStr(ActiveFace(choice), "chart_id") ?? "";
     public int DetectionCount => GetInt("n_dets");
     private int? _patchCount;
     private IReadOnlyList<JsonElement>? _faces;
@@ -177,6 +190,7 @@ public sealed class HandshakeDocument
             {
                 writer.WriteStartObject();
                 writer.WriteBoolean("ok", true);
+                writer.WriteString("snapshot_id", SnapshotId);
                 writer.WriteBoolean("use_all", true);
                 writer.WriteNumber("crop", crop);
                 writer.WriteNumber("n_charts", Faces().Count);
@@ -184,7 +198,7 @@ public sealed class HandshakeDocument
                 writer.WriteStartArray();
                 foreach (var face in Faces())
                 {
-                    WriteFace(writer, face, crop);
+                    WriteFace(writer, face, crop, SnapshotId);
                 }
 
                 writer.WriteEndArray();
@@ -192,7 +206,7 @@ public sealed class HandshakeDocument
             }
             else
             {
-                WriteFace(writer, ActiveFace(choice), crop);
+                WriteFace(writer, ActiveFace(choice), crop, SnapshotId);
             }
         }
 
@@ -202,9 +216,11 @@ public sealed class HandshakeDocument
         return path;
     }
 
-    private static void WriteFace(Utf8JsonWriter writer, JsonElement face, double crop)
+    private static void WriteFace(Utf8JsonWriter writer, JsonElement face, double crop, string snapshotId)
     {
         writer.WriteStartObject();
+        writer.WriteString("snapshot_id", snapshotId);
+        CopyString(writer, face, "chart_id");
         CopyString(writer, face, "chart_type");
         CopyString(writer, face, "cli_chart");
         writer.WriteBoolean("ok", true);
@@ -212,7 +228,11 @@ public sealed class HandshakeDocument
         writer.WriteNumber("crop", crop);
         if (face.TryGetProperty("rows", out var rows)) writer.WriteNumber("rows", rows.GetInt32());
         if (face.TryGetProperty("cols", out var cols)) writer.WriteNumber("cols", cols.GetInt32());
-        CopyString(writer, face, "quad");
+        if (face.TryGetProperty("quad", out var quad))
+        {
+            writer.WritePropertyName("quad");
+            quad.WriteTo(writer);
+        }
         if (face.TryGetProperty("corners", out var corners))
         {
             writer.WritePropertyName("corners");

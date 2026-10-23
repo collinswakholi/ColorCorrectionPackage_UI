@@ -1,4 +1,4 @@
-//! Opt2 ONNX detect integration (skipped when weights or test image are absent).
+//! Opt-in GPU integration. An explicitly requested run requires its resources.
 
 use std::path::PathBuf;
 
@@ -21,32 +21,19 @@ fn test_image() -> Option<PathBuf> {
 }
 
 #[test]
-fn opt2_onnx_detect_cpu_smoke() {
-    let root = match find_ccp_new_ui_root() {
-        Some(r) => r,
-        None => return,
-    };
+#[ignore = "requires an explicit compatible GPU runtime; run with --features ort-plane -- --ignored"]
+fn opt2_onnx_detect_gpu_smoke() {
+    let root = find_ccp_new_ui_root().expect("GPU smoke test requires a resource root");
     let deploy = root.join("models").join("opt2");
     let onnx = primary_onnx_path(&deploy);
-    if !onnx.is_file() {
-        eprintln!(
-            "skip opt2_onnx_detect_cpu_smoke: missing {}",
-            onnx.display()
-        );
-        return;
-    }
-    let image = match test_image() {
-        Some(p) => p,
-        None => {
-            eprintln!("skip opt2_onnx_detect_cpu_smoke: no ColorCard test image");
-            return;
-        }
-    };
-    let report = probe_accelerators("cpu");
+    assert!(onnx.is_file(), "GPU smoke test requires {}", onnx.display());
+    let image =
+        test_image().expect("GPU smoke test requires a public ColorCard fixture in test_images");
+    let report = probe_accelerators("auto");
     set_runtime_from_report(&report);
     let settings = DetectSettings {
         deploy_dir: deploy,
-        device: "cpu".into(),
+        device: "auto".into(),
         ..DetectSettings::default()
     };
     let warm = warmup_detector(&settings);

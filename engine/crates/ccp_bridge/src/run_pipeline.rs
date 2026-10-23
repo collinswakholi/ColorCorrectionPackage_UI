@@ -22,6 +22,9 @@ use ccp_core::maps::{
     APPLY_LUT_SIZE,
 };
 use ccp_core::phase2::emit_rpcc2_teacher;
+use ccp_core::reference_profile::{
+    annotate_patches, ChartReferenceAssignment, ReferenceProfile, ResolvedReferenceContext,
+};
 use ccp_core::refs::{
     chart_spec_from_name, load_neutrals_table, ChartPatch, ChartSpec, Quad, Vec2,
 };
@@ -37,7 +40,7 @@ use ccp_core::stages::{
 use ccp_core::{parse_rgb_color_space, parse_white_point, RIDGE_LAMBDA};
 use ccp_detect::plane::detect_plane_or_full;
 use ccp_detect::{
-    apply_encoded_lut_gpu, apply_encoded_lut_ort, runtime_assignment, runtime_policy, DevicePolicy,
+    runtime_policy, DevicePolicy,
 };
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder, RgbImage as Rgb8};
@@ -46,35 +49,84 @@ use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub mod fast_lut;
+use fast_lut::apply_combined;
+
 const PREVIEW_MAX_WIDTH: u32 = 2560;
 const PREVIEW_RGB_MAGIC: &[u8; 8] = b"CCPRGB8\n";
 
-fn pending_preview_pngs() -> &'static Mutex<HashMap<PathBuf, JoinHandle<()>>> {
-    static PENDING: OnceLock<Mutex<HashMap<PathBuf, JoinHandle<()>>>> = OnceLock::new();
-    PENDING.get_or_init(|| Mutex::new(HashMap::new()))
+thread_local! { static CPU_LUT_REQUEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+thread_local! { static AUTO_LUT_REQUEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+
+pub fn set_cpu_lut_request(cpu: bool) { CPU_LUT_REQUEST.set(cpu); }
+pub fn set_auto_lut_request(auto: bool) { AUTO_LUT_REQUEST.set(auto); }
+
+// Small previews do not amortize GPU startup and transfer overhead. This is a
+// conservative size policy, not a claim to benchmark the user's hardware.
+fn auto_uses_cpu(pixels: usize) -> bool { pixels < 1_048_576 }
+
+#[derive(Default)]
+struct PreviewPngEncoders {
+    pending: Mutex<HashMap<PathBuf, JoinHandle<()>>>,
 }
 
-fn join_pending_preview_png(path: &Path) {
-    let handle = pending_preview_pngs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove(path);
-    if let Some(handle) = handle {
-        let _ = handle.join();
+impl PreviewPngEncoders {
+    fn reap_finished(&self) {
+        let handles: Vec<_> = {
+            let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            let finished: Vec<_> = pending
+                .iter()
+                .filter(|(_, handle)| handle.is_finished())
+                .map(|(path, _)| path.clone())
+                .collect();
+            finished.into_iter().filter_map(|path| pending.remove(&path)).collect()
+        };
+        // Join outside the registry lock. A finished encoder still owns a native
+        // Windows thread handle until joined/dropped; unique run paths must not
+        // retain those handles until shutdown. Encoders still running stay queued.
+        for handle in handles {
+            let _ = handle.join();
+        }
+    }
+
+    fn join(&self, path: &Path) {
+        let handle = self.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(path);
+        if let Some(handle) = handle {
+            let _ = handle.join();
+        }
+    }
+
+    fn flush(&self) {
+        let handles: Vec<_> = self.pending.lock().unwrap_or_else(|e| e.into_inner())
+            .drain().map(|(_, handle)| handle).collect();
+        for handle in handles {
+            let _ = handle.join();
+        }
+    }
+
+    fn spawn(&self, rgb: Rgb8, path: PathBuf) {
+        self.reap_finished();
+        self.join(&path);
+        let key = path.clone();
+        if let Ok(handle) = std::thread::Builder::new()
+            .name("ccp-preview-png".into())
+            .spawn(move || {
+                let _ = encode_preview_png(&rgb, &path);
+            })
+        {
+            self.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(key, handle);
+        }
     }
 }
 
-pub fn flush_preview_encodes() {
-    let handles: Vec<JoinHandle<()>> = pending_preview_pngs()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .drain()
-        .map(|(_, h)| h)
-        .collect();
-    for handle in handles {
-        let _ = handle.join();
-    }
+fn pending_preview_pngs() -> &'static PreviewPngEncoders {
+    static PENDING: OnceLock<PreviewPngEncoders> = OnceLock::new();
+    PENDING.get_or_init(PreviewPngEncoders::default)
 }
+
+fn join_pending_preview_png(path: &Path) { pending_preview_pngs().join(path); }
+
+pub fn flush_preview_encodes() { pending_preview_pngs().flush(); }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -92,7 +144,12 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-static LAST_APPLY_BACKEND: Mutex<String> = Mutex::new(String::new());
+// Request-local diagnostics must not be overwritten by concurrent callers of
+// the library. The worker dispatches a request and reads its result on this thread.
+thread_local! {
+    static LAST_APPLY: std::cell::RefCell<(String, Option<Value>)> =
+        const { std::cell::RefCell::new((String::new(), None)) };
+}
 const LUT_CACHE_CAPACITY: usize = 8;
 type LutCacheEntry = (Vec<u8>, Arc<Vec<f32>>);
 type LutCache = Mutex<Vec<LutCacheEntry>>;
@@ -114,6 +171,10 @@ fn encoded_lut_cached(
         &settings.target_white,
         size,
     ))?;
+    cached_lut(key, || Ok(build_encoded_lut(model, settings, size)?))
+}
+
+fn cached_lut(key: Vec<u8>, build: impl FnOnce() -> Result<Vec<f32>>) -> Result<Arc<Vec<f32>>> {
     {
         let mut cache = encoded_lut_cache()
             .lock()
@@ -127,7 +188,7 @@ fn encoded_lut_cached(
             return Ok(hit);
         }
     }
-    let built = Arc::new(build_encoded_lut(model, settings, size)?);
+    let built = Arc::new(build()?);
     let mut cache = encoded_lut_cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -142,17 +203,19 @@ fn encoded_lut_cached(
 }
 
 pub fn last_apply_backend() -> String {
-    LAST_APPLY_BACKEND
-        .lock()
-        .ok()
-        .map(|g| g.clone())
-        .unwrap_or_default()
+    LAST_APPLY.with_borrow(|v| v.0.clone())
 }
 
 fn remember_apply_backend(label: &str) {
-    if let Ok(mut guard) = LAST_APPLY_BACKEND.lock() {
-        *guard = label.to_string();
-    }
+    LAST_APPLY.with_borrow_mut(|v| *v = (label.to_string(), None));
+}
+
+fn remember_apply_execution(execution: Value) {
+    LAST_APPLY.with_borrow_mut(|v| v.1 = Some(execution));
+}
+
+pub fn last_apply_execution() -> Option<Value> {
+    LAST_APPLY.with_borrow(|v| v.1.clone())
 }
 
 fn apply_cc_accel(
@@ -168,48 +231,41 @@ fn apply_cc_accel(
     }
     let gs = APPLY_LUT_SIZE;
     let lut = encoded_lut_cached(model, settings, gs)?;
-    // Still-image 3D LUT sampling is memory-local and benchmarks faster on CPU
-    // than a host↔device round-trip. Explicit device policies remain available.
-    let prefer = if runtime_policy() == DevicePolicy::Auto {
-        "cpu".to_string()
-    } else {
-        runtime_assignment().apply
-    };
-    if matches!(prefer.as_str(), "directml" | "openvino") {
+    apply_lut_accel(img, &lut, gs, "cc-lut33")
+}
+
+fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Result<()> {
+    // LUT selection is independent of GPU inference. Keep the legacy CPU policy.
+    let small_auto = AUTO_LUT_REQUEST.get() && auto_uses_cpu(img.len()/3);
+    if runtime_policy() != DevicePolicy::Cpu && !CPU_LUT_REQUEST.get() && !small_auto {
         if img.as_slice_mut().is_none() {
             let dim = img.raw_dim();
             let owned: Vec<f32> = img.iter().copied().collect();
             *img = Array3::from_shape_vec(dim, owned).map_err(|e| Error::Message(e.to_string()))?;
         }
-        let (h, w, _) = img.dim();
         if let Some(slice) = img.as_slice_mut() {
-            match apply_encoded_lut_ort(slice, h, w, &lut, gs) {
-                Ok(backend) => {
-                    remember_apply_backend(backend);
-                    return Ok(());
-                }
-                Err(error) => {
-                    eprintln!("ccp_bridge: LUT {prefer} inference failed; CPU fallback: {error}")
-                }
+            let execution = ccp_detect::lut_wgpu::apply(slice, &lut, gs).map_err(Error::Message)?;
+            if let Some(reason) = &execution.chunks.fallback_reason {
+                eprintln!("LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
+                    execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels);
             }
+            remember_apply_backend(&execution.backend);
+            remember_apply_execution(json!({
+                "backend": execution.backend, "method": method, "grid": gs,
+                "accelerated_pixels": execution.chunks.accelerated_pixels,
+                "cpu_pixels": execution.chunks.cpu_pixels,
+                "fallback_reason": execution.chunks.fallback_reason,
+            }));
+            return Ok(());
         }
     }
-    if matches!(prefer.as_str(), "cuda" | "mps" | "auto") {
-        if img.as_slice_mut().is_none() {
-            let dim = img.raw_dim();
-            let owned: Vec<f32> = img.iter().copied().collect();
-            *img = Array3::from_shape_vec(dim, owned).map_err(|e| Error::Message(e.to_string()))?;
-        }
-        let (h, w, _) = img.dim();
-        if let Some(slice) = img.as_slice_mut() {
-            if let Ok(backend) = apply_encoded_lut_gpu(slice, h, w, &lut, gs, &prefer) {
-                remember_apply_backend(backend);
-                return Ok(());
-            }
-        }
-    }
-    apply_encoded_lut_inplace(img, &lut, gs);
+    apply_encoded_lut_inplace(img, lut, gs);
     remember_apply_backend("cpu");
+    remember_apply_execution(json!({
+        "backend":"cpu", "method":method, "grid":gs,
+        "accelerated_pixels":0, "cpu_pixels":img.len()/3, "fallback_reason":null,
+        "selection_reason": if small_auto { "auto_small_image" } else { "cpu_requested" }
+    }));
     Ok(())
 }
 
@@ -246,6 +302,8 @@ pub struct SavedPipeline {
     pub ffc_plane_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ffc_white_size: Option<[i32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_context: Option<ResolvedReferenceContext>,
 }
 
 impl Default for SavedPipeline {
@@ -270,6 +328,7 @@ impl Default for SavedPipeline {
             ffc_plane: None,
             ffc_plane_source: None,
             ffc_white_size: None,
+            reference_context: None,
         }
     }
 }
@@ -321,6 +380,8 @@ impl SavedPipeline {
 
 #[derive(Clone, Debug)]
 pub struct HandshakeFace {
+    pub snapshot_id: String,
+    pub chart_id: String,
     pub chart_type: String,
     pub cli_chart: String,
     pub patch_obbs: Vec<Quad>,
@@ -467,6 +528,8 @@ fn face_from_value(face: &Value, crop: f64) -> Option<HandshakeFace> {
         return None;
     }
     Some(HandshakeFace {
+        snapshot_id: json_str(face, &["snapshot_id"]).unwrap_or("").into(),
+        chart_id: json_str(face, &["chart_id"]).unwrap_or("").into(),
         chart_type,
         cli_chart,
         patch_obbs,
@@ -480,26 +543,45 @@ pub fn parse_handshake(
     use_all: bool,
     crop: f64,
 ) -> Result<Vec<HandshakeFace>> {
+    let snapshot = json_str(root, &["snapshot_id"]).unwrap_or("");
+    let identify = |mut parsed: HandshakeFace| {
+        if parsed.snapshot_id.is_empty() {
+            parsed.snapshot_id = snapshot.into();
+        }
+        parsed
+    };
     if let Some(charts) = root.get("charts").and_then(Value::as_array) {
         if !charts.is_empty() {
             if use_all {
                 let faces: Vec<HandshakeFace> = charts
                     .iter()
-                    .filter_map(|c| face_from_value(c, crop))
-                    .collect();
+                    .enumerate()
+                    .map(|(index, c)| {
+                        face_from_value(c, crop).map(&identify).ok_or_else(|| {
+                            Error::Message(format!(
+                                "handshake chart {index} has no valid patch_obbs"
+                            ))
+                        })
+                    })
+                    .collect::<Result<_>>()?;
                 if faces.is_empty() {
                     return Err(Error::Message("handshake charts have no patch_obbs".into()));
                 }
                 return Ok(faces);
             }
-            let idx = face.min(charts.len() - 1);
-            return face_from_value(&charts[idx], crop)
-                .map(|f| vec![f])
+            let selected = charts.get(face).ok_or_else(|| {
+                Error::Message(format!(
+                    "handshake face {face} is out of range for {} charts",
+                    charts.len()
+                ))
+            })?;
+            return face_from_value(selected, crop)
+                .map(|f| vec![identify(f)])
                 .ok_or_else(|| Error::Message("handshake face has no patch_obbs".into()));
         }
     }
     face_from_value(root, crop)
-        .map(|f| vec![f])
+        .map(|f| vec![identify(f)])
         .ok_or_else(|| Error::Message("handshake has no patch_obbs / patch_cells".into()))
 }
 
@@ -524,6 +606,51 @@ pub fn load_handshake_value(req: &Value) -> Result<Value> {
     Err(Error::Message(
         "run requires handshake or chart_json (path or object)".into(),
     ))
+}
+
+fn resolve_request_references(
+    req: &Value,
+    faces: &[HandshakeFace],
+) -> Result<Option<ResolvedReferenceContext>> {
+    let custom =
+        req.get("reference_profiles").is_some() || req.get("reference_assignments").is_some();
+    if !custom {
+        return Ok(None);
+    }
+    let profiles: Vec<ReferenceProfile> = serde_json::from_value(
+        req.get("reference_profiles")
+            .cloned()
+            .unwrap_or(Value::Null),
+    )?;
+    let assignments: Vec<ChartReferenceAssignment> = serde_json::from_value(
+        req.get("reference_assignments")
+            .cloned()
+            .unwrap_or(Value::Null),
+    )?;
+    let snapshot = faces.first().map(|f| f.snapshot_id.as_str()).unwrap_or("");
+    if faces.iter().any(|f| f.snapshot_id != snapshot) {
+        return Err(Error::Message(
+            "chart assignments span different detection snapshots".into(),
+        ));
+    }
+    let charts = faces
+        .iter()
+        .map(|f| Ok((f.chart_id.clone(), chart_spec_from_name(&f.cli_chart)?.kind)))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Some(ResolvedReferenceContext::resolve(
+        snapshot,
+        &charts,
+        profiles,
+        assignments,
+    )?))
+}
+
+/// Saturation is a property of the original capture, even if FFC/GC/WB later
+/// lower its values. Patch ordering is immutable throughout one run.
+fn restore_original_saturation(original: &[ChartPatch], current: &mut [ChartPatch]) {
+    for (source, patch) in original.iter().zip(current.iter_mut()) {
+        patch.saturated = source.saturated;
+    }
 }
 
 pub fn load_neutrals() -> HashMap<String, Vec<String>> {
@@ -677,19 +804,7 @@ fn encode_preview_png(rgb: &Rgb8, path: &Path) -> Result<()> {
 }
 
 fn spawn_preview_png(rgb: Rgb8, path: PathBuf) {
-    join_pending_preview_png(&path);
-    let key = path.clone();
-    if let Ok(handle) = std::thread::Builder::new()
-        .name("ccp-preview-png".into())
-        .spawn(move || {
-            let _ = encode_preview_png(&rgb, &path);
-        })
-    {
-        pending_preview_pngs()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(key, handle);
-    }
+    pending_preview_pngs().spawn(rgb, path);
 }
 
 fn write_preview(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
@@ -973,6 +1088,7 @@ fn sample_faces(
     image: RgbView<'_>,
     faces: &[HandshakeFace],
     options: SamplingOptions,
+    references: Option<&ResolvedReferenceContext>,
 ) -> Result<(ChartSpec, Vec<ChartPatch>, String)> {
     let mut all = Vec::new();
     let mut spec = None;
@@ -983,11 +1099,20 @@ fn sample_faces(
         } else {
             face.cli_chart.as_str()
         };
-        let this = chart_spec_from_name(name)?;
+        let resolved = references.map(|r| r.chart(&face.chart_id)).transpose()?;
+        let this = resolved
+            .map(|r| r.spec.clone())
+            .unwrap_or(chart_spec_from_name(name)?);
         if chart_type.is_empty() {
             chart_type = this.id.clone();
         }
-        let sampled = sample_patch_obbs_view(&image, &this, &face.patch_obbs, options)?;
+        let mut sampled = sample_patch_obbs_view(&image, &this, &face.patch_obbs, options)?;
+        annotate_patches(
+            &mut sampled,
+            &face.chart_id,
+            &this,
+            resolved.map(|r| (r.profile_id.as_str(), r.profile_revision)),
+        );
         all.extend(sampled);
         if spec.is_none() {
             spec = Some(this);
@@ -1001,6 +1126,7 @@ fn sample_work(
     work: &Array3<f32>,
     faces: &[HandshakeFace],
     options: SamplingOptions,
+    references: Option<&ResolvedReferenceContext>,
 ) -> Result<(ChartSpec, Vec<ChartPatch>, String)> {
     let pixels = array3_f32s(work);
     let view = RgbView::from_rgb(
@@ -1008,7 +1134,7 @@ fn sample_work(
         work.shape()[0] as u32,
         pixels.as_ref(),
     )?;
-    sample_faces(view, faces, options)
+    sample_faces(view, faces, options, references)
 }
 
 fn sample_work_ffc(
@@ -1016,6 +1142,7 @@ fn sample_work_ffc(
     faces: &[HandshakeFace],
     options: SamplingOptions,
     gain: &Array2<f32>,
+    references: Option<&ResolvedReferenceContext>,
 ) -> Result<(ChartSpec, Vec<ChartPatch>, String)> {
     let pixels = array3_f32s(work);
     let width = work.shape()[1] as u32;
@@ -1031,17 +1158,22 @@ fn sample_work_ffc(
         } else {
             face.cli_chart.as_str()
         };
-        let this = chart_spec_from_name(name)?;
+        let resolved = references.map(|r| r.chart(&face.chart_id)).transpose()?;
+        let this = resolved
+            .map(|r| r.spec.clone())
+            .unwrap_or(chart_spec_from_name(name)?);
         if chart_type.is_empty() {
             chart_type = this.id.clone();
         }
-        all.extend(sample_patch_obbs_view_transform(
-            &view,
+        let mut sampled =
+            sample_patch_obbs_view_transform(&view, &this, &face.patch_obbs, options, &transform)?;
+        annotate_patches(
+            &mut sampled,
+            &face.chart_id,
             &this,
-            &face.patch_obbs,
-            options,
-            &transform,
-        )?);
+            resolved.map(|r| (r.profile_id.as_str(), r.profile_revision)),
+        );
+        all.extend(sampled);
         if spec.is_none() {
             spec = Some(this);
         }
@@ -1150,6 +1282,8 @@ fn build_report(
         patches.push(json!({
             "name": b.name,
             "index": b.index,
+            "provenance": b.provenance,
+            "reference_lab_d50": b.reference_lab_d50,
             "before_delta_e": db,
             "after_delta_e": da,
             "saturated": b.saturated,
@@ -1234,7 +1368,8 @@ impl PreviewMode {
     }
 
     fn wants_intermediate(&self, name: &str) -> bool {
-        self.is_all() && name != "original" && name != "corrected" && name != "cc"
+        (self.is_all() || matches!(self, Self::Stage(stage) if stage == name))
+            && name != "original" && name != "corrected" && name != "cc"
     }
 }
 
@@ -1294,7 +1429,7 @@ pub struct CachedFfc {
 impl CachedFfc {
     pub fn compute(white: &Path, crop: Option<&str>, params: &FfcFitParams) -> Result<Self> {
         let white_img = load_image(white)?;
-        let (rect, source) = ffc_plane_info(&white_img, crop);
+        let (rect, source) = ffc_plane_info(&white_img, crop)?;
         let white_size = [white_img.width as i32, white_img.height as i32];
         let white_arr = rgb_image_into_array3(white_img)?;
         let gain = compute_multiplier(Some(&white_arr), Some(rect), params)?;
@@ -1416,13 +1551,11 @@ fn finish_image_writes(
                 jobs.push((preview_path(dir, "corrected"), true));
             }
             PreviewMode::Stage(stage) => {
-                if stage != "original" {
-                    let stem = if stage == "corrected" || stage == "cc" {
-                        "corrected"
-                    } else {
-                        stage.as_str()
-                    };
-                    jobs.push((preview_path(dir, stem), true));
+                // FFC/GC/WB previews were written at their actual stage.
+                // Never replace them with the final buffer (which may also
+                // use the optional combined LUT).
+                if stage == "corrected" || stage == "cc" {
+                    jobs.push((preview_path(dir, "corrected"), true));
                 }
             }
             PreviewMode::All => {
@@ -1433,12 +1566,32 @@ fn finish_image_writes(
     write_jobs_parallel(work, &jobs, space)
 }
 
+fn maybe_preview_with_progress(
+    preview_dir: Option<&Path>,
+    stage: &str,
+    work: &Array3<f32>,
+    progress: &mut dyn FnMut(&str),
+) -> Result<()> {
+    if preview_dir.is_some() {
+        progress("Writing preview");
+        maybe_preview(preview_dir, stage, work)?;
+        progress("Writing preview complete");
+    }
+    Ok(())
+}
+
+/// Write a processed image with the same quantization, codec and color metadata
+/// used by the app. Useful for measuring alternate math without changing IO.
+pub fn write_corrected_image(work: &Array3<f32>, output: &Path, space: &RgbColorSpace) -> Result<()> {
+    finish_image_writes(work, output, None, true, &PreviewMode::None, space)
+}
+
 /// White-image crop used for FFC: manual rect, YOLO plane, or full frame.
-fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> ([i32; 4], &'static str) {
+fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4], &'static str)> {
     if let Some(s) = crop_rect {
         if let Some(r) = ccp_detect::plane::parse_crop_rect(s) {
             if r.width > 0 && r.height > 0 {
-                return ([r.x, r.y, r.width, r.height], "crop_rect");
+                return Ok(([r.x, r.y, r.width, r.height], "crop_rect"));
             }
         }
     }
@@ -1449,18 +1602,19 @@ fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> ([i32; 4], &'sta
         .collect();
     let plane = ccp_detect::paths::plane_onnx_path();
     if let Some(path) = plane.as_deref() {
-        if let Ok(Some(r)) = ccp_detect::plane::detect_plane(&rgb8, white.width, white.height, path)
+        if let Some(r) = ccp_detect::plane::detect_plane(&rgb8, white.width, white.height, path)
+            .map_err(|e| Error::Message(e.to_string()))?
         {
             if r.width > 0 && r.height > 0 {
-                return ([r.x, r.y, r.width, r.height], "detected");
+                return Ok(([r.x, r.y, r.width, r.height], "detected"));
             }
         }
     }
     let full = detect_plane_or_full(&rgb8, white.width, white.height, None, None);
-    (
+    Ok((
         [full.x, full.y, full.width.max(1), full.height.max(1)],
         "full",
-    )
+    ))
 }
 
 fn attach_ffc_plane(report: &mut Value, saved: &SavedPipeline) {
@@ -1539,6 +1693,7 @@ pub fn run_from_json_ex(
     let face = json_i64(req, &["face"], 0).max(0) as usize;
     let use_all = json_bool(req, &["use_all", "chart_all"], false);
     let faces = parse_handshake(&handshake, face, use_all, crop)?;
+    let reference_context = resolve_request_references(req, &faces)?;
 
     let white_path = json_str(req, &["white", "white_image", "white_image_path"]);
     let stages = StageConfig {
@@ -1576,7 +1731,8 @@ pub fn run_from_json_ex(
     progress("Loading image");
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
     let loaded = ccp_core::sample::load_image_with_icc(image_path, honor_icc)?;
-    let (spec, before_patches, chart_type) = sample_faces(loaded.view(), &faces, sampling)?;
+    let (spec, before_patches, chart_type) =
+        sample_faces(loaded.view(), &faces, sampling, reference_context.as_ref())?;
     let mut work = rgb_image_into_array3(loaded)?;
     let has_chart = !before_patches.is_empty();
 
@@ -1598,25 +1754,27 @@ pub fn run_from_json_ex(
         if let Some(white) = white_path {
             progress("FFC");
             let t = Instant::now();
-            let ffc = resolve_cached_ffc(
+            match resolve_cached_ffc(
                 Path::new(white),
                 crop_rect.as_deref(),
                 &ffc_params,
                 ffc_cache.as_ref(),
-            )
-            .map_err(|e| {
-                Error::Message(format!(
-                    "FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup."
-                ))
-            })?;
-            ffc_plane = Some(ffc.plane);
-            ffc_plane_source = Some(ffc.plane_source.clone());
-            ffc_white_size = Some(ffc.white_size);
-            ffc_gain = Some(Arc::clone(&ffc.gain));
-            ffc_applied = true;
-            ffc_elapsed = t.elapsed().as_secs_f64();
+            ) {
+                Ok(ffc) => {
+                    ffc_plane = Some(ffc.plane);
+                    ffc_plane_source = Some(ffc.plane_source.clone());
+                    ffc_white_size = Some(ffc.white_size);
+                    ffc_gain = Some(Arc::clone(&ffc.gain));
+                    ffc_applied = true;
+                    ffc_elapsed = t.elapsed().as_secs_f64();
+                }
+                Err(error) => return Err(Error::Message(format!("FFC reference could not be loaded or fitted: {error}. Provide a readable blank white-field image from the same capture setup."))),
+            }
+        } else {
+            progress("FFC skipped (white miss)");
         }
     }
+    let fast_mode = json_bool(req, &["fast_mode"], false);
     let defer_fused_ffc_gc = ffc_applied
         && stages.do_gc
         && !preview_mode.wants_intermediate("ffc")
@@ -1627,6 +1785,7 @@ pub fn run_from_json_ex(
             &faces,
             sampling,
             ffc_gain.as_deref().expect("deferred FFC has gain"),
+            reference_context.as_ref(),
         )?
         .1
     } else {
@@ -1636,8 +1795,9 @@ pub fn run_from_json_ex(
                 maybe_preview(preview_dir.as_deref(), "ffc", &work)?;
             }
         }
-        sample_work(&work, &faces, sampling)?.1
+        sample_work(&work, &faces, sampling, reference_context.as_ref())?.1
     };
+    restore_original_saturation(&before_patches, &mut patches);
     if has_chart && ffc_applied {
         let now = de_stats(&patches, false, &settings.input_space);
         stages_de.push(stage_json("FFC", prev_de, now, ffc_elapsed));
@@ -1651,6 +1811,20 @@ pub fn run_from_json_ex(
             mapping.clip_lo,
             mapping.clip_hi,
         );
+        restore_original_saturation(&before_patches, &mut patches);
+    }
+
+    let fast_source = fast_mode.then(|| {
+        let mut source = work.clone();
+        if defer_fused_ffc_gc {
+            apply_ffc_inplace(&mut source, ffc_gain.as_deref().expect("deferred FFC has gain"));
+        }
+        source
+    });
+    // FFC can be deferred to the fused GC pass. Do not announce completion
+    // while only its white-field gain and sampled chart values are ready.
+    if ffc_applied && (!defer_fused_ffc_gc || fast_mode) {
+        progress("FFC complete");
     }
 
     let mut saved = SavedPipeline {
@@ -1667,6 +1841,7 @@ pub fn run_from_json_ex(
         ffc_plane_source,
         ffc_white_size,
         ffc_params: ffc_applied.then_some(ffc_params),
+        reference_context: reference_context.clone(),
         ..SavedPipeline::default()
     };
     saved.kind = kind.name().into();
@@ -1681,11 +1856,13 @@ pub fn run_from_json_ex(
                 ffc_gain.as_deref().expect("deferred FFC has gain"),
                 &gc,
             );
+            if !fast_mode { progress("FFC complete"); }
         } else {
             apply_gc_inplace(&mut work, &gc)?;
         }
         saved.gc_model = Some(gc.clone());
-        patches = sample_work(&work, &faces, sampling)?.1;
+        patches = sample_work(&work, &faces, sampling, reference_context.as_ref())?.1;
+        restore_original_saturation(&before_patches, &mut patches);
         let elapsed = t.elapsed().as_secs_f64();
         if preview_mode.wants_intermediate("gc") {
             maybe_preview(preview_dir.as_deref(), "gc", &work)?;
@@ -1695,6 +1872,7 @@ pub fn run_from_json_ex(
             stages_de.push(stage_json("GC", prev_de, now, elapsed));
             prev_de = now;
         }
+        progress("GC complete");
     }
 
     if stages.do_wb {
@@ -1703,7 +1881,8 @@ pub fn run_from_json_ex(
         let wb = fit_wb(&spec, &patches, Some(&neutrals))?;
         apply_wb_inplace(&mut work, &wb);
         saved.wb_diag = Some(wb.diag);
-        patches = sample_work(&work, &faces, sampling)?.1;
+        patches = sample_work(&work, &faces, sampling, reference_context.as_ref())?.1;
+        restore_original_saturation(&before_patches, &mut patches);
         let elapsed = t.elapsed().as_secs_f64();
         if preview_mode.wants_intermediate("wb") {
             maybe_preview(preview_dir.as_deref(), "wb", &work)?;
@@ -1713,6 +1892,7 @@ pub fn run_from_json_ex(
             stages_de.push(stage_json("WB", prev_de, now, elapsed));
             prev_de = now;
         }
+        progress("WB complete");
     }
 
     let mut feature_count = 0i32;
@@ -1761,10 +1941,25 @@ pub fn run_from_json_ex(
         let t = Instant::now();
         let model = fit_correction_model(&patches, kind, &settings, RIDGE_LAMBDA, &mapping)?;
         feature_count = model.feature_count;
-        apply_cc_accel(&mut work, &model, &settings)?;
+        if !fast_mode { apply_cc_accel(&mut work, &model, &settings)?; }
         saved.correction = Some(model);
         cc_elapsed = t.elapsed().as_secs_f64();
+        progress("CC complete");
     }
+
+    let render_start = Instant::now();
+    if let Some(source) = fast_source {
+        work = source;
+        let mut options = ApplyOptions::from_saved(&saved);
+        options.fast_mode = true;
+        let (pipeline, _) = saved.lut_pipeline()?;
+        let combined = combined_progress_label(&pipeline, &options);
+        if let Some(label) = &combined { progress(label); }
+        apply_combined(&mut work, &saved, &options)?;
+        if combined.is_some() { progress("Combined LUT complete"); }
+    }
+    let combined_render_secs = if fast_mode { render_start.elapsed().as_secs_f64() } else { 0.0 };
+    cc_elapsed += combined_render_secs;
 
     progress("Writing outputs");
     finish_image_writes(
@@ -1786,6 +1981,10 @@ pub fn run_from_json_ex(
     if json_bool(req, &["phase2_teacher"], true) {
         if let Ok(teacher) = emit_rpcc2_teacher(&patches, Some(&settings)) {
             let teacher_path = model_out.with_file_name("teacher_rpcc2.json");
+            let mut teacher = serde_json::to_value(&teacher)?;
+            if let Some(context) = &reference_context {
+                teacher["reference_context"] = serde_json::to_value(context)?;
+            }
             let _ = std::fs::write(teacher_path, serde_json::to_string_pretty(&teacher)?);
         }
     }
@@ -1796,7 +1995,7 @@ pub fn run_from_json_ex(
     }
 
     let after_patches = if has_chart {
-        sample_work(&work, &faces, sampling)?.1
+        sample_work(&work, &faces, sampling, reference_context.as_ref())?.1
     } else {
         Vec::new()
     };
@@ -1813,6 +2012,13 @@ pub fn run_from_json_ex(
             &settings.input_space
         },
     );
+    report_json["apply_execution"] = json!(last_apply_execution());
+    report_json["fast_mode"] = json!(fast_mode);
+    report_json["combined_render_secs"] = json!(combined_render_secs);
+    report_json["fit_patch_count"] = json!(patches.len());
+    if let Some(context) = &reference_context {
+        report_json["reference_context"] = serde_json::to_value(context)?;
+    }
     report_json["input_normalization"] = json!({
         "exif_orientation": "applied before detect, sample and export",
         "embedded_icc": if honor_icc { "convert to working sRGB when present" } else { "explicit pixel encoding; ICC conversion bypassed" },
@@ -1825,9 +2031,10 @@ pub fn run_from_json_ex(
         report_json["stages"] = Value::Array(stages_de);
     }
     if let Some(validation) = validation.as_ref() {
+        report_json["validation_label"] = json!("CC-only");
         report_json["validation_delta_e_2000"] = serde_json::to_value(validation)?;
         report_json["validation_scope"] = json!(
-            "CC mapping only; GC/WB are fitted before folds. Not independent capture validation."
+            "CC-only validation; GC/WB are fitted before folds. Not independent capture validation."
         );
         report_json["validation_elapsed_secs"] = json!(validation_elapsed);
         let training_mean = report_json["delta_e_2000"]["mean_after"]
@@ -1875,6 +2082,7 @@ pub fn run_from_json_ex(
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&report, serde_json::to_string_pretty(&report_json)?)?;
+    progress("Writing outputs complete");
 
     Ok(RunOutcome {
         output,
@@ -1897,7 +2105,18 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
         || v.get("gc_model").is_some()
         || v.get("wb_diag").is_some()
     {
-        return Ok(serde_json::from_value(v)?);
+        let saved: SavedPipeline = serde_json::from_value(v)?;
+        if let Some(context) = &saved.reference_context {
+            if context.version != 1 {
+                return Err(Error::Message(
+                    "unsupported reference context version".into(),
+                ));
+            }
+            for profile in &context.reference_profiles {
+                profile.resolve()?;
+            }
+        }
+        return Ok(saved);
     }
     let correction: CorrectionModel = serde_json::from_value(v)?;
     Ok(SavedPipeline {
@@ -1911,6 +2130,8 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
 
 #[derive(Clone, Debug)]
 pub struct ApplyOptions {
+    /// Optional combined 65³ GC/WB/CC LUT. Default preserves separate stages.
+    pub fast_mode: bool,
     pub do_ffc: bool,
     pub do_gc: bool,
     pub do_wb: bool,
@@ -1926,6 +2147,7 @@ pub struct ApplyOptions {
 impl Default for ApplyOptions {
     fn default() -> Self {
         Self {
+            fast_mode: false,
             do_ffc: false,
             do_gc: true,
             do_wb: true,
@@ -1943,6 +2165,7 @@ impl Default for ApplyOptions {
 impl ApplyOptions {
     pub fn from_saved(saved: &SavedPipeline) -> Self {
         Self {
+            fast_mode: false,
             do_ffc: false,
             do_gc: saved.do_gc,
             do_wb: saved.do_wb,
@@ -1958,6 +2181,7 @@ impl ApplyOptions {
 
     pub fn from_req(req: &Value, saved: &SavedPipeline) -> Self {
         Self {
+            fast_mode: json_bool(req, &["fast_mode"], false),
             do_ffc: json_bool(req, &["do_ffc"], false),
             do_gc: json_bool(req, &["do_gc"], saved.do_gc),
             do_wb: json_bool(req, &["do_wb"], saved.do_wb),
@@ -1988,6 +2212,76 @@ pub fn compute_ffc_gain(
     Ok((*CachedFfc::compute(white, crop_rect, params)?.gain).clone())
 }
 
+pub fn apply_saved_to_work(
+    work: &mut Array3<f32>,
+    saved: &SavedPipeline,
+    apply: &ApplyOptions,
+    gain: Option<&Array2<f32>>,
+) -> Result<()> {
+    if apply.do_ffc && gain.is_none() {
+        return Err(Error::Message(
+            "FFC requested but no white-field gain map was supplied".into(),
+        ));
+    }
+    remember_apply_backend("cpu");
+    if apply.fast_mode {
+        if apply.do_ffc { apply_ffc_inplace(work, gain.expect("validated gain")); }
+        return apply_combined(work, saved, apply);
+    }
+    let (lut, _) = saved.lut_pipeline()?;
+    let fuse = apply.do_ffc && apply.do_gc && gain.is_some() && lut.gc.is_some();
+    if fuse {
+        apply_ffc_gc_fused_inplace(
+            work,
+            gain.expect("fuse requires gain"),
+            lut.gc.as_ref().expect("fuse requires gc"),
+        );
+    } else {
+        if apply.do_ffc {
+            if let Some(g) = gain {
+                apply_ffc_inplace(work, g);
+            }
+        }
+        if apply.do_gc {
+            if let Some(gc) = &lut.gc {
+                apply_gc_inplace(work, gc)?;
+            }
+        }
+    }
+    if apply.do_wb {
+        if let Some(wb) = &lut.wb {
+            apply_wb_inplace(work, wb);
+        }
+    }
+    if apply.do_cc {
+        if let Some((model, settings)) = &lut.cc {
+            apply_cc_accel(work, model, settings)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn u8_rgb_to_array3(width: u32, height: u32, rgb: &[u8]) -> Result<Array3<f32>> {
+    let n = width as usize * height as usize * 3;
+    if rgb.len() != n {
+        return Err(Error::Message(format!("rgb24 length {} != {n}", rgb.len())));
+    }
+    let floats: Vec<f32> = rgb.iter().map(|b| *b as f32 / 255.0).collect();
+    Array3::from_shape_vec((height as usize, width as usize, 3), floats)
+        .map_err(|e| Error::Message(e.to_string()))
+}
+
+pub fn array3_to_u8_rgb(arr: &Array3<f32>, dest: &mut [u8]) -> Result<()> {
+    let src = array3_f32s(arr);
+    if dest.len() != src.len() {
+        return Err(Error::Message("rgb24 dest size mismatch".into()));
+    }
+    dest.par_iter_mut()
+        .zip(src.par_iter())
+        .for_each(|(d, s)| *d = f32_to_u8(*s));
+    Ok(())
+}
+
 pub fn apply_saved_to_image(saved: &SavedPipeline, image: &Path, output: &Path) -> Result<()> {
     apply_saved_to_image_ex(saved, image, output, None, &ApplyOptions::from_saved(saved))?;
     Ok(())
@@ -2000,6 +2294,19 @@ pub fn apply_saved_to_image_ex(
     preview_dir: Option<&Path>,
     apply: &ApplyOptions,
 ) -> Result<ApplyImageReport> {
+    apply_saved_to_image_ex_with_progress(saved, image, output, preview_dir, apply, &mut |_| {})
+}
+
+/// The callback marks actual stage boundaries. Fast rendering reports its active
+/// transforms as one combined operation, rather than inventing sequential work.
+pub fn apply_saved_to_image_ex_with_progress(
+    saved: &SavedPipeline,
+    image: &Path,
+    output: &Path,
+    preview_dir: Option<&Path>,
+    apply: &ApplyOptions,
+    progress: &mut dyn FnMut(&str),
+) -> Result<ApplyImageReport> {
     remember_apply_backend("cpu");
     let settings = correction_settings(
         &saved.input_space_id,
@@ -2009,72 +2316,111 @@ pub fn apply_saved_to_image_ex(
     )?;
     validate_stage_input(&settings, apply.do_ffc, apply.do_gc, apply.do_wb)?;
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
+    progress("Loading image");
     let loaded = ccp_core::sample::load_image_with_icc(image, honor_icc)?;
     let mut work = rgb_image_into_array3(loaded)?;
     let ffc_skipped = None;
     let gain = if apply.do_ffc {
-        let white = apply
-            .white
-            .as_ref()
-            .filter(|p| !p.as_os_str().is_empty())
+        let white = apply.white.as_ref().filter(|p| !p.as_os_str().is_empty())
             .ok_or_else(|| Error::Message("FFC requires a blank white-field image from the same capture setup; neither color chart is a flat-field reference.".into()))?;
-        let ffc = resolve_cached_ffc(
-            white,
-            apply.crop_rect.as_deref(),
-            &apply.ffc,
-            apply.ffc_cache.as_ref(),
-        )
-        .map_err(|e| {
-            Error::Message(format!(
-                "FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup."
-            ))
-        })?;
+        progress("FFC");
+        let ffc = resolve_cached_ffc(white, apply.crop_rect.as_deref(), &apply.ffc, apply.ffc_cache.as_ref())
+            .map_err(|e| Error::Message(format!("FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup.")))?;
         Some(Arc::clone(&ffc.gain))
     } else {
         None
     };
 
     let (lut, _) = saved.lut_pipeline()?;
+    if apply.fast_mode {
+        if let Some(g) = &gain {
+            apply_ffc_inplace(&mut work, g);
+            progress("FFC complete");
+        }
+        if apply.preview_mode.wants_intermediate("ffc") && gain.is_some() {
+            maybe_preview_with_progress(preview_dir, "ffc", &work, progress)?;
+        }
+        if apply.preview_mode.wants_intermediate("gc") || apply.preview_mode.wants_intermediate("wb") {
+            let mut intermediate = work.clone();
+            if apply.do_gc {
+                if let Some(gc) = &lut.gc {
+                    apply_gc_inplace(&mut intermediate, gc)?;
+                    if apply.preview_mode.wants_intermediate("gc") { maybe_preview_with_progress(preview_dir, "gc", &intermediate, progress)?; }
+                }
+            }
+            if apply.do_wb {
+                if let Some(wb) = &lut.wb {
+                    apply_wb_inplace(&mut intermediate, wb);
+                    if apply.preview_mode.wants_intermediate("wb") { maybe_preview_with_progress(preview_dir, "wb", &intermediate, progress)?; }
+                }
+            }
+        }
+        let combined = combined_progress_label(&lut, apply);
+        if let Some(label) = &combined { progress(label); }
+        apply_combined(&mut work, saved, apply)?;
+        if combined.is_some() { progress("Combined LUT complete"); }
+    } else {
     let can_fuse = apply.do_ffc
         && apply.do_gc
         && gain.is_some()
         && lut.gc.is_some()
         && !apply.preview_mode.wants_intermediate("ffc");
     if can_fuse {
+        progress("GC");
         apply_ffc_gc_fused_inplace(
             &mut work,
             gain.as_ref().expect("fuse requires gain"),
             lut.gc.as_ref().expect("fuse requires gc"),
         );
+        progress("FFC complete");
+        progress("GC complete");
+        if apply.preview_mode.wants_intermediate("gc") {
+            maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
+        }
     } else {
         if let Some(g) = &gain {
             apply_ffc_inplace(&mut work, g);
+            progress("FFC complete");
             if apply.preview_mode.wants_intermediate("ffc") {
-                maybe_preview(preview_dir, "ffc", &work)?;
+                maybe_preview_with_progress(preview_dir, "ffc", &work, progress)?;
             }
         }
         if apply.do_gc {
             if let Some(gc) = &lut.gc {
+                progress("GC");
                 apply_gc_inplace(&mut work, gc)?;
+                progress("GC complete");
                 if apply.preview_mode.wants_intermediate("gc") {
-                    maybe_preview(preview_dir, "gc", &work)?;
+                    maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
                 }
             }
         }
     }
     if apply.do_wb {
         if let Some(wb) = &lut.wb {
+            progress("WB");
             apply_wb_inplace(&mut work, wb);
+            progress("WB complete");
             if apply.preview_mode.wants_intermediate("wb") {
-                maybe_preview(preview_dir, "wb", &work)?;
+                maybe_preview_with_progress(preview_dir, "wb", &work, progress)?;
             }
         }
     }
     if apply.do_cc {
         if let Some((model, settings)) = &lut.cc {
+            progress("CC");
             apply_cc_accel(&mut work, model, settings)?;
+            progress("CC complete");
         }
     }
+    }
+    let writes_final_preview = preview_dir.is_some() && matches!(
+        &apply.preview_mode,
+        PreviewMode::Corrected | PreviewMode::All
+    ) || (preview_dir.is_some() && matches!(&apply.preview_mode, PreviewMode::Stage(stage) if stage == "corrected" || stage == "cc"));
+    let write_message = if apply.write_output { Some("Writing outputs") }
+        else if writes_final_preview { Some("Writing preview") } else { None };
+    if let Some(message) = write_message { progress(message); }
     finish_image_writes(
         &work,
         output,
@@ -2087,7 +2433,16 @@ pub fn apply_saved_to_image_ex(
             &settings.input_space
         },
     )?;
+    if let Some(message) = write_message { progress(&format!("{message} complete")); }
     Ok(ApplyImageReport { ffc_skipped })
+}
+
+fn combined_progress_label(lut: &LutPipeline, apply: &ApplyOptions) -> Option<String> {
+    let mut stages = Vec::new();
+    if apply.do_gc && lut.gc.is_some() { stages.push("GC"); }
+    if apply.do_wb && lut.wb.is_some() { stages.push("WB"); }
+    if apply.do_cc && lut.cc.is_some() { stages.push("CC"); }
+    (!stages.is_empty()).then(|| format!("Combined LUT · {}", stages.join(" + ")))
 }
 
 pub fn export_cube_from_saved(
@@ -2160,6 +2515,253 @@ mod tests {
         dir.join(format!("{stem}.rgb")).is_file() || dir.join(format!("{stem}.png")).is_file()
     }
 
+    fn progress_fixture() -> SavedPipeline {
+        SavedPipeline {
+            do_gc: true,
+            do_wb: true,
+            do_cc: true,
+            gc_model: Some(GammaModel::legacy(vec![0.002, 0.8, 0.0])),
+            wb_diag: Some([1.12, 0.91, 1.03]),
+            correction: Some(CorrectionModel {
+                kind: ModelKind::Ccm3x3,
+                feature_count: 3,
+                coefficients: vec![0.7, 0.1, 0.2, 0.2, 0.8, 0.1, 0.1, 0.1, 0.7],
+                ..CorrectionModel::default()
+            }),
+            ..SavedPipeline::default()
+        }
+    }
+
+    #[test]
+    fn apply_progress_groups_fast_transforms_and_omits_disabled_or_absent_work() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-progress-fast-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("image.png");
+        let white = dir.join("white.png");
+        Rgb8::from_pixel(48, 32, image::Rgb([110, 120, 130])).save(&image).unwrap();
+        Rgb8::from_pixel(48, 32, image::Rgb([180; 3])).save(&white).unwrap();
+        let saved = progress_fixture();
+        let mut options = ApplyOptions::from_saved(&saved);
+        options.fast_mode = true;
+        options.write_output = false;
+        options.do_ffc = true;
+        options.white = Some(white);
+        options.crop_rect = Some("0,0,48,32".into());
+        options.ffc.method = FfcFitMethod::Linear;
+        let output = dir.join("must-not-write.png");
+        let mut events = Vec::new();
+        apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
+            &mut |message| events.push(message.to_owned())).unwrap();
+        assert_eq!(events, ["Loading image", "FFC", "FFC complete", "Combined LUT · GC + WB + CC", "Combined LUT complete"]);
+        assert!(!output.exists());
+
+        options.do_ffc = false;
+        options.do_gc = false;
+        options.do_cc = false;
+        events.clear();
+        apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
+            &mut |message| events.push(message.to_owned())).unwrap();
+        assert_eq!(events, ["Loading image", "Combined LUT · WB", "Combined LUT complete"]);
+        let mut absent = saved.clone();
+        absent.wb_diag = None;
+        events.clear();
+        apply_saved_to_image_ex_with_progress(&absent, &image, &output, None, &options,
+            &mut |message| events.push(message.to_owned())).unwrap();
+        assert_eq!(events, ["Loading image"], "identity rendering must not claim absent stages or writes");
+        set_cpu_lut_request(false);
+    }
+
+    #[test]
+    fn apply_progress_marks_only_successful_ffc_and_writes_complete() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-progress-errors-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("image.png");
+        Rgb8::from_pixel(48, 32, image::Rgb([110; 3])).save(&image).unwrap();
+        let saved = progress_fixture();
+        let mut options = ApplyOptions::from_saved(&saved);
+        options.fast_mode = true;
+        options.do_ffc = true;
+        options.white = Some(dir.join("missing-white.png"));
+        let output = dir.join("existing-output-directory");
+        std::fs::create_dir_all(&output).unwrap();
+        let retained = output.join("previous-result.txt");
+        std::fs::write(&retained, b"retain previous artifact").unwrap();
+        let mut events = Vec::new();
+        assert!(apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
+            &mut |message| events.push(message.to_owned())).is_err());
+        assert_eq!(events, ["Loading image", "FFC"]);
+        options.do_ffc = false;
+        events.clear();
+        assert!(apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
+            &mut |message| events.push(message.to_owned())).is_err());
+        assert_eq!(events.last().unwrap(), "Writing outputs");
+        assert!(!events.iter().any(|value| value == "Writing outputs complete"));
+        assert_eq!(std::fs::read(&retained).unwrap(), b"retain previous artifact");
+        let successful = dir.join("successful.png");
+        events.clear();
+        apply_saved_to_image_ex_with_progress(&saved, &image, &successful, None, &options,
+            &mut |message| {
+                if message == "Writing outputs complete" {
+                    assert_eq!(image::open(&successful).unwrap().to_rgb8().dimensions(), (48, 32));
+                }
+                events.push(message.to_owned());
+            }).unwrap();
+        assert_eq!(events.last().unwrap(), "Writing outputs complete");
+        let legacy = dir.join("legacy.png");
+        apply_saved_to_image_ex(&saved, &image, &legacy, None, &options).unwrap();
+        assert_eq!(std::fs::read(successful).unwrap(), std::fs::read(legacy).unwrap());
+        set_cpu_lut_request(false);
+    }
+
+    #[test]
+    fn apply_progress_lazy_preview_finishes_after_usable_rgb_and_does_not_write_output() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-progress-preview-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("image.png");
+        Rgb8::from_pixel(48, 32, image::Rgb([110; 3])).save(&image).unwrap();
+        let output = dir.join("must-not-write.png");
+        let previews = dir.join("previews");
+        let saved = progress_fixture();
+        let mut options = ApplyOptions::from_saved(&saved);
+        options.do_wb = false;
+        options.do_cc = false;
+        options.write_output = false;
+        options.preview_mode = PreviewMode::Stage("gc".into());
+        let mut events = Vec::new();
+        apply_saved_to_image_ex_with_progress(&saved, &image, &output, Some(&previews), &options,
+            &mut |message| {
+                if message == "Writing preview complete" {
+                    assert!(previews.join("gc.rgb").is_file(), "done requires the usable RGB sidecar, not asynchronous PNG completion");
+                }
+                events.push(message.to_owned());
+            }).unwrap();
+        assert_eq!(events, ["Loading image", "GC", "GC complete", "Writing preview", "Writing preview complete"]);
+        assert!(!output.exists());
+        flush_preview_encodes();
+        set_cpu_lut_request(false);
+    }
+
+    #[test]
+    fn fit_progress_finishes_real_fused_stages_and_artifacts_before_announcing_done() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-progress-fit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        let white = dir.join("white.png");
+        write_cast_classic(&image, 120, 80);
+        Rgb8::from_pixel(120, 80, image::Rgb([180; 3])).save(&white).unwrap();
+        for fast in [false, true] {
+            let output = dir.join(format!("output-{fast}.png"));
+            let report = dir.join(format!("report-{fast}.json"));
+            let model = dir.join(format!("model-{fast}.json"));
+            let request = json!({"image":image,"white":white,"crop_rect":"0,0,120,80",
+                "handshake":classic_handshake(120,80),"output":output,"report":report,"model_out":model,
+                "do_ffc":true,"do_gc":true,"do_wb":true,"do_cc":true,"model":"ccm",
+                "cross_validate":false,"ffc":{"method":"linear"},"fast_mode":fast});
+            let mut events = Vec::new();
+            run_from_json(&request, &mut |message| {
+                if message == "Writing outputs complete" {
+                    assert!(output.is_file() && model.is_file() && report.is_file());
+                }
+                events.push(message.to_owned());
+            }).unwrap();
+            for stage in ["FFC", "GC", "WB", "CC"] {
+                let start = events.iter().position(|value| value == stage).unwrap();
+                let done = events.iter().position(|value| value == &format!("{stage} complete")).unwrap();
+                assert!(done > start);
+            }
+            assert_eq!(events.last().unwrap(), "Writing outputs complete");
+            assert_eq!(events.iter().filter(|value| value.starts_with("Combined LUT ·")).count(), usize::from(fast));
+            if !fast {
+                assert!(events.iter().position(|value| value == "FFC complete").unwrap()
+                    > events.iter().position(|value| value == "GC").unwrap(), "fused FFC cannot finish before its actual GC pass");
+            }
+        }
+        set_cpu_lut_request(false);
+    }
+
+    #[test]
+    fn fast_rendering_keeps_fused_ffc_fit_coefficients() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-fast-ffc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png"); let white = dir.join("white.png");
+        write_cast_classic(&image,120,80);
+        Rgb8::from_fn(120,80,|x,y| image::Rgb([180+((x+y)/5) as u8;3])).save(&white).unwrap();
+        let mut request = json!({"image":image,"white":white,"crop_rect":"0,0,120,80",
+            "handshake":classic_handshake(120,80),"output":dir.join("corrected.png"),
+            "report":dir.join("report.json"),"model_out":dir.join("model.json"),
+            "do_ffc":true,"do_gc":true,"do_wb":true,"do_cc":true,"model":"rpcc2",
+            "cross_validate":false,"ffc":{"method":"linear"},"preview_mode":"corrected"});
+        let normal = run_from_json(&request,&mut |_|{}).unwrap();
+        request["fast_mode"] = json!(true);
+        let fast = run_from_json(&request,&mut |_|{}).unwrap();
+        assert_eq!(serde_json::to_value(&normal.saved).unwrap(),serde_json::to_value(&fast.saved).unwrap());
+        let mut options = ApplyOptions::from_saved(&fast.saved);
+        options.fast_mode = true; options.do_ffc = true; options.white = Some(white);
+        options.crop_rect = Some("0,0,120,80".into()); options.ffc = fast.saved.ffc_params.clone().unwrap();
+        let reload = dir.join("reload.png");
+        apply_saved_to_image_ex(&fast.saved,&image,&reload,None,&options).unwrap();
+        assert_eq!(image::open(&fast.output).unwrap().to_rgb8(),image::open(reload).unwrap().to_rgb8());
+        set_cpu_lut_request(false);
+    }
+
+    #[test]
+    fn fast_calibration_preserves_fits_previews_and_reload_for_all_model_families() {
+        set_cpu_lut_request(true);
+        let dir = std::env::temp_dir().join(format!("ccp-fast-models-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image,120,80);
+        for kind in ["ccm","rpcc2","rpcc3","linear","pls","nn"] {
+            let mut saved_json = None;
+            for fast in [false,true] {
+                let output = dir.join(format!("{kind}-{fast}.png"));
+                let previews = dir.join(format!("{kind}-{fast}-previews"));
+                let request = json!({"image":image,"handshake":classic_handshake(120,80),
+                    "output":output,"report":dir.join("report.json"),"model_out":dir.join("model.json"),
+                    "model":kind,"do_ffc":false,"do_gc":true,"do_wb":true,"do_cc":true,
+                    "nn_epochs":40,"hidden_size":8,"cross_validate":false,"fast_mode":fast,
+                    "preview_dir":previews,"preview_mode":"all"});
+                let fitted = run_from_json(&request,&mut |_|{}).unwrap();
+                let current = serde_json::to_value(&fitted.saved).unwrap();
+                if let Some(normal) = &saved_json { assert_eq!(&current,normal,"{kind} fit changed"); }
+                else { saved_json = Some(current); }
+                assert_eq!(fitted.report_json["fast_mode"],fast);
+                if fast {
+                    assert_eq!(fitted.report_json["apply_execution"]["method"],"combined-lut65");
+                    let loaded = load_saved(&fitted.model_out).unwrap();
+                    let mut options = ApplyOptions::from_saved(&loaded); options.fast_mode = true;
+                    let reapplied = dir.join(format!("{kind}-reloaded.png"));
+                    apply_saved_to_image_ex(&loaded,&image,&reapplied,None,&options).unwrap();
+                    assert_eq!(image::open(&output).unwrap().to_rgb8(), image::open(&reapplied).unwrap().to_rgb8());
+                    flush_preview_encodes();
+                    for stage in ["gc","wb"] {
+                        let before = dir.join(format!("{kind}-false-previews")).join(format!("{stage}.png"));
+                        let after = previews.join(format!("{stage}.png"));
+                        assert_eq!(image::open(before).unwrap().to_rgb8(),image::open(after).unwrap().to_rgb8());
+                        let lazy = dir.join(format!("{kind}-lazy-{stage}"));
+                        let mut preview_options = options.clone();
+                        preview_options.write_output = false;
+                        preview_options.preview_mode = PreviewMode::Stage(stage.into());
+                        preview_options.do_cc = false;
+                        preview_options.do_wb = stage == "wb";
+                        apply_saved_to_image_ex(&loaded,&image,&reapplied,Some(&lazy),&preview_options).unwrap();
+                        flush_preview_encodes();
+                        assert_eq!(
+                            image::open(previews.join(format!("{stage}.png"))).unwrap().to_rgb8(),
+                            image::open(lazy.join(format!("{stage}.png"))).unwrap().to_rgb8(),
+                            "{kind} lazy {stage} must preserve stage math");
+                    }
+                }
+            }
+        }
+        set_cpu_lut_request(false);
+    }
+
     #[test]
     fn write_preview_emits_rgb_sidecar() {
         let dir = std::env::temp_dir().join(format!("ccp-preview-rgb-{}", std::process::id()));
@@ -2177,9 +2779,131 @@ mod tests {
     }
 
     #[test]
+    fn preview_encoders_reap_100_unique_outputs_without_waiting_for_running_jobs() {
+        let dir = std::env::temp_dir().join(format!("ccp-preview-reap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let encoders = PreviewPngEncoders::default();
+        let (release, wait) = std::sync::mpsc::channel();
+        let blocked_path = dir.join("still-running.png");
+        encoders.pending.lock().unwrap().insert(blocked_path.clone(), std::thread::spawn(move || {
+            let _ = wait.recv();
+        }));
+        for index in 0..100u8 {
+            let path = dir.join(format!("unique-{index}.png"));
+            encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([index, 17, 219])), path.clone());
+            let deadline = Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                let pending = encoders.pending.lock().unwrap();
+                if pending.get(&path).unwrap().is_finished() { break; }
+                drop(pending);
+                assert!(Instant::now() < deadline, "preview encoder did not finish");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            // At most the explicitly blocked task and this newest completed
+            // encoder may remain. The next spawn reaps this completed handle.
+            assert!(encoders.pending.lock().unwrap().len() <= 2);
+        }
+        encoders.reap_finished();
+        assert_eq!(encoders.pending.lock().unwrap().len(), 1);
+        assert!(encoders.pending.lock().unwrap().contains_key(&blocked_path));
+        release.send(()).unwrap();
+        encoders.flush();
+        assert!(encoders.pending.lock().unwrap().is_empty());
+        for index in 0..100u8 {
+            let image = image::open(dir.join(format!("unique-{index}.png"))).unwrap().to_rgb8();
+            assert_eq!(image.dimensions(), (8, 8));
+            assert!(image.pixels().all(|pixel| pixel.0 == [index, 17, 219]));
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preview_encoders_reap_failed_encodes_and_recover_for_later_outputs() {
+        let dir = std::env::temp_dir().join(format!("ccp-preview-reap-errors-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-directory");
+        std::fs::write(&blocker, b"preserve this file").unwrap();
+        let failed = blocker.join("corrected.png");
+        let encoders = PreviewPngEncoders::default();
+        encoders.spawn(Rgb8::new(8, 8), failed.clone());
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        while !encoders.pending.lock().unwrap().get(&failed).unwrap().is_finished() {
+            assert!(Instant::now() < deadline, "failed encoder did not finish");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let recovered = dir.join("recovered.png");
+        encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([7, 8, 9])), recovered.clone());
+        assert!(!encoders.pending.lock().unwrap().contains_key(&failed));
+        encoders.flush();
+        assert!(encoders.pending.lock().unwrap().is_empty());
+        assert_eq!(std::fs::read(&blocker).unwrap(), b"preserve this file");
+        assert_eq!(image::open(recovered).unwrap().to_rgb8().get_pixel(0, 0).0, [7, 8, 9]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preview_encoders_finish_pending_same_path_before_replacement() {
+        let dir = std::env::temp_dir().join(format!("ccp-preview-rewrite-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("corrected.png");
+        let encoders = Arc::new(PreviewPngEncoders::default());
+        let (release, wait) = std::sync::mpsc::channel();
+        let first_path = path.clone();
+        encoders.pending.lock().unwrap().insert(path.clone(), std::thread::spawn(move || {
+            wait.recv().unwrap();
+            encode_preview_png(&Rgb8::from_pixel(8, 8, image::Rgb([1, 2, 3])), &first_path).unwrap();
+        }));
+        let second_encoders = Arc::clone(&encoders);
+        let second_path = path.clone();
+        let (submitted, submitted_rx) = std::sync::mpsc::channel();
+        let replacement = std::thread::spawn(move || {
+            second_encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([4, 5, 6])), second_path);
+            submitted.send(()).unwrap();
+        });
+        assert!(submitted_rx.recv_timeout(std::time::Duration::from_millis(20)).is_err());
+        release.send(()).unwrap();
+        replacement.join().unwrap();
+        encoders.flush();
+        assert_eq!(image::open(&path).unwrap().to_rgb8().get_pixel(0, 0).0, [4, 5, 6]);
+        assert!(encoders.pending.lock().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preview_required_sidecar_failure_propagates_without_replacing_previous_png() {
+        let dir = std::env::temp_dir().join(format!("ccp-preview-required-errors-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("corrected.png");
+        let previous = Rgb8::from_pixel(8, 8, image::Rgb([21, 43, 65]));
+        previous.save(&path).unwrap();
+        let old_bytes = std::fs::read(&path).unwrap();
+        std::fs::create_dir(path.with_extension("rgb")).unwrap();
+        let error = write_preview(&Array3::from_elem((8, 8, 3), 0.8), &path).unwrap_err();
+        assert!(matches!(error, Error::Io(_)));
+        assert_eq!(std::fs::read(&path).unwrap(), old_bytes);
+        assert!(!pending_preview_pngs().pending.lock().unwrap().contains_key(&path));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn ffc_default_smooth_is_odd_five() {
         assert_eq!(FfcFitParams::default().smooth_window, 5);
         assert_eq!(FfcFitParams::default().smooth_window % 2, 1);
+    }
+
+    #[test]
+    fn requested_frame_ffc_without_gain_fails_before_mutation() {
+        let mut work = Array3::<f32>::from_elem((2, 2, 3), 0.42);
+        let original = work.clone();
+        let options = ApplyOptions {
+            fast_mode: false,
+            do_ffc: true,
+            ..ApplyOptions::default()
+        };
+        let error =
+            apply_saved_to_work(&mut work, &SavedPipeline::default(), &options, None).unwrap_err();
+        assert!(error.to_string().contains("no white-field gain"));
+        assert_eq!(original, work);
     }
 
     #[test]
@@ -2205,102 +2929,159 @@ mod tests {
         );
     }
 
+    fn custom_profile(id: &str, offset: f64) -> ReferenceProfile {
+        let spec = chart_spec(ChartKind::Classic).unwrap();
+        ReferenceProfile {
+            version: 1,
+            id: id.into(),
+            name: id.into(),
+            revision: 1,
+            chart: ChartKind::Classic,
+            color_space: "lab".into(),
+            white_point: "d50".into(),
+            scale: 1.0,
+            order: "row-major".into(),
+            values: spec
+                .reference_lab_d50
+                .iter()
+                .map(|lab| [lab.l + offset, lab.a, lab.b])
+                .collect(),
+        }
+    }
+
     #[test]
-    fn requested_ffc_fit_rejects_missing_unreadable_and_invalid_references() {
-        let dir =
-            std::env::temp_dir().join(format!("ccp-ffc-fit-rejection-{}", std::process::id()));
+    fn custom_profiles_survive_all_stages_selection_model_report_and_teacher() {
+        let dir = std::env::temp_dir().join(format!(
+            "ccp-custom-reference-pipeline-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let image = dir.join("chart.png");
         write_cast_classic(&image, 120, 80);
-        let invalid = dir.join("invalid-white.png");
-        std::fs::write(&invalid, b"not a readable image").unwrap();
-        for (index, white) in [dir.join("missing-white.png"), invalid, dir.clone()]
-            .into_iter()
+        let mut a = classic_handshake(120, 80);
+        a["chart_id"] = json!("s:a");
+        let mut b = a.clone();
+        b["chart_id"] = json!("s:b");
+        let handshake = json!({"snapshot_id":"s", "charts":[a,b]});
+        let profiles = vec![
+            custom_profile("card-a", 0.0),
+            custom_profile("card-b", -3.0),
+        ];
+        let assignments = json!([{"chart_id":"s:a","profile_id":"card-a","profile_revision":1}, {"chart_id":"s:b","profile_id":"card-b","profile_revision":1}]);
+        for (suffix, use_all, face) in [("both", true, 0), ("selected", false, 1)] {
+            let run_dir = dir.join(suffix);
+            std::fs::create_dir_all(&run_dir).unwrap();
+            let request = json!({"image":image,"handshake":handshake,"use_all":use_all,"face":face,
+                "reference_profiles":profiles,"reference_assignments":assignments,"output":run_dir.join("corrected.png"),
+                "report":run_dir.join("report.json"),"model_out":run_dir.join("model.json"),
+                "model":"ccm","do_gc":true,"do_wb":true,"do_cc":true,"cross_validate":false,"skip_saturated":true});
+            let outcome = run_from_json(&request, &mut |_| {}).unwrap();
+            let context = outcome.saved.reference_context.as_ref().unwrap();
+            assert_eq!(context.charts.len(), if use_all { 2 } else { 1 });
+            assert_eq!(context.charts.last().unwrap().chart_id, "s:b");
+            let report = &outcome.report_json;
+            let count = if use_all { 48 } else { 24 };
+            assert_eq!(report["patches"].as_array().unwrap().len(), count);
+            let last_chart = &report["patches"][count - 24];
+            assert_eq!(last_chart["provenance"]["chart_id"], "s:b");
+            assert!(
+                (last_chart["reference_lab_d50"]["l"].as_f64().unwrap() - profiles[1].values[0][0])
+                    .abs()
+                    < 1e-8
+            );
+            let saturated = report["saturated_patches"].as_u64().unwrap();
+            assert!(saturated > 0);
+            assert_eq!(
+                report["fit_patch_count"].as_u64().unwrap(),
+                count as u64 - saturated
+            );
+            let reloaded = load_saved(&outcome.model_out).unwrap();
+            let reloaded_context = reloaded.reference_context.as_ref().unwrap();
+            assert_eq!(
+                reloaded_context.reference_profiles,
+                context.reference_profiles
+            );
+            assert_eq!(
+                reloaded_context.reference_assignments,
+                context.reference_assignments
+            );
+            for (a, b) in reloaded_context.charts.iter().zip(&context.charts) {
+                assert_eq!(a.chart_id, b.chart_id);
+                for (la, lb) in a
+                    .spec
+                    .reference_lab_d50
+                    .iter()
+                    .zip(&b.spec.reference_lab_d50)
+                {
+                    assert!(
+                        (la.l - lb.l).abs() < 1e-12
+                            && (la.a - lb.a).abs() < 1e-12
+                            && (la.b - lb.b).abs() < 1e-12
+                    );
+                }
+            }
+            let teacher: Value =
+                serde_json::from_slice(&std::fs::read(run_dir.join("teacher_rpcc2.json")).unwrap())
+                    .unwrap();
+            let persisted_report: Value =
+                serde_json::from_slice(&std::fs::read(&outcome.report).unwrap()).unwrap();
+            assert_eq!(
+                teacher["reference_context"],
+                persisted_report["reference_context"]
+            );
+            let apply_out = run_dir.join("applied.png");
+            apply_saved_to_image(&reloaded, &image, &apply_out).unwrap();
+            assert!(apply_out.is_file());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn custom_assignment_errors_precede_image_loading_and_outputs() {
+        let mut hs = classic_handshake(120, 80);
+        hs["snapshot_id"] = json!("s");
+        hs["chart_id"] = json!("s:a");
+        let req = json!({"image":"never-read.png","handshake":hs,"reference_profiles":[custom_profile("card",0.0)],
+            "reference_assignments":[], "output":"never-write.png"});
+        let error = run_from_json(&req, &mut |_| {}).unwrap_err().to_string();
+        assert!(error.contains("assignment"), "{error}");
+    }
+
+    #[test]
+    fn requested_ffc_fit_and_apply_fail_closed_for_invalid_white() {
+        let dir = std::env::temp_dir().join(format!("ccp-ffc-fail-closed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let invalid = dir.join("invalid.png");
+        std::fs::write(&invalid, b"invalid image").unwrap();
+        for (i, white) in [dir.join("missing.png"), invalid, dir.clone()]
+            .iter()
             .enumerate()
         {
-            let output = dir.join(format!("output-{index}.png"));
-            let report = dir.join(format!("report-{index}.json"));
-            let model = dir.join(format!("model-{index}.json"));
-            let request = json!({"image": image, "handshake": classic_handshake(120, 80),
-                "output": output, "report": report, "model_out": model,
-                "white": white, "do_ffc": true, "phase2_teacher": false});
-            let error = run_from_json(&request, &mut |_| {})
-                .err()
-                .unwrap()
-                .to_string();
-            assert!(
-                error.contains("FFC reference could not be loaded or fitted"),
-                "{error}"
-            );
-            assert!(error.contains("blank white-field image"), "{error}");
-            assert!(!output.exists() && !report.exists() && !model.exists());
-        }
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn requested_ffc_apply_rejects_absent_missing_unreadable_and_invalid_references() {
-        let dir =
-            std::env::temp_dir().join(format!("ccp-ffc-apply-rejection-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let image = dir.join("chart.png");
-        write_cast_classic(&image, 120, 80);
-        let invalid = dir.join("invalid-white.png");
-        std::fs::write(&invalid, b"not a readable image").unwrap();
-        for (index, white) in [
-            None,
-            Some(PathBuf::new()),
-            Some(dir.join("missing-white.png")),
-            Some(invalid),
-            Some(dir.clone()),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let output = dir.join(format!("output-{index}.png"));
-            let apply = ApplyOptions {
+            let output = dir.join(format!("output-{i}.png"));
+            let req = json!({"image":image,"handshake":classic_handshake(120,80),"output":output,"white":white,"do_ffc":true});
+            assert!(run_from_json(&req, &mut |_| {})
+                .unwrap_err()
+                .to_string()
+                .contains("blank white-field image"));
+            let options = ApplyOptions {
                 do_ffc: true,
-                white,
+                white: Some(white.clone()),
                 ..ApplyOptions::default()
             };
-            let error =
-                apply_saved_to_image_ex(&SavedPipeline::default(), &image, &output, None, &apply)
-                    .err()
-                    .unwrap()
-                    .to_string();
-            assert!(
-                error.contains("FFC") && error.contains("blank white-field image"),
-                "{error}"
-            );
+            assert!(apply_saved_to_image_ex(
+                &SavedPipeline::default(),
+                &image,
+                &output,
+                None,
+                &options
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("blank white-field image"));
             assert!(!output.exists());
         }
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn disabled_ffc_ignores_unused_invalid_white_for_fit_and_apply() {
-        let dir = std::env::temp_dir().join(format!("ccp-ffc-disabled-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let image = dir.join("chart.png");
-        write_cast_classic(&image, 120, 80);
-        let invalid = dir.join("invalid-white.png");
-        std::fs::write(&invalid, b"not a readable image").unwrap();
-        let request = json!({"image": image, "handshake": classic_handshake(120, 80),
-            "output": dir.join("fitted.png"), "report": dir.join("report.json"),
-            "model_out": dir.join("model.json"), "white": invalid,
-            "do_ffc": false, "phase2_teacher": false});
-        let fitted = run_from_json(&request, &mut |_| {}).unwrap();
-        assert!(!fitted.saved.do_ffc);
-        let output = dir.join("applied.png");
-        let apply = ApplyOptions {
-            do_ffc: false,
-            white: Some(invalid),
-            ..ApplyOptions::default()
-        };
-        let applied =
-            apply_saved_to_image_ex(&fitted.saved, &image, &output, None, &apply).unwrap();
-        assert!(output.is_file());
-        assert!(applied.ffc_skipped.is_none());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -2481,6 +3262,7 @@ mod tests {
         let spec = chart_spec_from_name("classic").unwrap();
         let sample = Lab::new(60.0, 5.0, -5.0);
         let base = ChartPatch {
+            provenance: None,
             name: spec.names[0].clone(),
             index: 0,
             reference_lab_d50: sample,
@@ -2618,12 +3400,13 @@ mod tests {
         std::fs::create_dir_all(&prev).unwrap();
         let gated = dir.join("gated.png");
         let apply = ApplyOptions {
+            fast_mode: false,
             do_ffc: true,
             do_gc: false,
             do_wb: true,
             do_cc: true,
             white: Some(image.clone()),
-            crop_rect: None,
+            crop_rect: Some("0,0,120,80".into()),
             ffc: FfcFitParams {
                 method: FfcFitMethod::Linear,
                 ..FfcFitParams::default()
@@ -2751,8 +3534,8 @@ mod tests {
             ..FfcFitParams::default()
         };
         let cache = FfcGainCache::new();
-        let a = cache.get_or_compute(&image, None, &params).unwrap();
-        let b = cache.get_or_compute(&image, None, &params).unwrap();
+        let a = cache.get_or_compute(&image, Some("0,0,40,30"), &params).unwrap();
+        let b = cache.get_or_compute(&image, Some("0,0,40,30"), &params).unwrap();
         assert!(Arc::ptr_eq(&a, &b));
         assert!(Arc::ptr_eq(&a.gain, &b.gain));
         assert_eq!(a.gain, b.gain);

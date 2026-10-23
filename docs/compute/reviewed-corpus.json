@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "review_date": "2026-10-19",
+  "review_method": "Codex visual inspection of existing source photographs via image viewer, rendered at 1920x1280 from 6000x4000 originals",
+  "scope": "Visible supported chart counts/layouts only; not independent patch color truth, detector ground-truth corners, or human-certified measurements",
+  "fixtures": [
+    {
+      "path": "test_images/ColorCard_Big.JPG",
+      "sha256": "f942a60763713b536fff1023b5fde6ebf1bc8f6c11c85b667b6672b8fca321bb",
+      "required_charts": [
+        {
+          "identity": "large-classic",
+          "detected_template": "classic",
+          "rows": 4,
+          "columns": 6,
+          "canonical_corner_quadrants": [
+            0,
+            1,
+            3,
+            2
+          ]
+        }
+      ],
+      "orientation": "upright near-frontal chart",
+      "notes": "One physical ColorChecker Classic 24-patch face. Background board and handwritten note are not chart faces."
+    },
+    {
+      "path": "test_images/ColorCard_Combo.JPG",
+      "sha256": "7d666664b018e544a43d986184a6520bc27479cbf5a739b5da6da064316d3740",
+      "required_charts": [
+        {
+          "identity": "large-classic-right",
+          "detected_template": "classic",
+          "rows": 4,
+          "columns": 6,
+          "canonical_corner_quadrants": [
+            0,
+            1,
+            3,
+            2
+          ]
+        },
+        {
+          "identity": "passport-classic-face-left",
+          "detected_template": "classic",
+          "compatible_profile": "passport",
+          "rows": 4,
+          "columns": 6,
+          "canonical_corner_quadrants": [
+            0,
+            1,
+            3,
+            2
+          ]
+        }
+      ],
+      "orientation": "two upright Classic-compatible patch grids in one photograph",
+      "notes": "The Passport creative/enhancement face above its Classic face is outside this phase. Expect two required supported faces, without claiming separate Passport recognition."
+    },
+    {
+      "path": "test_images/Sample_3572.JPG",
+      "sha256": "3d6f8a5d5de5390bc6348fb416118ff9cbfc4fd41153792ae5e7134c825c8d87",
+      "required_charts": [
+        {
+          "identity": "passport-classic-face-lower-right",
+          "detected_template": "classic",
+          "compatible_profile": "passport",
+          "rows": 4,
+          "columns": 6,
+          "canonical_corner_quadrants": [
+            3,
+            0,
+            2,
+            1
+          ]
+        }
+      ],
+      "orientation": "Classic grid rotated 90 degrees counterclockwise in photograph (4 visible columns by 6 rows)",
+      "notes": "One required supported face beside a creative/enhancement face outside scope. Fruit and board are scene content."
+    },
+    {
+      "path": "test_images/Sample_3573.JPG",
+      "sha256": "70a08fdd115a058f5b0119b60dfcb0ef799809d27d78bd87e5e47c56bb4d2ef1",
+      "required_charts": [
+        {
+          "identity": "passport-classic-face-lower-right",
+          "detected_template": "classic",
+          "compatible_profile": "passport",
+          "rows": 4,
+          "columns": 6,
+          "canonical_corner_quadrants": [
+            3,
+            0,
+            2,
+            1
+          ]
+        }
+      ],
+      "orientation": "Classic grid rotated 90 degrees counterclockwise in photograph (4 visible columns by 6 rows)",
+      "notes": "One required supported face beside a creative/enhancement face outside scope. Fruit and board are scene content."
+    },
+    {
+      "path": "test_images/Blank.JPG",
+      "sha256": "95d7dd22b165fa5304247241c541886c466b2ae35774e7a757a2347e18ebaada",
+      "required_charts": [],
+      "orientation": "not applicable",
+      "notes": "Blank board photograph; a no-chart negative and the existing FFC blank-field asset."
+    }
+  ],
+  "missing_required_coverage": [
+    "Reviewed real SpyderCHECKR 24 photographs",
+    "Reviewed real Digital SG photographs",
+    "Reviewed real 180/270-degree chart photographs and real rotations for Spyder/Digital SG",
+    "Independent chart reference measurements and held-out photographs for full-pipeline color accuracy"
+  ],
+  "derived_fixture_policy": "Programmatic rotations are synthetic augmentations, not additional independent photographs. Record transformation, input hash and generated hash; compare canonical cell identity separately from pixel geometry.",
+  "additional_sample_inventory": "_implementation/sample-inventory.json: all51images in user-identified testdata/samples match assets/test_images relative-path copies byte-for-byte; do not count duplicates as independent captures.",
+  "synthetic_layout_fixtures": [
+    {
+      "path": "testdata/samples/synth_sg.png",
+      "sha256": "73d2fb954d24c251b21155484d4504efaeddb5a5e6dbdfadf50022737adee2ce",
+      "chart": "digital-sg",
+      "notes": "Visually inspected borderless generated raster; tests known geometry/fitting/import, not independent photographed detector performance."
+    },
+    {
+      "path": "testdata/samples/synth_spyder.png",
+      "sha256": "9cfd05b5a2f11b1e21050d5359e34bfe369ecf4f354b6859f7189bc32ff9053f",
+      "chart": "spyder",
+      "notes": "Visually inspected borderless generated raster; tests known geometry/fitting/import, not independent photographed detector performance."
+    }
+  ],
+  "excluded_fixtures": [
+    {
+      "case": "additional privately retained reference photograph",
+      "status": "excluded-from-public-corpus",
+      "reason": "Not part of the five verified public Git photographs; retain as local optional coverage and report separately."
+    }
+  ]
+}

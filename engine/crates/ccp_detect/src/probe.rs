@@ -1,53 +1,17 @@
-//! Accelerator probe: auto-detect CUDA, DirectML, OpenVINO, MPS, MLX, and CPU.
+//! Hardware inventory and portable GPU inference policy.
 
 use std::env;
-use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread::available_parallelism;
 
 use serde::{Deserialize, Serialize};
 
-use crate::paths::{
-    default_libtorch_root, libtorch_version_matches_29, read_libtorch_json, LibTorchJson,
-};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BackendKind {
-    LibTorchCpu,
-    LibTorchCuda,
-    LibTorchMps,
-    OrtCuda,
-    OrtDirectMl,
-    OrtOpenVino,
-    OrtCoreMl,
-    Mlx,
-}
-
+pub enum BackendKind { OrtDirectMl, OrtWebGpu }
 impl BackendKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::LibTorchCpu => "LibTorchCpu",
-            Self::LibTorchCuda => "LibTorchCuda",
-            Self::LibTorchMps => "LibTorchMps",
-            Self::OrtCuda => "OrtCuda",
-            Self::OrtDirectMl => "OrtDirectMl",
-            Self::OrtOpenVino => "OrtOpenVino",
-            Self::OrtCoreMl => "OrtCoreMl",
-            Self::Mlx => "Mlx",
-        }
-    }
-
-    pub fn short(self) -> &'static str {
-        match self {
-            Self::LibTorchCpu => "CPU",
-            Self::LibTorchCuda | Self::OrtCuda => "CUDA",
-            Self::LibTorchMps => "MPS",
-            Self::OrtDirectMl => "DirectML",
-            Self::OrtOpenVino => "OpenVINO",
-            Self::OrtCoreMl => "CoreML",
-            Self::Mlx => "MLX",
-        }
-    }
+    pub fn as_str(self) -> &'static str { match self { Self::OrtDirectMl => "OrtDirectMl", Self::OrtWebGpu => "OrtWebGpu" } }
+    pub fn short(self) -> &'static str { match self { Self::OrtDirectMl => "DirectML", Self::OrtWebGpu => "WebGPU" } }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,19 +43,11 @@ pub struct BackendInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LibTorchInfo {
-    pub kind: String,
-    pub version: String,
-    pub root: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcceleratorReport {
     pub cpu: CpuInfo,
     pub gpus: Vec<GpuInfo>,
     pub backends: Vec<BackendInfo>,
     pub active: BackendKind,
-    pub libtorch: LibTorchInfo,
     pub policy: String,
     pub assignment: ComputeAssignment,
     pub recommended: String,
@@ -106,37 +62,13 @@ pub struct ComputeAssignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DevicePolicy {
-    Auto,
-    Cpu,
-    Cuda,
-    DirectMl,
-    OpenVino,
-    Mlx,
-}
-
+pub enum DevicePolicy { Auto, Cpu, DirectMl, WebGpu, Vulkan }
 impl DevicePolicy {
-    pub fn parse(s: &str) -> Self {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "cpu" => Self::Cpu,
-            "cuda" | "gpu" => Self::Cuda,
-            "directml" | "dml" => Self::DirectMl,
-            "openvino" | "ov" | "intel" => Self::OpenVino,
-            "mlx" | "metal" | "mps" => Self::Mlx,
-            _ => Self::Auto,
-        }
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Cpu => "cpu",
-            Self::Cuda => "cuda",
-            Self::DirectMl => "directml",
-            Self::OpenVino => "openvino",
-            Self::Mlx => "mlx",
-        }
-    }
+    pub fn parse(s: &str) -> Self { match s.trim().to_ascii_lowercase().as_str() {
+        "cpu" => Self::Cpu, "directml" | "dml" => Self::DirectMl,
+        "webgpu" => Self::WebGpu, "vulkan" => Self::Vulkan, _ => Self::Auto,
+    } }
+    pub fn as_str(self) -> &'static str { match self { Self::Auto => "auto", Self::Cpu => "cpu", Self::DirectMl => "directml", Self::WebGpu => "webgpu", Self::Vulkan => "vulkan" } }
 }
 
 impl Default for ComputeAssignment {
@@ -438,7 +370,7 @@ mod dxgi {
                             vendor: vendor_from_pci(desc.vendor_id).to_string(),
                             name,
                             vram_mb: (desc.dedicated_video_memory as u64) / (1024 * 1024),
-                            index: out.len() as u32,
+                            index: i,
                             driver: String::new(),
                         });
                     }
@@ -455,21 +387,7 @@ mod dxgi {
     }
 }
 
-fn env_gpu_fallback() -> Vec<GpuInfo> {
-    let mut gpus = Vec::new();
-    if env::var("CUDA_PATH").is_ok() || env::var("CUDA_VISIBLE_DEVICES").is_ok() {
-        gpus.push(GpuInfo {
-            vendor: "NVIDIA".into(),
-            name: env::var("CCP_GPU_NAME").unwrap_or_else(|_| "NVIDIA (env)".into()),
-            vram_mb: 0,
-            index: 0,
-            driver: String::new(),
-        });
-    }
-    gpus
-}
-
-fn enumerate_gpus() -> Vec<GpuInfo> {
+pub(crate) fn enumerate_gpus() -> Vec<GpuInfo> {
     #[cfg(windows)]
     {
         let gpus = dxgi::enumerate();
@@ -484,7 +402,7 @@ fn enumerate_gpus() -> Vec<GpuInfo> {
             return gpus;
         }
     }
-    env_gpu_fallback()
+    Vec::new()
 }
 
 #[cfg(target_os = "linux")]
@@ -521,675 +439,41 @@ fn nvidia_smi_gpus() -> Vec<GpuInfo> {
     gpus
 }
 
-fn tch_cuda_available() -> bool {
-    #[cfg(feature = "tch")]
-    {
-        return tch::Cuda::is_available();
-    }
-    #[allow(unreachable_code)]
-    false
-}
-
-fn tch_mps_available() -> bool {
-    cfg!(all(feature = "tch", target_os = "macos"))
-}
-
-fn is_apple_silicon() -> bool {
-    cfg!(all(target_os = "macos", target_arch = "aarch64"))
-}
-
-fn cuda_usable(json: Option<&LibTorchJson>, gpus: &[GpuInfo]) -> bool {
-    if tch_cuda_available() {
-        return true;
-    }
-    let nvidia = gpus.iter().any(|g| g.vendor.eq_ignore_ascii_case("NVIDIA"));
-    let kind_cuda = json
-        .map(|j| j.kind.eq_ignore_ascii_case("cuda"))
-        .unwrap_or(false);
-    kind_cuda && nvidia && (env::var("CUDA_PATH").is_ok() || env::var("CCP_CUDA").is_ok())
-}
-
-fn dll_exists(name: &str) -> bool {
-    let mut dirs = Vec::new();
-    if let Ok(exe) = env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            dirs.push(dir.to_path_buf());
-        }
-    }
-    if let Ok(root) = env::var("CCP_NEW_UI_ROOT") {
-        dirs.push(PathBuf::from(root));
-    }
-    #[cfg(windows)]
-    {
-        let sys = env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
-        dirs.push(PathBuf::from(sys).join("System32"));
-    }
-    if let Ok(path) = env::var("PATH") {
-        for part in env::split_paths(&path).take(24) {
-            dirs.push(part);
-        }
-    }
-    dirs.iter().any(|d| d.join(name).is_file())
-}
-
-fn ort_ep_available(name: &str) -> (bool, Option<String>) {
-    #[cfg(feature = "ort-plane")]
-    {
-        use ort::ep::ExecutionProvider;
-        let check = || -> Result<bool, String> {
-            match name {
-                "CUDAExecutionProvider" => ort::ep::CUDA::default()
-                    .is_available()
-                    .map_err(|e| e.to_string()),
-                "DmlExecutionProvider" => ort::ep::DirectML::default()
-                    .is_available()
-                    .map_err(|e| e.to_string()),
-                "OpenVINOExecutionProvider" => ort::ep::OpenVINO::default()
-                    .is_available()
-                    .map_err(|e| e.to_string()),
-                "CoreMLExecutionProvider" => ort::ep::CoreML::default()
-                    .is_available()
-                    .map_err(|e| e.to_string()),
-                _ => Ok(false),
-            }
-        };
-        match check() {
-            Ok(true) => (true, None),
-            Ok(false) => (false, Some(format!("{name}_not_in_runtime"))),
-            Err(e) => (false, Some(e)),
-        }
-    }
-    #[cfg(not(feature = "ort-plane"))]
-    {
-        let _ = name;
-        (false, Some("ort_not_linked".into()))
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Caps {
-    cuda_torch: bool,
-    mps_torch: bool,
-    mlx_hw: bool,
-    ort_cuda: bool,
-    ort_dml: bool,
-    ort_ov: bool,
-    ort_coreml: bool,
-    intel: bool,
-}
-
-fn first_used(assignment: &ComputeAssignment, names: &[&str]) -> &'static str {
-    for stage in [
-        assignment.detect.as_str(),
-        assignment.plane.as_str(),
-        assignment.apply.as_str(),
-    ] {
-        if names.contains(&stage) {
-            return "active";
-        }
-    }
-    "unused"
-}
-
-fn used_for(assignment: &ComputeAssignment, names: &[&str]) -> String {
-    let mut parts = Vec::new();
-    if names.contains(&assignment.detect.as_str()) {
-        parts.push("detect");
-    }
-    if names.contains(&assignment.plane.as_str()) {
-        parts.push("plane");
-    }
-    if names.contains(&assignment.apply.as_str()) {
-        parts.push("apply");
-    }
-    if parts.is_empty() {
-        "unused".into()
-    } else {
-        parts.join(",")
-    }
-}
-
-fn pick_detect(policy: DevicePolicy, caps: Caps) -> String {
-    match policy {
-        DevicePolicy::Cpu => "cpu".into(),
-        DevicePolicy::Cuda => {
-            if caps.cuda_torch {
-                "cuda".into()
-            } else if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::Mlx => {
-            if caps.mps_torch {
-                "mps".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::DirectMl => {
-            if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::OpenVino => {
-            if caps.ort_ov {
-                "openvino".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::Auto => {
-            if caps.cuda_torch {
-                "cuda".into()
-            } else if caps.mps_torch {
-                "mps".into()
-            } else if caps.ort_dml {
-                "directml".into()
-            } else if caps.ort_ov {
-                "openvino".into()
-            } else {
-                "cpu".into()
-            }
-        }
-    }
-}
-
-fn pick_plane(policy: DevicePolicy, caps: Caps) -> String {
-    match policy {
-        DevicePolicy::Cpu => "cpu".into(),
-        DevicePolicy::Cuda => {
-            if caps.ort_cuda {
-                "cuda".into()
-            } else if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::DirectMl => {
-            if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::OpenVino => {
-            if caps.ort_ov {
-                "openvino".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::Mlx => {
-            if caps.ort_coreml {
-                "coreml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::Auto => {
-            if caps.ort_cuda {
-                "cuda".into()
-            } else if caps.intel && caps.ort_ov {
-                "openvino".into()
-            } else if caps.ort_dml {
-                "directml".into()
-            } else if caps.ort_ov {
-                "openvino".into()
-            } else if caps.ort_coreml {
-                "coreml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-    }
-}
-
-fn pick_apply(policy: DevicePolicy, caps: Caps) -> String {
-    match policy {
-        DevicePolicy::Cpu => "cpu".into(),
-        DevicePolicy::Cuda => {
-            if caps.cuda_torch {
-                "cuda".into()
-            } else if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::Mlx => {
-            if caps.mps_torch {
-                "mps".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::DirectMl => {
-            if caps.ort_dml {
-                "directml".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        DevicePolicy::OpenVino => {
-            if caps.ort_ov {
-                "openvino".into()
-            } else {
-                "cpu".into()
-            }
-        }
-        // A 33³ still-image LUT is tiny and CPU sampling avoids host↔device
-        // transfer. Accelerators remain available through explicit policies.
-        DevicePolicy::Auto => "cpu".into(),
-    }
-}
-
-fn short_stage(name: &str) -> &'static str {
-    match name {
-        "cuda" => "CUDA",
-        "directml" => "DML",
-        "openvino" => "OpenVINO",
-        "mps" => "MPS",
-        "coreml" => "CoreML",
-        "mlx" => "MLX",
-        _ => "CPU",
-    }
-}
-
-fn recommended_label(assignment: &ComputeAssignment, gpus: &[GpuInfo], cpu: &CpuInfo) -> String {
-    let mut seen = Vec::new();
-    for stage in [
-        assignment.detect.as_str(),
-        assignment.plane.as_str(),
-        assignment.apply.as_str(),
-    ] {
-        if stage != "cpu" && !seen.contains(&stage) {
-            seen.push(stage);
-        }
-    }
-    if seen.is_empty() {
-        return format!("CPU · {} · {} thr", cpu.simd, assignment.threads);
-    }
-    let stack = seen
-        .iter()
-        .map(|s| short_stage(s))
-        .collect::<Vec<_>>()
-        .join("+");
-    let gpu_name = if seen.contains(&"cuda") {
-        gpus.iter()
-            .find(|g| g.vendor.eq_ignore_ascii_case("NVIDIA"))
-            .map(|g| g.name.as_str())
-    } else if seen.contains(&"openvino") {
-        gpus.iter()
-            .find(|g| g.vendor.eq_ignore_ascii_case("Intel"))
-            .map(|g| g.name.as_str())
-    } else if seen.contains(&"directml") {
-        gpus.iter()
-            .find(|g| {
-                g.vendor.eq_ignore_ascii_case("AMD") || g.vendor.eq_ignore_ascii_case("Intel")
-            })
-            .or_else(|| gpus.first())
-            .map(|g| g.name.as_str())
-    } else if seen.iter().any(|s| matches!(*s, "mps" | "coreml" | "mlx")) {
-        gpus.iter()
-            .find(|g| g.vendor.eq_ignore_ascii_case("Apple"))
-            .map(|g| g.name.as_str())
-            .or(Some("Apple GPU"))
-    } else {
-        None
-    };
-    match gpu_name {
-        Some(name) if !name.is_empty() => format!("{stack} · {name}"),
-        _ => stack,
-    }
-}
-
-fn headline(assignment: &ComputeAssignment, caps: Caps) -> BackendKind {
-    match assignment.detect.as_str() {
-        "cuda" => BackendKind::LibTorchCuda,
-        "mps" => BackendKind::LibTorchMps,
-        _ => match assignment.plane.as_str() {
-            "cuda" => BackendKind::OrtCuda,
-            "directml" => BackendKind::OrtDirectMl,
-            "openvino" => BackendKind::OrtOpenVino,
-            "coreml" => BackendKind::OrtCoreMl,
-            _ if caps.mlx_hw && assignment.apply == "mps" => BackendKind::LibTorchMps,
-            _ => BackendKind::LibTorchCpu,
-        },
-    }
-}
-
-fn slot(kind: BackendKind, status: &str, used_for: String, fail: Option<String>) -> BackendInfo {
-    BackendInfo {
-        kind,
-        status: status.into(),
-        device_index: 0,
-        used_for,
-        fail_reason: fail,
-    }
-}
-
-/// Probe CPU, GPUs, LibTorch, and ONNX Runtime execution providers. Assign detect / plane / apply.
+/// GPU provider selection is a plan, not proof of model execution.
 pub fn probe_accelerators(policy: &str) -> AcceleratorReport {
     let policy = DevicePolicy::parse(policy);
     let cpu = cpu_info();
-    let mut gpus = enumerate_gpus();
-    if is_apple_silicon() && !gpus.iter().any(|g| g.vendor.eq_ignore_ascii_case("Apple")) {
-        gpus.push(GpuInfo {
-            vendor: "Apple".into(),
-            name: "Apple GPU".into(),
-            vram_mb: 0,
-            index: gpus.len() as u32,
-            driver: "metal".into(),
-        });
-    }
-    let root = default_libtorch_root();
-    let json = read_libtorch_json(&root);
-    let version_ok = json
-        .as_ref()
-        .map(|j| libtorch_version_matches_29(&j.version))
-        .unwrap_or(false);
-    let nvidia = gpus.iter().any(|g| g.vendor.eq_ignore_ascii_case("NVIDIA"));
-    let amd = gpus.iter().any(|g| g.vendor.eq_ignore_ascii_case("AMD"));
-    let intel = gpus.iter().any(|g| g.vendor.eq_ignore_ascii_case("Intel"));
-    let cuda_torch = version_ok && cuda_usable(json.as_ref(), &gpus);
-    let mps_torch = tch_mps_available();
-    let mlx_hw = is_apple_silicon();
-    let dml_dll = cfg!(windows) && (dll_exists("DirectML.dll") || amd || intel || nvidia);
-    let (ort_cuda_api, ort_cuda_fail) = if nvidia {
-        ort_ep_available("CUDAExecutionProvider")
-    } else {
-        (false, Some("no_nvidia_gpu".into()))
-    };
-    let (ort_dml_api, ort_dml_fail) = if cfg!(windows) {
-        ort_ep_available("DmlExecutionProvider")
-    } else {
-        (false, Some("windows_only".into()))
-    };
-    let (ort_ov_api, ort_ov_fail) = ort_ep_available("OpenVINOExecutionProvider");
-    let (ort_coreml_api, ort_coreml_fail) = if cfg!(target_os = "macos") {
-        ort_ep_available("CoreMLExecutionProvider")
-    } else {
-        (false, Some("macos_only".into()))
-    };
-
-    // Usable = ORT says the EP exists, or we can reasonably try it (DLL + GPU).
-    // ORT may advertise an EP compiled into its API even when the provider
-    // library was not packaged beside the executable. LibTorch CUDA does not
-    // imply ONNX Runtime CUDA is usable.
-    let ort_cuda_library = !cfg!(windows) || dll_exists("onnxruntime_providers_cuda.dll");
-    let ort_openvino_library = !cfg!(windows) || dll_exists("onnxruntime_providers_openvino.dll");
-    let ort_cuda = ort_cuda_api && ort_cuda_library;
-    let ort_dml = ort_dml_api || dml_dll;
-    let ort_ov = ort_ov_api && ort_openvino_library;
-    let ort_coreml = ort_coreml_api || cfg!(all(feature = "ort-plane", target_os = "macos"));
-
-    let caps = Caps {
-        cuda_torch,
-        mps_torch,
-        mlx_hw,
-        ort_cuda,
-        ort_dml,
-        ort_ov,
-        ort_coreml,
-        intel,
+    let gpus = enumerate_gpus();
+    let detect = match policy {
+        DevicePolicy::DirectMl => "directml",
+        DevicePolicy::WebGpu => "webgpu",
+        DevicePolicy::Vulkan => "vulkan",
+        _ if cfg!(windows) => "directml",
+        _ => "webgpu",
     };
     let assignment = ComputeAssignment {
-        detect: pick_detect(policy, caps),
-        plane: pick_plane(policy, caps),
-        apply: pick_apply(policy, caps),
+        detect: detect.into(), plane: detect.into(),
+        apply: if policy == DevicePolicy::Cpu || !cfg!(feature = "wgpu-lut") { "cpu".into() } else { "wgpu".into() },
         threads: apply_thread_count(&cpu),
     };
-    let recommended = recommended_label(&assignment, &gpus, &cpu);
-    let active = headline(&assignment, caps);
-
-    let mut cuda_fail: Option<String> = None;
-    if json.as_ref().is_some() && !version_ok {
-        cuda_fail = Some("version_mismatch".into());
-    } else if json
-        .as_ref()
-        .map(|j| j.kind.eq_ignore_ascii_case("cuda"))
-        .unwrap_or(false)
-        && !cuda_torch
-    {
-        cuda_fail = Some("no_runtime".into());
-    }
-
-    let torch_cpu_used = used_for(&assignment, &["cpu"]);
-    let torch_cuda_used = {
-        let mut p = Vec::new();
-        if assignment.detect == "cuda" {
-            p.push("detect");
-        }
-        if assignment.apply == "cuda" {
-            p.push("apply");
-        }
-        if p.is_empty() {
-            "unused".into()
-        } else {
-            p.join(",")
-        }
-    };
-    let torch_mps_used = {
-        let mut p = Vec::new();
-        if assignment.detect == "mps" {
-            p.push("detect");
-        }
-        if assignment.apply == "mps" {
-            p.push("apply");
-        }
-        if p.is_empty() {
-            "unused".into()
-        } else {
-            p.join(",")
-        }
-    };
-    let dml_used = used_for(&assignment, &["directml"]);
-    let ov_used = used_for(&assignment, &["openvino"]);
-    let coreml_used = if assignment.plane == "coreml" {
-        "plane".into()
-    } else {
-        "unused".into()
-    };
-
-    let backends = vec![
-        slot(
-            BackendKind::LibTorchCpu,
-            if torch_cpu_used != "unused" {
-                "active"
-            } else {
-                "available"
-            },
-            torch_cpu_used,
-            if !version_ok && json.is_some() {
-                Some("version_mismatch".into())
-            } else {
-                None
-            },
-        ),
-        slot(
-            BackendKind::LibTorchCuda,
-            if first_used(&assignment, &["cuda"]) == "active" && cuda_torch {
-                "active"
-            } else if cuda_torch {
-                "available"
-            } else if nvidia {
-                "failed"
-            } else {
-                "unavailable"
-            },
-            torch_cuda_used,
-            cuda_fail,
-        ),
-        slot(
-            BackendKind::OrtCuda,
-            if assignment.plane == "cuda" {
-                "active"
-            } else if ort_cuda {
-                "available"
-            } else if nvidia {
-                "detected"
-            } else {
-                "unavailable"
-            },
-            if assignment.plane == "cuda" {
-                "plane".into()
-            } else {
-                "unused".into()
-            },
-            if ort_cuda { None } else { ort_cuda_fail },
-        ),
-        slot(
-            BackendKind::OrtDirectMl,
-            if first_used(&assignment, &["directml"]) == "active" {
-                "active"
-            } else if ort_dml {
-                "available"
-            } else if cfg!(windows) && (amd || intel || nvidia) {
-                "detected"
-            } else {
-                "unavailable"
-            },
-            dml_used,
-            if ort_dml {
-                None
-            } else {
-                ort_dml_fail.or_else(|| {
-                    if !cfg!(windows) {
-                        Some("windows_only".into())
-                    } else {
-                        None
-                    }
-                })
-            },
-        ),
-        slot(
-            BackendKind::OrtOpenVino,
-            if first_used(&assignment, &["openvino"]) == "active" {
-                "active"
-            } else if ort_ov {
-                "available"
-            } else if intel {
-                "detected"
-            } else {
-                "unavailable"
-            },
-            ov_used,
-            if ort_ov { None } else { ort_ov_fail },
-        ),
-        slot(
-            BackendKind::LibTorchMps,
-            if assignment.detect == "mps" || assignment.apply == "mps" {
-                "active"
-            } else if mps_torch {
-                "available"
-            } else if cfg!(target_os = "macos") {
-                "detected"
-            } else {
-                "unavailable"
-            },
-            torch_mps_used,
-            if mps_torch {
-                None
-            } else if !cfg!(target_os = "macos") {
-                Some("macos_only".into())
-            } else {
-                Some("libtorch_mps_not_linked".into())
-            },
-        ),
-        slot(
-            BackendKind::OrtCoreMl,
-            if assignment.plane == "coreml" {
-                "active"
-            } else if ort_coreml {
-                "available"
-            } else if cfg!(target_os = "macos") {
-                "detected"
-            } else {
-                "unavailable"
-            },
-            coreml_used,
-            if ort_coreml { None } else { ort_coreml_fail },
-        ),
-        slot(
-            BackendKind::Mlx,
-            if mlx_hw { "detected" } else { "unavailable" },
-            "unused".into(),
-            if mlx_hw {
-                Some("mlx_runtime_not_linked".into())
-            } else {
-                Some("apple_silicon_only".into())
-            },
-        ),
-    ];
-    AcceleratorReport {
-        cpu,
-        gpus,
-        backends,
-        active,
-        libtorch: LibTorchInfo {
-            kind: json
-                .as_ref()
-                .map(|j| j.kind.clone())
-                .unwrap_or_else(|| "unknown".into()),
-            version: json.as_ref().map(|j| j.version.clone()).unwrap_or_default(),
-            root: root.to_string_lossy().into_owned(),
-        },
-        policy: policy.as_str().to_string(),
-        assignment,
-        recommended,
-    }
+    let active = if detect == "directml" { BackendKind::OrtDirectMl } else { BackendKind::OrtWebGpu };
+    let backends = [BackendKind::OrtDirectMl, BackendKind::OrtWebGpu].into_iter().map(|kind| BackendInfo {
+        kind, status: if kind == BackendKind::OrtDirectMl && !cfg!(windows) { "unavailable" }
+            else if kind == active { "planned" } else { "not tested" }.into(),
+        device_index: 0, used_for: if kind == active { "detect,plane" } else { "unused" }.into(), fail_reason: None,
+    }).collect();
+    AcceleratorReport { cpu, gpus, backends, active, policy: policy.as_str().into(),
+        recommended: format!("{} inference · {} LUT", active.short(), assignment.apply), assignment }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn caps(cuda_torch: bool, mps_torch: bool, ort_dml: bool, ort_ov: bool, intel: bool) -> Caps {
-        Caps {
-            cuda_torch,
-            mps_torch,
-            mlx_hw: mps_torch,
-            ort_cuda: cuda_torch,
-            ort_dml,
-            ort_ov,
-            ort_coreml: false,
-            intel,
-        }
-    }
-
     #[test]
-    fn pick_detect_auto_prefers_cuda_torch() {
-        let c = caps(true, false, true, false, false);
-        assert_eq!(pick_detect(DevicePolicy::Auto, c), "cuda");
-    }
-
-    #[test]
-    fn pick_detect_auto_falls_back_to_dml() {
-        let c = caps(false, false, true, false, false);
-        assert_eq!(pick_detect(DevicePolicy::Auto, c), "directml");
-    }
-
-    #[test]
-    fn pick_detect_directml_policy() {
-        let c = caps(true, false, true, false, false);
-        assert_eq!(pick_detect(DevicePolicy::DirectMl, c), "directml");
-    }
-
-    #[test]
-    fn auto_apply_prefers_cpu_for_small_lut() {
-        let c = caps(false, false, true, false, false);
-        assert_eq!(pick_apply(DevicePolicy::Auto, c), "cpu");
-        assert_eq!(pick_plane(DevicePolicy::Auto, c), "directml");
-    }
-
-    #[test]
-    fn pick_detect_cpu_policy() {
-        let c = caps(true, true, true, false, false);
-        assert_eq!(pick_detect(DevicePolicy::Cpu, c), "cpu");
+    fn cpu_policy_only_controls_lut() {
+        let report = probe_accelerators("cpu");
+        assert_eq!(report.assignment.apply, "cpu");
+        assert_ne!(report.assignment.detect, "cpu");
+        assert_ne!(report.assignment.plane, "cpu");
     }
 }

@@ -2,6 +2,14 @@ namespace ColorCorrect.Engine;
 
 public sealed class CorrectionOptions
 {
+    /// Use CPU for LUT application without changing the GPU inference provider.
+    public bool CpuLut { get; set; }
+    /// Image-correction device; chart/plane detection has its own GPU provider.
+    public string LutDevice { get; set; } = "auto";
+    public bool FastMode { get; set; } = true;
+    public bool BatchPreviewResults { get; set; } = true;
+    public List<ReferenceProfile> ReferenceProfiles { get; set; } = [];
+    public List<ChartReferenceAssignment> ReferenceAssignments { get; set; } = [];
     public string Method { get; set; } = "rpcc";
     public int Degree { get; set; } = 2;
     public bool IncludeCombinations { get; set; } = true;

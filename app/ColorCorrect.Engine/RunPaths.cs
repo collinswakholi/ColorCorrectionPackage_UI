@@ -17,9 +17,11 @@ public static class RunPaths
 
     public static string RunsRoot(string repoRoot)
     {
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COLORCORRECT_DATA_DIR")))
+        if (File.Exists(Path.Combine(repoRoot, "runtime-support.json")))
         {
-            return Path.Combine(SessionStore.AppDataDir(), "runs");
+            var packagedRuns = Path.Combine(SessionStore.AppDataDir(), "runs");
+            Directory.CreateDirectory(packagedRuns);
+            return packagedRuns;
         }
         if (EnginePaths.LooksLikeRepo(repoRoot))
         {
@@ -49,7 +51,7 @@ public static class RunPaths
         var dest = Path.Combine(destDir, destName);
         try
         {
-            if (string.Equals(Path.GetFullPath(src), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+            if (PathIdentity.Equal(Path.GetFullPath(src), Path.GetFullPath(dest)))
             {
                 return;
             }
@@ -68,8 +70,8 @@ public static class RunPaths
         {
             var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var root = Path.GetFullPath(repoRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(full, root, StringComparison.OrdinalIgnoreCase);
+            return full.StartsWith(root + Path.DirectorySeparatorChar, PathIdentity.Comparison)
+                   || PathIdentity.Equal(full, root);
         }
         catch
         {

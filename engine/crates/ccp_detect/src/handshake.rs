@@ -169,7 +169,5 @@ pub fn make_handshake(
 }
 
 pub fn warmup_json(device: &str) -> String {
-    format!(
-        "{{\"ok\":true,\"backend\":\"torchscript\",\"runtime\":\"libtorch\",\"device\":\"{device}\",\"warmed\":true}}\n"
-    )
+    serde_json::json!({"ok":true,"backend":"onnx","runtime":if device.contains(":wgpu:") {"burn-wgpu"} else {"ort"},"device":device,"warmed":true}).to_string()+"\n"
 }

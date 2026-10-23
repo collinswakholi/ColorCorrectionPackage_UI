@@ -1,10 +1,10 @@
 * text=auto
 *.sh text eol=lf
+installer/linux/* text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.ps1 text eol=crlf
 *.onnx binary
-*.torchscript binary
 *.png binary
 *.JPG binary
 *.jpg binary

@@ -6,7 +6,6 @@ public static class SampleCatalog
 {
     private static readonly string[] Roots =
     [
-        "test_images",
         Path.Combine("assets", "test_images", "github"),
         Path.Combine("assets", "test_images", "internet"),
         Path.Combine("assets", "test_images"),

@@ -30,7 +30,7 @@ public static class ColorSpaces
     [
         ("rpcc", "Root polynomial"),
         ("ccm", "3x3 CCM"),
-        ("linear", "Linear"),
+        ("linear", "Polynomial regression"),
         ("pls", "PLS"),
         ("nn", "Neural net"),
     ];

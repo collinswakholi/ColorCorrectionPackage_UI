@@ -34,7 +34,7 @@ pub fn is_saturated(rgb: Vec3, threshold: f64) -> bool {
 pub fn flag_saturated(patches: &[ChartPatch], threshold: f64) -> SaturationReport {
     let flags: Vec<bool> = patches
         .iter()
-        .map(|p| is_saturated(p.original_measured_srgb, threshold))
+        .map(|p| p.saturated || is_saturated(p.original_measured_srgb, threshold))
         .collect();
     let names = patches
         .iter()
@@ -146,7 +146,17 @@ pub fn extrapolate_saturated(
         for channel in 0..3 {
             let measured = patch.original_measured_srgb[channel];
             if measured.abs() > MIN_CHANNEL {
-                ratios[channel].push(patch.reference_srgb[channel] / measured);
+                let reference = if patch
+                    .provenance
+                    .as_ref()
+                    .is_some_and(|p| p.custom_reference)
+                {
+                    crate::color::lab_d50_to_srgb_unclipped(patch.reference_lab_d50)
+                        .unwrap_or(patch.reference_srgb)
+                } else {
+                    patch.reference_srgb
+                };
+                ratios[channel].push(reference[channel] / measured);
             }
         }
     }
@@ -465,6 +475,12 @@ pub fn fit_gc(
     patches: &[ChartPatch],
     neutrals: Option<&HashMap<String, Vec<String>>>,
 ) -> Result<GammaModel> {
+    if patches
+        .iter()
+        .any(|p| p.provenance.as_ref().is_some_and(|v| v.custom_reference))
+    {
+        return fit_gc_reference_pairs(patches, neutrals);
+    }
     let named = lookup_neutrals(spec, neutrals)?;
     let d65 = parse_white_point("d65")?;
     let mut ref_l = Vec::new();
@@ -574,6 +590,12 @@ pub fn fit_wb(
     patches: &[ChartPatch],
     neutrals: Option<&HashMap<String, Vec<String>>>,
 ) -> Result<WhiteBalance> {
+    if patches
+        .iter()
+        .any(|p| p.provenance.as_ref().is_some_and(|v| v.custom_reference))
+    {
+        return fit_wb_reference_pairs(patches, neutrals);
+    }
     let named = lookup_neutrals(spec, neutrals)?;
     let mut refs = Vec::new();
     let mut dets = Vec::new();
@@ -591,6 +613,86 @@ pub fn fit_wb(
     }
     Ok(WhiteBalance {
         diag: compute_diag(&refs, &dets, WB_DIAG_SCALE)?,
+    })
+}
+
+/// Pair each profile's neutral truth with measurements of that same cell. A
+/// shared chart layout alone is insufficient to pool two physical references.
+fn reference_neutral_groups<'a>(
+    patches: &'a [ChartPatch],
+    neutrals: Option<&HashMap<String, Vec<String>>>,
+) -> Result<Vec<Vec<&'a ChartPatch>>> {
+    let mut groups: std::collections::BTreeMap<(String, String, u32, usize), Vec<&ChartPatch>> =
+        std::collections::BTreeMap::new();
+    for patch in patches {
+        let identity = patch.provenance.as_ref().ok_or_else(|| {
+            Error::InvalidArgument("custom calibration patch is missing reference identity".into())
+        })?;
+        let kind = crate::refs::parse_chart_kind(&identity.template_id)?;
+        let names = crate::refs::neutral_names_for(kind, neutrals);
+        if names.iter().any(|n| n.eq_ignore_ascii_case(&patch.name)) {
+            groups
+                .entry((
+                    identity.template_id.clone(),
+                    identity.profile_id.clone(),
+                    identity.profile_revision,
+                    patch.index,
+                ))
+                .or_default()
+                .push(patch);
+        }
+    }
+    Ok(groups.into_values().collect())
+}
+
+fn fit_gc_reference_pairs(
+    patches: &[ChartPatch],
+    neutrals: Option<&HashMap<String, Vec<String>>>,
+) -> Result<GammaModel> {
+    let d65 = parse_white_point("d65")?;
+    let mut refs = Vec::new();
+    let mut detected = Vec::new();
+    for group in reference_neutral_groups(patches, neutrals)? {
+        let measured: Vec<f64> = group
+            .iter()
+            .filter_map(|p| srgb_to_lab_d65(p.original_measured_srgb).ok().map(|v| v.l))
+            .filter(|v| v.is_finite())
+            .collect();
+        if measured.is_empty() {
+            continue;
+        }
+        refs.push(lab_d50_to_target_lab(group[0].reference_lab_d50, &d65)?.l);
+        detected.push(median(measured));
+    }
+    if refs.len() < 2 {
+        return Err(Error::InvalidArgument(
+            "GC needs at least two named reference neutrals".into(),
+        ));
+    }
+    fit_monotonic_gamma_profile(&refs, &detected)
+}
+
+fn fit_wb_reference_pairs(
+    patches: &[ChartPatch],
+    neutrals: Option<&HashMap<String, Vec<String>>>,
+) -> Result<WhiteBalance> {
+    let mut refs = Vec::new();
+    let mut detected = Vec::new();
+    for group in reference_neutral_groups(patches, neutrals)? {
+        if let Some(measured) = median_vec3(group.iter().map(|p| p.original_measured_srgb)) {
+            refs.push(crate::color::lab_d50_to_srgb_unclipped(
+                group[0].reference_lab_d50,
+            )?);
+            detected.push(measured);
+        }
+    }
+    if refs.len() < 2 {
+        return Err(Error::InvalidArgument(
+            "WB needs at least two named reference neutrals".into(),
+        ));
+    }
+    Ok(WhiteBalance {
+        diag: compute_diag(&refs, &detected, WB_DIAG_SCALE)?,
     })
 }
 
@@ -756,6 +858,7 @@ mod tests {
     fn test_patch(spec: &ChartSpec, name: &str, rgb: Vec3) -> ChartPatch {
         let index = spec.index_of(name).expect("named patch");
         ChartPatch {
+            provenance: None,
             name: spec.names[index].clone(),
             index,
             reference_lab_d50: spec.reference_lab_d50[index],
@@ -765,6 +868,66 @@ mod tests {
             center: crate::refs::Vec2 { x: 0.0, y: 0.0 },
             saturated: false,
         }
+    }
+
+    #[test]
+    fn same_layout_custom_profiles_keep_their_own_neutral_truth() {
+        let spec = crate::refs::chart_spec(crate::refs::ChartKind::Classic).unwrap();
+        let gain = [0.8, 1.0, 1.2];
+        let mut patches = Vec::new();
+        for (id, values) in [
+            ("card-a", [[0.5, 0.5, 0.5], [0.1, 0.1, 0.1]]),
+            ("card-b", [[0.65, 0.45, 0.35], [0.2, 0.1, 0.08]]),
+        ] {
+            let mut chart = Vec::new();
+            for (name, reference) in ["white", "black"].iter().zip(values) {
+                let mut patch = test_patch(
+                    &spec,
+                    name,
+                    [
+                        reference[0] / gain[0],
+                        reference[1] / gain[1],
+                        reference[2] / gain[2],
+                    ],
+                );
+                patch.reference_srgb = reference;
+                let d65 = parse_white_point("d65").unwrap();
+                let d50 = parse_white_point("d50").unwrap();
+                patch.reference_lab_d50 = crate::color::xyz_to_lab(
+                    crate::color::adapt_xyz_white(
+                        crate::color::srgb_to_xyz_d65(reference).unwrap(),
+                        &d65,
+                        &d50,
+                    )
+                    .unwrap(),
+                    &d50,
+                );
+                chart.push(patch);
+            }
+            crate::reference_profile::annotate_patches(&mut chart, id, &spec, Some((id, 1)));
+            patches.extend(chart);
+        }
+        let wb = fit_wb(&spec, &patches, None).unwrap();
+        for i in 0..3 {
+            assert!((wb.diag[i] - gain[i] * WB_DIAG_SCALE).abs() < 1e-10);
+        }
+        let gc = fit_gc(&spec, &patches, None).unwrap();
+        patches.reverse();
+        assert_eq!(wb.diag, fit_wb(&spec, &patches, None).unwrap().diag);
+        assert_eq!(gc, fit_gc(&spec, &patches, None).unwrap());
+        // Repeated observations of one physical reference pool within that profile.
+        let repeated = patches.clone();
+        patches.extend(repeated);
+        assert_eq!(wb.diag, fit_wb(&spec, &patches, None).unwrap().diag);
+    }
+
+    #[test]
+    fn original_saturation_survives_lower_stage_values() {
+        let spec = crate::refs::chart_spec(crate::refs::ChartKind::Classic).unwrap();
+        let mut patch = test_patch(&spec, "white", [0.3; 3]);
+        patch.saturated = true;
+        let report = extrapolate_saturated(&mut [patch], 0.99, -0.2, 1.3);
+        assert_eq!(report.flags, vec![true]);
     }
 
     #[test]
@@ -781,6 +944,7 @@ mod tests {
             test_patch(&spec, "black", black_hi),
         ];
         patches.push(ChartPatch {
+            provenance: None,
             name: "A1".into(),
             index: spec.index_of("white").unwrap(),
             reference_lab_d50: spec.reference_lab_d50[0],
@@ -874,6 +1038,7 @@ mod tests {
 
     fn sat_patch(index: usize, name: &str, rgb: Vec3) -> ChartPatch {
         ChartPatch {
+            provenance: None,
             name: name.into(),
             index,
             reference_lab_d50: crate::color::Lab::new(50.0, 0.0, 0.0),

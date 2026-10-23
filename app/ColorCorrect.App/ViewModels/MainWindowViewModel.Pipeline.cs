@@ -21,15 +21,17 @@ public partial class MainWindowViewModel
 {
     public IReadOnlyList<NamedValue> FfcFitMethods { get; }
     public IReadOnlyList<NamedValue> AccelPolicies { get; } =
-    [
-        new("auto", "Auto — best for this PC"),
-        new("cuda", "NVIDIA CUDA"),
-        new("directml", "AMD / Intel DirectML"),
-        new("openvino", "Intel OpenVINO"),
-        new("mlx", "Apple MLX / Metal"),
-        new("cpu", "CPU only"),
-    ];
+    new NamedValue[] {
+        new("auto", "Automatic (recommended)"),
+        new("webgpu", "WebGPU"),
+        new("directml", "DirectML"),
+        new("vulkan", "Vulkan"),
+    }.Where(mode => mode.Value != "directml" || OperatingSystem.IsWindows()).ToArray();
     public ObservableCollection<AccelRow> AccelRows { get; } = [];
+    public IReadOnlyList<NamedValue> ProcessingDevices { get; } = new NamedValue[] {
+        new("auto", "Auto (recommended)"), new("cpu", "CPU"), new("gpu", "GPU")
+    };
+    [ObservableProperty] private NamedValue _selectedProcessingDevice = new("auto", "Auto (recommended)");
 
     [ObservableProperty] private bool _doFfc;
     [ObservableProperty] private bool _doGc = true;
@@ -55,20 +57,19 @@ public partial class MainWindowViewModel
     [ObservableProperty] private string _accelJson = "";
     [ObservableProperty] private string _lutNote = "LUT does not include flat-field.";
     [ObservableProperty] private bool _forceCpu;
-    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Auto — best for this PC");
+    [ObservableProperty] private bool _fastMode = true;
+    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Automatic (recommended)");
     private bool _accelSync;
-    private bool _cudaOfferDismissed;
-    private bool _cudaOfferAsked;
-    private bool _cudaInstalling;
     [ObservableProperty] private bool _phase2Teacher = true;
     [ObservableProperty] private string _lastPreviewDir = "";
-    [ObservableProperty] private bool _showCudaAddon;
-    [ObservableProperty] private string _accelHint = "Probing CPU, CUDA, DirectML, OpenVINO, and Apple Metal…";
+    [ObservableProperty] private string _accelHint = "Checking graphics hardware…";
     private readonly Dictionary<string, Bitmap> _stageBitmaps = new(StringComparer.OrdinalIgnoreCase);
     private string _usedDetect = "";
     private string _usedPlane = "";
     private string _usedApply = "";
     private int _stageLoadGen;
+
+
 
     public bool IsStageOriginal
     {
@@ -110,15 +111,17 @@ public partial class MainWindowViewModel
     public bool IsGcPreviewLoading => IsStagePreviewLoading && StageName == "GC";
     public bool IsWbPreviewLoading => IsStagePreviewLoading && StageName == "WB";
 
-    public bool HasStageFfc => DoFfc && (Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
-    public bool HasStageGc => DoGc && (Active?.IsCorrected == true || StageFileExists("gc.jpg"));
-    public bool HasStageWb => DoWb && (Active?.IsCorrected == true || StageFileExists("wb.jpg"));
-    public bool HasStageCc => DoCc && (Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
+    public bool HasStageFfc => ResultStageEnabled(Active, "ffc") && (Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
+    public bool HasStageGc => ResultStageEnabled(Active, "gc") && (Active?.IsCorrected == true || StageFileExists("gc.jpg"));
+    public bool HasStageWb => ResultStageEnabled(Active, "wb") && (Active?.IsCorrected == true || StageFileExists("wb.jpg"));
+    public bool HasStageCc => ResultStageEnabled(Active, "cc") && (Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
     public bool HasStageCorrected => HasCorrected || Active?.IsCorrected == true || StageFileExists("corrected.jpg");
 
     public string WhiteImageLabel => string.IsNullOrWhiteSpace(WhiteImagePath)
-        ? "No white reference (FFC skips)"
+        ? "Choose a white reference to use FFC"
         : Path.GetFileName(WhiteImagePath);
+
+    public bool ShowFfcDegree => SelectedFfcFitMethod.Value != "linear";
 
     private bool StageFileExists(string file) =>
         ResolvePreviewFile(LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
@@ -211,7 +214,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (CatalogFolders.Any(item => string.Equals(item.Path, folder, StringComparison.OrdinalIgnoreCase)))
+        if (CatalogFolders.Any(item => PathIdentity.Equal(item.Path, folder)))
         {
             Status = "That folder is already in the catalog.";
             return;
@@ -243,6 +246,8 @@ public partial class MainWindowViewModel
 
     public void UseWhitePath(string path)
     {
+        // Choosing a white image is an explicit override of a loaded model's reference.
+        _loadedWhiteIdentity = null;
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path) || !IsImage(path))
         {
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path) && !IsImage(path))
@@ -286,9 +291,12 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
     private async Task ForceCpuRestartAsync()
     {
+        var cancellation = BeginJob();
         _worker.Policy = SelectedAccelPolicy.Value;
+        _usedDetect = _usedPlane = _usedApply = "";
         await OnUi(() =>
         {
+            Busy = true;
             WorkerReady = false;
             WorkerStartupComplete = false;
             WorkerStartupError = "";
@@ -296,7 +304,7 @@ public partial class MainWindowViewModel
         }).ConfigureAwait(false);
         try
         {
-            await _worker.RestartAsync().ConfigureAwait(false);
+            await _worker.RestartAsync(cancellation).ConfigureAwait(false);
             await RefreshAccelAsync().ConfigureAwait(false);
             await OnUi(() =>
             {
@@ -319,6 +327,7 @@ public partial class MainWindowViewModel
                 WorkerLine = "Worker failed";
             }).ConfigureAwait(false);
         }
+        finally { await OnUi(() => Busy = false).ConfigureAwait(false); }
     }
 
     [RelayCommand]
@@ -329,7 +338,6 @@ public partial class MainWindowViewModel
             var report = await _worker.DevicesAsync().ConfigureAwait(false);
             var raw = report.GetRawText();
             var rows = ParseAccel(report);
-            var cudaOffer = OfferCudaAddon(report);
             var hint = AccelHintFrom(report);
             await OnUi(() =>
             {
@@ -340,132 +348,12 @@ public partial class MainWindowViewModel
                     AccelRows.Add(row);
                 }
 
-                ShowCudaAddon = cudaOffer;
                 AccelHint = hint;
             }).ConfigureAwait(false);
-            if (cudaOffer)
-            {
-                await MaybeOfferCudaDownloadAsync().ConfigureAwait(false);
-            }
         }
         catch (System.Exception ex)
         {
             await OnUi(() => AccelJson = ex.Message).ConfigureAwait(false);
-        }
-    }
-
-    [RelayCommand]
-    private async Task OpenCudaAddon()
-    {
-        await InstallCudaLibTorchAsync(prompt: true).ConfigureAwait(false);
-    }
-
-    private async Task MaybeOfferCudaDownloadAsync()
-    {
-        if (_cudaOfferAsked || _cudaOfferDismissed || _cudaInstalling || ForceCpu)
-        {
-            return;
-        }
-
-        if (!string.Equals(SelectedAccelPolicy.Value, "auto", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(SelectedAccelPolicy.Value, "cuda", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _cudaOfferAsked = true;
-        if (Dialogs is null)
-        {
-            return;
-        }
-
-        var ok = await Dispatcher.UIThread.InvokeAsync(() => Dialogs.ConfirmAsync(
-            "NVIDIA GPU found",
-            "ColorCorrect Studio can use CUDA for chart detection and explicitly selected CUDA LUT application. LibTorch 2.9 CUDA is installed separately in %LOCALAPPDATA%\\CCP-New\\libtorch-cuda (a multi-GB download from pytorch.org). NN fitting remains on CPU; Auto still-image application uses CPU. Plane crop uses DirectML when available.\n\nDownload CUDA LibTorch now?",
-            "Download CUDA")).ConfigureAwait(false);
-        if (!ok)
-        {
-            _cudaOfferDismissed = true;
-            ScheduleSave();
-            return;
-        }
-
-        await InstallCudaLibTorchAsync(prompt: false).ConfigureAwait(false);
-    }
-
-    private async Task InstallCudaLibTorchAsync(bool prompt)
-    {
-        if (_cudaInstalling)
-        {
-            return;
-        }
-
-        var script = LibTorchCudaInstaller.FindScript(_worker.RepoRoot, _worker.ExePath);
-        if (string.IsNullOrWhiteSpace(script))
-        {
-            await OnUi(() =>
-            {
-                Status = "CUDA installer script is missing from this build.";
-                Log("Accel", "install_libtorch_cuda.ps1 not found.", LogLevel.Error);
-            }).ConfigureAwait(false);
-            return;
-        }
-
-        if (prompt && Dialogs is not null)
-        {
-            var ok = await Dispatcher.UIThread.InvokeAsync(() => Dialogs.ConfirmAsync(
-                "Install CUDA LibTorch",
-                "Download official LibTorch 2.9.1 + CUDA 12.6 into %LOCALAPPDATA%\\CCP-New\\libtorch-cuda? The CPU runtime is preserved. CUDA accelerates chart detection and eligible LUT image application, not NN fitting or every correction stage. The worker will restart with the add-on.",
-                "Download")).ConfigureAwait(false);
-            if (!ok)
-            {
-                return;
-            }
-        }
-
-        _cudaInstalling = true;
-        try
-        {
-            await OnUi(() =>
-            {
-                Busy = true;
-                Status = "Downloading CUDA LibTorch…";
-            }).ConfigureAwait(false);
-
-            var progress = new Progress<string>(line =>
-            {
-                _ = OnUi(() => Status = line.Length > 96 ? line[..96] + "…" : line);
-            });
-            var (ok, log) = await LibTorchCudaInstaller.InstallAsync(script, progress).ConfigureAwait(false);
-            if (!ok)
-            {
-                await OnUi(() =>
-                {
-                    Status = "CUDA LibTorch download failed. CPU stays in use.";
-                    Log("Accel", "CUDA LibTorch install failed.", LogLevel.Error,
-                        string.IsNullOrWhiteSpace(log) ? [] : [log]);
-                }).ConfigureAwait(false);
-                return;
-            }
-
-            _cudaOfferDismissed = true;
-            // A portable launcher may have inherited the bundled CPU override.
-            // Switch only this app process; no machine/user environment changes.
-            Environment.SetEnvironmentVariable("CCP_LIBTORCH_ROOT", LibTorchCudaInstaller.DestRoot());
-            Environment.SetEnvironmentVariable("LIBTORCH_PATH", LibTorchCudaInstaller.DestRoot());
-            await OnUi(() =>
-            {
-                ShowCudaAddon = false;
-                Status = "CUDA LibTorch installed. Restarting worker…";
-                Log("Accel", "CUDA LibTorch installed.", LogLevel.Success);
-            }).ConfigureAwait(false);
-            ScheduleSave();
-            await ForceCpuRestartAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            _cudaInstalling = false;
-            await OnUi(() => Busy = false).ConfigureAwait(false);
         }
     }
 
@@ -523,31 +411,37 @@ public partial class MainWindowViewModel
     partial void OnDoFfcChanged(bool value)
     {
         NotifyStageRadios();
+        RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
     partial void OnDoGcChanged(bool value)
     {
         NotifyStageRadios();
+        RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
     partial void OnDoWbChanged(bool value)
     {
         NotifyStageRadios();
+        RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
     partial void OnDoCcChanged(bool value)
     {
         NotifyStageRadios();
+        RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
     partial void OnSelectedFfcFitMethodChanged(NamedValue value)
     {
+        OnPropertyChanged(nameof(ShowFfcDegree));
         ShowFfcNn = value.Value == "nn";
         ShowFfcIter = value.Value is "nn" or "pls";
+        RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
@@ -594,25 +488,20 @@ public partial class MainWindowViewModel
     }
     partial void OnForceCpuChanged(bool value)
     {
-        if (_restoring || _accelSync)
-        {
-            return;
-        }
+        if (value) SelectedProcessingDevice = ProcessingDevices[1];
+        else if (SelectedProcessingDevice.Value == "cpu") SelectedProcessingDevice = ProcessingDevices[0];
+        if (!_restoring) ScheduleSave();
+    }
 
-        _accelSync = true;
-        try
-        {
-            SelectedAccelPolicy = Pick(AccelPolicies, value ? "cpu" : "auto");
-            _worker.Policy = SelectedAccelPolicy.Value;
-            if (!_restoring)
-            {
-                ScheduleSave();
-            }
-        }
-        finally
-        {
-            _accelSync = false;
-        }
+    partial void OnSelectedProcessingDeviceChanged(NamedValue value)
+    {
+        ForceCpu = value.Value == "cpu";
+        if (!_restoring) ScheduleSave();
+    }
+
+    partial void OnFastModeChanged(bool value)
+    {
+        if (!_restoring) ScheduleSave();
     }
 
     partial void OnSelectedAccelPolicyChanged(NamedValue value)
@@ -625,7 +514,6 @@ public partial class MainWindowViewModel
         _accelSync = true;
         try
         {
-            ForceCpu = value.Value == "cpu";
             _worker.Policy = value.Value;
             if (!_restoring)
             {
@@ -649,10 +537,12 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(WhiteImageLabel));
         RefreshWhiteBadges();
         RefreshOverlay();
+        RefreshValidation();
     }
 
     private void NotifyStageRadios()
     {
+        OnPropertyChanged(nameof(IsResultPreviewSuppressed));
         OnPropertyChanged(nameof(IsStageOriginal));
         OnPropertyChanged(nameof(IsStageFfc));
         OnPropertyChanged(nameof(IsStageGc));
@@ -705,17 +595,9 @@ public partial class MainWindowViewModel
     private void ClearStageBitmaps()
     {
         _stageLoadGen++;
-        foreach (var bmp in _stageBitmaps.Values)
-        {
-            if (!ReferenceEquals(bmp, OriginalPreview)
-                && !ReferenceEquals(bmp, CorrectedPreview)
-                && !ReferenceEquals(bmp, Preview))
-            {
-                bmp.Dispose();
-            }
-        }
-
+        var retired = _stageBitmaps.Values.Distinct().ToArray();
         _stageBitmaps.Clear();
+        foreach (var bitmap in retired) DisposeIfUnused(bitmap);
         SyncStagePreviewLoading();
     }
 
@@ -723,20 +605,14 @@ public partial class MainWindowViewModel
     {
         var old = Preview;
         Preview = next;
-        if (old is not null
-            && !ReferenceEquals(old, next)
-            && !ReferenceEquals(old, OriginalPreview)
-            && !ReferenceEquals(old, CorrectedPreview)
-            && !_stageBitmaps.ContainsValue(old))
-        {
-            old.Dispose();
-        }
+        DisposeIfUnused(old);
 
         SyncStagePreviewLoading();
     }
 
     private void ApplyStagePreview()
     {
+        if (Active?.PreviewSuppressed == true && StageName != "Original") return;
         if (StageName == "Original")
         {
             if (OriginalPreview is not null)
@@ -819,6 +695,7 @@ public partial class MainWindowViewModel
 
     private async Task EnsureStagePreviewAsync(string stage)
     {
+        if (Active?.PreviewSuppressed == true) return;
         var key = stage.ToLowerInvariant() switch
         {
             "ffc" => "ffc",
@@ -849,10 +726,11 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var model = File.Exists(item.ModelPath) ? item.ModelPath : LoadedModelPath;
+        var model = item.CompletedContext?.Model.Path ?? "";
         var previewDir = !string.IsNullOrWhiteSpace(item.PreviewDir) ? item.PreviewDir : LastPreviewDir;
         if (!File.Exists(model) || string.IsNullOrWhiteSpace(previewDir))
         {
+            FailStagePreview(stage);
             return;
         }
 
@@ -860,7 +738,8 @@ public partial class MainWindowViewModel
         var ok = false;
         try
         {
-            ok = await _client.PreviewStageAsync(item.Path, model, previewDir, key, BuildOptions()).ConfigureAwait(false);
+            var options = ReplayOptions(item);
+            if (options is not null) ok = await _client.PreviewStageAsync(item.Path, model, previewDir, key, options).ConfigureAwait(false);
         }
         finally
         {
@@ -876,10 +755,21 @@ public partial class MainWindowViewModel
                     ApplyStagePreview();
                     NotifyStageRadios();
                 }
+                else
+                {
+                    FailStagePreview(stage);
+                }
 
                 SyncStagePreviewLoading();
             }).ConfigureAwait(false);
         }
+    }
+
+    internal void FailStagePreview(string stage)
+    {
+        StageName = HasStageCorrected ? "Corrected" : "Original";
+        IsStagePreviewLoading = false;
+        Log("Preview", $"Could not load {stage} preview. Check that the saved model and its assets are available.", LogLevel.Warning);
     }
 
     internal void RememberJobAccel(string? plane, string? apply, string? detect = null)
@@ -923,67 +813,30 @@ public partial class MainWindowViewModel
 
     private string AccelHintFrom(JsonElement report)
     {
-        if (report.TryGetProperty("assignment", out var assign) && assign.ValueKind == JsonValueKind.Object)
-        {
-            var detect = FirstUsed(_usedDetect, Str(assign, "detect"));
-            var plane = FirstUsed(_usedPlane, Str(assign, "plane"));
-            var apply = FirstUsed(_usedApply, Str(assign, "apply"));
-            var threads = assign.TryGetProperty("threads", out var t) && t.TryGetInt32(out var n) ? n : 0;
-            var rec = report.TryGetProperty("recommended", out var recEl) && recEl.ValueKind == JsonValueKind.String
-                ? recEl.GetString() ?? ""
-                : "";
-            var used = "";
-            if (!string.IsNullOrWhiteSpace(_usedPlane) || !string.IsNullOrWhiteSpace(_usedApply))
-            {
-                used = "Last job";
-                if (!string.IsNullOrWhiteSpace(_usedPlane))
-                {
-                    used += $" · Plane {LabelStage(_usedPlane)}";
-                }
-
-                if (!string.IsNullOrWhiteSpace(_usedApply))
-                {
-                    used += $" · Apply {LabelStage(_usedApply)}";
-                }
-
-                used += "\n";
-            }
-            var stages = $"{used}Detect {LabelStage(detect)} · Plane {LabelStage(plane)} · Apply {LabelStage(apply)}";
-            if (threads > 0)
-            {
-                stages += $" · {threads} CPU threads";
-            }
-
-            return string.IsNullOrWhiteSpace(rec) ? stages : $"{rec}\n{stages}";
-        }
-
-        return report.TryGetProperty("active", out var active)
-            ? $"Active backend {active}"
-            : "Auto-detect ready.";
+        var lines = new List<string> { $"Inference mode: {SelectedAccelPolicy.Label}" };
+        if (!string.IsNullOrWhiteSpace(_usedDetect)) lines.Add($"Last detection: {LabelStage(_usedDetect)}");
+        if (!string.IsNullOrWhiteSpace(_usedPlane)) lines.Add($"Last plane inference: {LabelStage(_usedPlane)}");
+        lines.Add(string.IsNullOrWhiteSpace(_usedApply) ? "LUT: not run yet" : $"Last LUT: {LabelStage(_usedApply)}");
+        return string.Join("\n", lines);
     }
 
     private static string LabelStage(string value) => value.Trim().ToLowerInvariant() switch
     {
-        "cuda" => "CUDA",
+        "wgpu" => "wgpu (pending execution)",
         "directml" => "DirectML",
-        "openvino" => "OpenVINO",
-        "mps" => "Metal",
-        "coreml" => "CoreML",
-        "mlx" => "MLX",
+        "webgpu" => "WebGPU",
+        "vulkan" => "Vulkan",
         "cpu" => "CPU",
+        var backend when backend.StartsWith("webgpu:", StringComparison.Ordinal) => "WebGPU",
+        var backend when backend.StartsWith("wgpu:", StringComparison.Ordinal) && backend.Contains("cpu", StringComparison.Ordinal) => "GPU + CPU",
+        var backend when backend.StartsWith("wgpu:", StringComparison.Ordinal) => "GPU",
         _ => string.IsNullOrWhiteSpace(value) ? "CPU" : value,
     };
 
     private static string BackendTitle(string kind) => kind switch
     {
-        "LibTorchCpu" => "LibTorch CPU",
-        "LibTorchCuda" => "LibTorch CUDA",
-        "LibTorchMps" => "LibTorch Metal",
-        "OrtCuda" => "ONNX CUDA",
-        "OrtDirectMl" => "ONNX DirectML",
-        "OrtOpenVino" => "ONNX OpenVINO",
-        "OrtCoreMl" => "ONNX CoreML",
-        "Mlx" => "MLX",
+        "OrtDirectMl" => "DirectML",
+        "OrtWebGpu" => "WebGPU",
         _ => kind,
     };
 
@@ -1004,56 +857,33 @@ public partial class MainWindowViewModel
         {
             var brand = Str(cpu, "brand");
             var simd = Str(cpu, "simd");
-            var cpuBusy = detect is "cpu" or "" || plane is "cpu" or "" || apply is "cpu" or "";
+            var cpuBusy = detect is "cpu" or "" || plane is "cpu" or "" || apply is "cpu" or "" || apply.EndsWith("+cpu", StringComparison.Ordinal);
             rows.Add(new AccelRow
             {
                 Name = string.IsNullOrWhiteSpace(brand) ? "CPU" : brand,
                 Status = cpuBusy ? "In use" : "Available",
                 Detail = string.IsNullOrWhiteSpace(simd)
                     ? "Rayon + SIMD apply fallback"
-                    : $"Rayon · {simd.ToUpperInvariant()} · detect/plane/apply fallback",
+                    : $"Rayon · {simd.ToUpperInvariant()} · fitting and LUT fallback",
             });
         }
 
         if (report.TryGetProperty("gpus", out var gpus) && gpus.ValueKind == JsonValueKind.Array)
         {
-            foreach (var gpu in gpus.EnumerateArray())
+            foreach (var gpu in gpus.EnumerateArray().GroupBy(g => Str(g, "name"), StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
             {
                 var name = Str(gpu, "name");
                 var vendor = Str(gpu, "vendor");
-                var nvidia = vendor.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase)
-                             || name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
-                var amd = vendor.Contains("AMD", StringComparison.OrdinalIgnoreCase);
-                var intel = vendor.Contains("Intel", StringComparison.OrdinalIgnoreCase);
-                var apple = vendor.Contains("Apple", StringComparison.OrdinalIgnoreCase);
-                var inUse = (nvidia && (detect == "cuda" || apply == "cuda" || plane == "cuda"))
-                            || (amd && (detect == "directml" || apply == "directml" || plane == "directml"))
-                            || (intel && (detect is "openvino" or "directml"
-                                          || apply is "openvino" or "directml"
-                                          || plane is "openvino" or "directml"))
-                            || (apple && (detect is "mps" or "mlx" || apply is "mps" or "mlx" || plane == "coreml"));
+                var wgpuUsed = apply.StartsWith("wgpu:", StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(name) && apply.Contains(name, StringComparison.OrdinalIgnoreCase);
+                // Provider execution does not identify a particular GPU by vendor.
+                // Only an actual adapter name from the LUT backend can mark this row in use.
+                var inUse = wgpuUsed;
                 var detailParts = new List<string>();
-                if (nvidia)
-                {
-                    if (detect == "cuda") detailParts.Add("LibTorch detect");
-                    if (apply == "cuda") detailParts.Add("LibTorch apply");
-                    if (plane == "cuda") detailParts.Add("ONNX CUDA plane");
-                    else if (plane == "directml") detailParts.Add("ONNX DirectML plane");
-                }
-                else if (amd || intel)
-                {
-                    if (detect == "directml") detailParts.Add("ONNX DirectML detect");
-                    if (apply == "directml") detailParts.Add("ONNX DirectML apply");
-                    if (plane == "directml") detailParts.Add("ONNX DirectML plane");
-                    if (plane == "openvino") detailParts.Add("OpenVINO plane");
-                }
-                else if (apple)
-                {
-                    detailParts.Add("LibTorch Metal detect/apply · CoreML plane · MLX when linked");
-                }
+                if (wgpuUsed) detailParts.Add(apply.EndsWith("+cpu", StringComparison.Ordinal) ? "wgpu LUT + CPU recovery" : "wgpu LUT");
                 var detail = detailParts.Count > 0
                     ? string.Join(" · ", detailParts)
-                    : "Assigned from the policy above";
+                    : "Hardware detected; see provider status below";
                 rows.Add(new AccelRow
                 {
                     Name = string.IsNullOrWhiteSpace(name) ? vendor : name,
@@ -1068,12 +898,11 @@ public partial class MainWindowViewModel
             foreach (var backend in backends.EnumerateArray())
             {
                 var kind = Str(backend, "kind");
-                if (kind is "LibTorchCpu")
-                {
-                    continue;
-                }
 
                 var status = TitleStatus(Str(backend, "status"));
+                if ((kind == "OrtDirectMl" && (_usedDetect == "directml" || _usedPlane == "directml"))
+                    || (kind == "OrtWebGpu" && (_usedDetect is "webgpu" or "vulkan" || _usedPlane is "webgpu" or "vulkan")))
+                    status = "In use";
                 if (status is "Unavailable")
                 {
                     continue;
@@ -1117,26 +946,6 @@ public partial class MainWindowViewModel
         if (s.Equals("unavailable", StringComparison.OrdinalIgnoreCase)) return "Unavailable";
         if (s.Equals("planned", StringComparison.OrdinalIgnoreCase)) return "Planned";
         return char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
-    }
-
-    private static bool OfferCudaAddon(JsonElement report)
-    {
-        var kind = report.TryGetProperty("libtorch", out var torch) ? Str(torch, "kind") : "";
-        if (!kind.Equals("cpu", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!report.TryGetProperty("gpus", out var gpus) || gpus.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        return gpus.EnumerateArray().Any(gpu =>
-        {
-            var blob = Str(gpu, "vendor") + " " + Str(gpu, "name");
-            return blob.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
-        });
     }
 
     private static bool ActiveIs(JsonElement report, string kind) =>

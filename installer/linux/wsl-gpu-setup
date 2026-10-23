@@ -1,0 +1,39 @@
+#!/bin/sh
+# Opt-in controls only ColorCorrect's worker; no sudo, downloads, or global ICD edits.
+set -eu
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+ADDON="$APP_DIR/addons/wsl-gpu"
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/colorcorrect"
+check() {
+    [ -c /dev/dxg ] || { echo 'The experimental WSL GPU add-on requires WSL 2 GPU access (/dev/dxg).' >&2; return 1; }
+    [ "$(uname -m)" = x86_64 ] || { echo 'This experimental WSL add-on is currently validated for x64 only.' >&2; return 1; }
+    for library in libd3d12.so libdxcore.so; do
+        [ -r "/usr/lib/wsl/lib/$library" ] || { echo "Missing WSL library $library. Update WSL and the Windows GPU driver." >&2; return 1; }
+        missing=$(ldd "/usr/lib/wsl/lib/$library" 2>&1) || { echo "$missing" >&2; return 1; }
+        case "$missing" in *'not found'*) echo "$missing" >&2; return 1 ;; esac
+    done
+    [ -f "$ADDON/manifest.json" ] && [ -f "$ADDON/checksums.sha256" ] && [ -f "$ADDON/icd/dzn_icd.json" ] || {
+        echo 'The optional WSL GPU add-on is not installed. Install the matching reviewed add-on first.' >&2; return 1;
+    }
+    (cd "$ADDON" && sha256sum --check --strict --quiet checksums.sha256) || { echo 'WSL GPU add-on integrity check failed.' >&2; return 1; }
+    missing=$(ldd "$ADDON/lib/libvulkan_dzn.so" 2>&1) || { echo "$missing" >&2; return 1; }
+    case "$missing" in *'not found'*) echo "$missing" >&2; return 1 ;; esac
+    echo 'Experimental WSL GPU add-on files and prerequisites verified. GPU execution is checked when processing starts.'
+}
+case "${1:-status}" in
+    check) check ;;
+    enable)
+        check
+        mkdir -p "$CONFIG"
+        (umask 077; printf '%s\n' 'experimental Mesa 25.2.8; ColorCorrect worker only' > "$CONFIG/wsl-gpu.enabled")
+        echo 'Enabled for future ColorCorrect workers. Restart the app or client.'
+        ;;
+    disable)
+        rm -f -- "$CONFIG/wsl-gpu.enabled"
+        echo 'Disabled for future ColorCorrect workers. Restart the app or client.'
+        ;;
+    status)
+        if [ -f "$CONFIG/wsl-gpu.enabled" ]; then echo 'Enabled (experimental).'; else echo 'Disabled.'; fi
+        ;;
+    *) echo 'Usage: wsl-gpu-setup status|check|enable|disable' >&2; exit 64 ;;
+esac

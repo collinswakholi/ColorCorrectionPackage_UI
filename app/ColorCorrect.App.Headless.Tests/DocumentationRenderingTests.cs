@@ -12,28 +12,27 @@ namespace ColorCorrect.App.Headless.Tests;
 public sealed class DocumentationRenderingTests
 {
     [AvaloniaFact]
-    public async Task ProcessIllustration_UsesPublicSamplesAndShowsAllCorrectionStages()
+    public async Task ProcessIllustration_UsesAcceptanceFixturesAndShowsAllCorrectionStages()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "test_images")))
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "testdata", "acceptance")))
             root = root.Parent;
         Assert.NotNull(root);
-        var corpus = Path.Combine(root.FullName, "test_images");
+        var corpus = Path.Combine(root.FullName, "testdata", "acceptance");
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
             Busy = false, IsLightTheme = true, ProcessExpanded = true,
             ModelExpanded = false, LibraryExpanded = false,
         };
+        PublicFixtureCatalog.Install(vm);
         var window = new MainWindow { Width = 1002, Height = 900, DataContext = vm };
         window.Show();
         try
         {
             var grid = Assert.IsType<Grid>(window.Sidebar.Parent);
             grid.ColumnDefinitions[0].Width = new GridLength(240);
-            vm.UseWhitePath(Path.Combine(corpus, "Blank.JPG"));
-            vm.AddPaths([Path.Combine(corpus, "ColorCard_Big.JPG"),
-                Path.Combine(corpus, "ColorCard_Combo.JPG"), Path.Combine(corpus, "Sample_3572.JPG"),
-                Path.Combine(corpus, "Sample_3573.JPG")]);
+            vm.UseWhitePath(Path.Combine(corpus, "blank.jpg"));
+            vm.AddPaths([Path.Combine(corpus, "chart.jpg"), Path.Combine(corpus, "sample.jpg")]);
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (vm.OriginalPreview is null && DateTime.UtcNow < deadline)
             {
@@ -60,7 +59,7 @@ public sealed class DocumentationRenderingTests
             Assert.NotNull(frame);
             var output = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "TestResults", "UI"));
             Directory.CreateDirectory(output);
-            frame.Save(Path.Combine(output, "docs-process-controls-still-only-win.png"));
+            frame.Save(Path.Combine(output, "docs-process-controls-still-only.png"));
         }
         finally
         {

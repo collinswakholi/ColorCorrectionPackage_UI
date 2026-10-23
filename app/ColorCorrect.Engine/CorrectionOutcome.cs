@@ -2,6 +2,7 @@ namespace ColorCorrect.Engine;
 
 public sealed class CorrectionOutcome
 {
+    public CompletedResultContext? CompletedContext { get; init; }
     public bool Ok { get; init; }
     public bool HasChartMetrics { get; init; }
     public string Error { get; init; } = "";

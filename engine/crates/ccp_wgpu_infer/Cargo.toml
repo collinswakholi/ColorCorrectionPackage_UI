@@ -1,0 +1,21 @@
+[package]
+name = "ccp_wgpu_infer"
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "GPU-only Rust inference for the bundled chart and plane models"
+
+[dependencies]
+# Keep eager kernels: fusion/autotune produced incorrect chart geometry on
+# WSL/Dozen. Re-enable only after the multi-photo tensor/cell regression passes.
+burn = { version = "=0.22.0", default-features = false, features = ["std", "wgpu"] }
+burn-store = { version = "=0.22.0", default-features = false, features = ["std"] }
+sha2 = "0.10"
+
+[build-dependencies]
+burn-onnx = "=0.22.0"
+sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"

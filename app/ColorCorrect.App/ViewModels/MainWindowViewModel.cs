@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -31,7 +31,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly SpeedyWorker _worker = new();
     private readonly CorrectionClient _client;
     private readonly SemaphoreSlim _run = new(1, 1);
-    private readonly HashSet<string> _trusted = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _trusted = new(PathIdentity.Comparer);
     private readonly List<CatalogItemViewModel> _catalog = [];
     private CancellationTokenSource? _jobCts;
     private CancellationTokenSource? _saveCts;
@@ -48,8 +48,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool _started;
     private bool _restoring;
     private readonly bool _persistenceEnabled;
-    private readonly Dictionary<string, CachedOriginal> _originalCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CachedOriginal> _originalCache = new(PathIdentity.Comparer);
+    // A background decode can lend a cached original to a queued UI update.
+    // Cache eviction must not release that bitmap before the update consumes it.
+    private readonly Dictionary<Bitmap, int> _originalLeases = new();
     private readonly object _originalCacheLock = new();
+    private bool _disposed;
     private const int OriginalCacheLimit = 8;
 
     private sealed class CachedOriginal
@@ -105,11 +109,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 _restoring = false;
             }
         }
-        Log("Ready", "ColorCorrect Studio workbench ready.", LogLevel.Info, [
-            "Log records detect, apply, batch, session, model, and worker events.",
-            "Working images are not restored automatically. Save session to keep a set.",
-            $"Catalog {_catalog.Count} sample(s).",
-        ]);
+        Log("Ready", "Add images to begin.");
     }
 
     public IAppDialogs? Dialogs { get; set; }
@@ -376,15 +376,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         : Active?.Handshake is { Ok: true }
             ? "Run fits a new model from this image and replaces the loaded model."
             : "Detect the chart on this image, then Run to fit a new model.";
-    public string WorkflowHint => Active is null
-        ? "Add a still image, then Fit + apply."
-        : WillUseLoadedModel
-            ? "Using the loaded model. Run applies it to this still."
-            : Active.Handshake is { Ok: true }
-                ? Active.IsCorrected
-                    ? "Corrected. Fit + apply again retrains from this still."
-                    : "Chart detected. Fit + apply trains a new model from this still."
-                : "Detect the chart, then Fit + apply.";
+    public string WorkflowHint => Active is null ? "Add a still, then Fit + apply."
+        : WillUseLoadedModel ? "Using the loaded model. Run applies it to this still."
+        : Active.Handshake is { Ok: true }
+            ? Active.IsCorrected ? "Corrected. Fit + apply again retrains from this still."
+                : "Chart detected. Fit + apply trains a new model from this still."
+            : "Detect the chart, then Fit + apply.";
     public bool ShowStillPreview => HasImage;
     public bool ShowChartSection => HasImage;
     public bool ShowChartOverlay => OverlayHandshake is { Ok: true };
@@ -434,7 +431,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path) && IsImage(path))
                 .Select(Path.GetFullPath)
                 .Where(path => string.Equals(Path.GetFileName(path), staleName, StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(PathIdentity.Comparer)
                 .ToArray();
             if (replacements.Length == 1)
             {
@@ -445,8 +442,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         SessionItemViewModel? last = null;
         var added = false;
+        var skipped = 0;
         var names = new List<string>();
-        var unsupported = 0;
         foreach (var path in incoming)
         {
             if (Session.Count >= MaxWorking)
@@ -455,21 +452,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 break;
             }
 
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            if (!SupportedStillImage.IsSupportedFile(path))
             {
-                continue;
-            }
-
-            if (!IsImage(path))
-            {
-                unsupported++;
+                skipped++;
                 continue;
             }
 
             var full = Path.GetFullPath(path);
-            if (Session.Any(item => string.Equals(item.Path, full, StringComparison.OrdinalIgnoreCase)))
+            if (Session.Any(item => PathIdentity.Equal(item.Path, full)))
             {
-                last = Session.First(item => string.Equals(item.Path, full, StringComparison.OrdinalIgnoreCase));
+                last = Session.First(item => PathIdentity.Equal(item.Path, full));
                 continue;
             }
 
@@ -499,12 +491,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             Log("Session", $"Added {names.Count} file(s).", LogLevel.Info, names);
-        }
 
-        if (unsupported > 0)
+        }
+        if (skipped > 0)
         {
-            Status = $"Skipped {unsupported} unsupported file(s). This preview supports JPEG, PNG and TIFF still images only; video is not supported.";
-            Log("Session", Status, LogLevel.Warning);
+            Status = $"Skipped {skipped} unsupported or unreadable file(s); video is not supported.";
+            Log("Import", Status, LogLevel.Warning);
         }
     }
 
@@ -575,7 +567,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return [item.Path];
         }
 
-        if (!selected.Contains(item.Path, StringComparer.OrdinalIgnoreCase))
+        if (!selected.Contains(item.Path, PathIdentity.Comparer))
         {
             selected.Add(item.Path);
         }
@@ -586,7 +578,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public IReadOnlyList<string> SessionDragPaths(SessionItemViewModel item)
     {
         var selected = Session.Where(sample => sample.IsSelected).Select(sample => sample.Path).ToList();
-        if (selected.Count > 0 && selected.Contains(item.Path, StringComparer.OrdinalIgnoreCase))
+        if (selected.Count > 0 && selected.Contains(item.Path, PathIdentity.Comparer))
         {
             return selected;
         }
@@ -1063,13 +1055,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         LoadedModelPath = path;
+        RestoreLoadedModelSettings(path);
         UseLoadedModel = true;
         _loadedModelPlane = FfcPlane.TryLoad(path);
         ModelIoStatus = $"Loaded {Path.GetFileName(path)}";
-        Log("Model", $"Loaded {Path.GetFileName(path)}.", LogLevel.Success, [
-            path,
-            _loadedModelPlane is null ? "No FFC plane in this model." : $"{_loadedModelPlane.Badge} {_loadedModelPlane.Width}×{_loadedModelPlane.Height}.",
-        ]);
+        Log("Model", $"Loaded {Path.GetFileName(path)}.", LogLevel.Success);
         RefreshOverlay();
         NotifyRunCommands();
         ScheduleSave();
@@ -1131,22 +1121,23 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (!SaveCorrected && !SaveFfc && !SaveGc && !SaveWb && !SaveCc && !SaveReport)
+        if (!SaveCorrected && !(SaveFfc && CanSaveFfc) && !(SaveGc && CanSaveGc)
+            && !(SaveWb && CanSaveWb) && !(SaveCc && CanSaveCc) && !SaveReport)
         {
             Status = "Choose at least one output to save.";
             ToastService.ShowWarning(Status);
             return;
         }
 
-        // This command changes bound state after confirmation. Keep the Avalonia
-        // synchronization context even when the dialog completes asynchronously.
+        // Keep the Avalonia synchronization context while validating the selected
+        // destination and, below, confirming replacement of existing files.
         if (!await EnsureOutputAllowedAsync())
         {
             return;
         }
 
         var destDir = string.IsNullOrWhiteSpace(OutputDir)
-            ? Path.Combine(_worker.RepoRoot, "assets", "runs", "saved")
+            ? Path.Combine(RunPaths.RunsRoot(_worker.RepoRoot), "saved")
             : Path.IsPathRooted(OutputDir) ? OutputDir : Path.GetFullPath(Path.Combine(_worker.RepoRoot, OutputDir));
         var format = SelectedOutputFormat?.Value ?? "jpg";
         var ext = format.Equals("png", StringComparison.OrdinalIgnoreCase) ? ".png" : ".jpg";
@@ -1156,6 +1147,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SaveProgressLabel = $"Preparing {items.Count} image(s)…";
         CurrentStage = "Save";
         var jobs = new List<(string Src, string Dest)>();
+        var failures = new ConcurrentQueue<string>();
+        var artifactNames = CorrectionClient.BuildArtifactBases(items.Select(item => item.Path).ToArray());
         try
         {
             Directory.CreateDirectory(destDir);
@@ -1164,7 +1157,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 var item = items[i];
                 SaveProgress = 40.0 * i / Math.Max(1, items.Count);
                 SaveProgressLabel = $"Preparing {item.FileName}…";
-                var stem = Path.GetFileNameWithoutExtension(item.Path);
+                var stem = artifactNames[i];
                 if (SaveCorrected)
                 {
                     if (!File.Exists(item.CorrectedPath))
@@ -1176,32 +1169,36 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     {
                         jobs.Add((item.CorrectedPath, Path.Combine(destDir, stem + "_corrected" + ext)));
                     }
+                    else
+                    {
+                        failures.Enqueue($"{item.FileName}: corrected image is unavailable; check the saved model and reference assets.");
+                    }
                 }
 
-                if (SaveFfc)
+                if (SaveFfc && ResultStageEnabled(item, "ffc"))
                 {
                     await EnsureItemStageAsync(item, "ffc");
-                    QueueStageCopy(jobs, item, destDir, stem, "ffc", ext);
+                    if (!QueueStageCopy(jobs, item, destDir, stem, "ffc", ext)) failures.Enqueue($"{item.FileName}: requested FFC stage is unavailable.");
                 }
 
-                if (SaveGc)
+                if (SaveGc && ResultStageEnabled(item, "gc"))
                 {
                     await EnsureItemStageAsync(item, "gc");
-                    QueueStageCopy(jobs, item, destDir, stem, "gc", ext);
+                    if (!QueueStageCopy(jobs, item, destDir, stem, "gc", ext)) failures.Enqueue($"{item.FileName}: requested GC stage is unavailable.");
                 }
 
-                if (SaveWb)
+                if (SaveWb && ResultStageEnabled(item, "wb"))
                 {
                     await EnsureItemStageAsync(item, "wb");
-                    QueueStageCopy(jobs, item, destDir, stem, "wb", ext);
+                    if (!QueueStageCopy(jobs, item, destDir, stem, "wb", ext)) failures.Enqueue($"{item.FileName}: requested WB stage is unavailable.");
                 }
 
-                if (SaveCc)
+                if (SaveCc && ResultStageEnabled(item, "cc"))
                 {
                     await EnsureItemStageAsync(item, "cc");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "cc", ext))
                     {
-                        QueueStageCopy(jobs, item, destDir, stem, "cc", ext, sourceStage: "corrected");
+                        if (!QueueStageCopy(jobs, item, destDir, stem, "cc", ext, sourceStage: "corrected")) failures.Enqueue($"{item.FileName}: requested CC stage is unavailable.");
                     }
                 }
 
@@ -1211,14 +1208,28 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 }
             }
 
+            var collisions = jobs.Where(job => File.Exists(job.Dest) && !PathsEqual(job.Src, job.Dest))
+                .Select(job => job.Dest).Distinct(PathIdentity.Comparer).ToArray();
+            if (collisions.Length > 0 && (Dialogs is null || !await Dialogs.ConfirmAsync(
+                "Replace existing files?",
+                $"{collisions.Length} file(s) already exist in the selected folder:\n\n{string.Join("\n", collisions.Take(8).Select(Path.GetFileName))}"
+                + (collisions.Length > 8 ? "\n…" : "") + "\n\nReplace them with the selected exports?", "Replace files", danger: true)))
+            {
+                Status = "Save cancelled. Existing files were kept.";
+                return;
+            }
+
             var copied = 0;
-            var failures = new ConcurrentQueue<string>();
             var degree = Math.Clamp(Environment.ProcessorCount, 2, 6);
             await Parallel.ForEachAsync(jobs, new ParallelOptions { MaxDegreeOfParallelism = degree }, async (job, _) =>
             {
                 try
                 {
-                    if (string.Equals(Path.GetExtension(job.Dest), ".json", StringComparison.OrdinalIgnoreCase))
+                    if (PathsEqual(job.Src, job.Dest))
+                    {
+                        // The requested artifact is already at its destination.
+                    }
+                    else if (string.Equals(Path.GetExtension(job.Dest), ".json", StringComparison.OrdinalIgnoreCase))
                     {
                         File.Copy(job.Src, job.Dest, overwrite: true);
                     }
@@ -1326,15 +1337,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return true;
         }
 
-        var model = File.Exists(item.ModelPath) ? item.ModelPath : LoadedModelPath;
-        if (!File.Exists(model))
-        {
-            return false;
-        }
-
-        var options = BuildOptions();
+        var options = ReplayOptions(item);
+        var model = item.CompletedContext?.Model.Path ?? "";
+        if (options is null) return false;
         options.WriteOutput = true;
         options.PreviewMode = "none";
+        options.OutputDir = "";
         // Updating this session item's outputs also notifies UI bindings.
         var outcome = await _client.ApplyModelAsync(item.Path, model, options);
         if (!outcome.Ok || !File.Exists(outcome.OutputPath))
@@ -1360,14 +1368,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var model = File.Exists(item.ModelPath) ? item.ModelPath : LoadedModelPath;
+        var model = item.CompletedContext?.Model.Path ?? "";
         var previewDir = item.PreviewDir;
         if (!File.Exists(model) || string.IsNullOrWhiteSpace(previewDir))
         {
             return;
         }
 
-        await _client.PreviewStageAsync(item.Path, model, previewDir, stage, BuildOptions()).ConfigureAwait(false);
+        var options = ReplayOptions(item);
+        if (options is not null) await _client.PreviewStageAsync(item.Path, model, previewDir, stage, options).ConfigureAwait(false);
     }
 
     [RelayCommand]
@@ -1408,6 +1417,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ClipLo = -0.2m;
         ClipHi = 1.3m;
         Phase2Teacher = true;
+        ClearNumericDrafts();
         UpdateCcSummary();
         Log("Settings", "Reset correction settings to defaults.", LogLevel.Info, CorrectionSettingsDetails());
         ScheduleSave();
@@ -1415,6 +1425,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
         UnhookWorkerProgress();
         FlushPersist();
         _saveCts?.Cancel();
@@ -1423,15 +1435,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _previewGeneration++;
         var original = OriginalPreview;
         var corrected = CorrectedPreview;
+        var displayed = Preview;
         Preview = null;
         OriginalPreview = null;
         CorrectedPreview = null;
         ClearStageBitmaps();
-        original?.Dispose();
-        if (!ReferenceEquals(corrected, original))
-        {
-            corrected?.Dispose();
-        }
         foreach (var item in Session)
         {
             item.Dispose();
@@ -1442,15 +1450,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             item.Dispose();
         }
 
+        Bitmap[] cachedOriginals;
         lock (_originalCacheLock)
         {
-            foreach (var cached in _originalCache.Values)
-            {
-                cached.Bitmap.Dispose();
-            }
-
+            cachedOriginals = _originalCache.Values.Select(cached => cached.Bitmap).ToArray();
             _originalCache.Clear();
         }
+        foreach (var bitmap in cachedOriginals.Concat(new[] { original, corrected, displayed }).Distinct()) DisposeIfUnused(bitmap);
         await _worker.DisposeAsync().ConfigureAwait(false);
         _run.Dispose();
         ClearTransientCache();
@@ -1493,7 +1499,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _ = LoadPreviewsAsync(item, gen);
 
         MaybeAutoDetect();
-        if (!string.IsNullOrWhiteSpace(LastPreviewDir) && item.IsCorrected)
+        OnPropertyChanged(nameof(IsResultPreviewSuppressed));
+        if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(LastPreviewDir) && item.IsCorrected)
         {
             StageName = "Corrected";
             ApplyStagePreview();
@@ -1551,26 +1558,33 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         CorrectedPreview = corrected;
         Preview = null;
         UpdateDisplayedPreview();
-        DisposeIfUnused(oldOriginal, OriginalPreview, CorrectedPreview, Preview);
-        DisposeIfUnused(oldCorrected, OriginalPreview, CorrectedPreview, Preview);
-        DisposeIfUnused(oldPreview, OriginalPreview, CorrectedPreview, Preview);
+        foreach (var bitmap in new[] { oldOriginal, oldCorrected, oldPreview }.Distinct()) DisposeIfUnused(bitmap);
     }
 
-    private void DisposeIfUnused(Bitmap? candidate, params Bitmap?[] live)
+    private void DisposeIfUnused(Bitmap? candidate)
     {
         if (candidate is null)
         {
             return;
         }
 
-        if (live.Any(item => ReferenceEquals(item, candidate)))
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => DisposeIfUnused(candidate));
+            return;
+        }
+        // Display properties and both caches share bitmap instances. Releasing a
+        // display slot does not release a stage still owned by the same result.
+        if (ReferenceEquals(candidate, Preview) || ReferenceEquals(candidate, OriginalPreview)
+            || ReferenceEquals(candidate, CorrectedPreview) || _stageBitmaps.ContainsValue(candidate))
         {
             return;
         }
 
         lock (_originalCacheLock)
         {
-            if (_originalCache.Values.Any(item => ReferenceEquals(item.Bitmap, candidate)))
+            if (_originalCache.Values.Any(item => ReferenceEquals(item.Bitmap, candidate))
+                || _originalLeases.ContainsKey(candidate))
             {
                 return;
             }
@@ -1668,11 +1682,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         try
         {
-            return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+            return PathIdentity.Equal(Path.GetFullPath(a), Path.GetFullPath(b));
         }
         catch
         {
-            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+            return PathIdentity.Equal(a, b);
         }
     }
 
@@ -1749,7 +1763,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 ? $"{report.Process} · {report.FeatureCount} feat"
                 : report.Process;
         ValidationSummary = double.IsFinite(report.ValidationMean)
-            ? $"Held out CC · {report.ValidationFolds}-fold mean {report.ValidationMean:0.00} · median {report.ValidationMedian:0.00} · max {report.ValidationMax:0.00}"
+            ? $"CC-only validation · {report.ValidationFolds}-fold mean {report.ValidationMean:0.00} · median {report.ValidationMedian:0.00} · max {report.ValidationMax:0.00}"
             : "Training fit shown · validation unavailable";
         PatchSummary = $"{report.Patches.Count} patches";
         StatusDeltaE = report.StatusLine();
@@ -1773,10 +1787,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         HasSelected = Session.Any(item => item.IsSelected);
         HasSaveItems = Session.Any(item => item.HasSaveable);
         CanSaveCorrected = Session.Any(item => item.IncludeInSave && (item.IsCorrected || File.Exists(item.CorrectedPath)));
-        CanSaveFfc = Session.Any(item => item.IncludeInSave && item.IsCorrected && DoFfc);
-        CanSaveGc = Session.Any(item => item.IncludeInSave && item.IsCorrected && DoGc);
-        CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && DoWb);
-        CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && DoCc);
+        CanSaveFfc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "ffc"));
+        CanSaveGc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "gc"));
+        CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "wb"));
+        CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "cc"));
         CanSaveReport = Session.Any(item => item.IncludeInSave && File.Exists(item.ReportPath));
         HasWhiteRef = !string.IsNullOrWhiteSpace(WhiteImagePath) && File.Exists(WhiteImagePath);
         RefreshWhiteBadges();
@@ -1799,6 +1813,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void NotifyRunCommands()
     {
+        SaveSessionAsCommand.NotifyCanExecuteChanged();
+        LoadSessionCommand.NotifyCanExecuteChanged();
         DetectCommand.NotifyCanExecuteChanged();
         ApplyCommand.NotifyCanExecuteChanged();
         BatchFitCommand.NotifyCanExecuteChanged();
@@ -1820,6 +1836,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasWorkerError));
         OnPropertyChanged(nameof(StatusStateLabel));
         RefreshDetectSummary();
+        RefreshValidation();
     }
 
     private void RefreshSessionNavigation()
@@ -1840,14 +1857,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool CanDetect() =>
         WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path);
     private bool CanApply() =>
-        WorkerReady && !Busy && !IsSaving && Active is not null && NnSettingsValid &&
+        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path) && OperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && NnSettingsValid && Session.Count > 0;
+    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && OperationError(true) is null && Session.Count > 0;
     private bool CanBatchApply() =>
-        WorkerReady && !Busy && !IsSaving && Session.Count > 0 && File.Exists(LoadedModelPath);
+        WorkerReady && !Busy && !IsSaving && OperationError(false) is null && Session.Count > 0 && File.Exists(LoadedModelPath);
     private bool CanRestartWorker() => !Busy && !IsSaving;
-    private bool CanCancel() => IsBatching;
+    private bool CanCancel() => Busy;
     private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);
     private bool CanExportCube() => !Busy && File.Exists(LoadedModelPath);
 
@@ -1858,6 +1875,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : [100];
         return new CorrectionOptions
         {
+            CpuLut = ForceCpu,
+            LutDevice = SelectedProcessingDevice.Value,
+            FastMode = FastMode,
+            BatchPreviewResults = BatchPreviewResults,
             Method = SelectedMethod.Value,
             Degree = int.TryParse(SelectedDegree?.Value, out var degree) ? degree : 2,
             IncludeCombinations = IncludeCombinations,
@@ -1932,6 +1953,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(HasHiddenLayersError));
         OnPropertyChanged(nameof(HiddenLayersError));
         UpdateCcSummary();
+        RefreshValidation();
     }
 
     private void UpdateCcSummary()
@@ -1966,6 +1988,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
+
+
         if (Active.Handshake is { Ok: true })
         {
             DetectSummary = $"{Active.DetectLabel} · {Math.Max(1, Active.Handshake.ChartCount)} chart(s)";
@@ -1981,8 +2005,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void MaybeAutoDetect()
     {
-        if (_restoring || !WorkerReady || Active is not { Handshake: null } item
-            || !File.Exists(item.Path))
+        if (_disposed || _restoring || !CanDetect() || Active is not { Handshake: null } item)
         {
             return;
         }
@@ -1994,7 +2017,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         if (string.IsNullOrWhiteSpace(OutputDir))
         {
-            return Path.Combine(_worker.RepoRoot, "assets", "runs");
+            return RunPaths.RunsRoot(_worker.RepoRoot);
         }
 
         return Path.IsPathRooted(OutputDir)
@@ -2009,6 +2032,19 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void Log(string action, string detail, LogLevel level = LogLevel.Info, IEnumerable<string>? details = null)
     {
+        if (level == LogLevel.Error)
+        {
+            try
+            {
+                var folder = Path.Combine(SessionStore.AppDataDir(), "diagnostics");
+                Directory.CreateDirectory(folder);
+                var path = Path.Combine(folder, "engine.log");
+                if (File.Exists(path) && new FileInfo(path).Length > 2_000_000) File.Delete(path);
+                File.AppendAllText(path, $"{DateTime.Now:O} {action}: {detail}\n{_worker.FormatRecentStderr()}\n");
+            }
+            catch { /* Logging must never block recovery. */ }
+            detail = ConciseProcessingError(detail);
+        }
         var stamp = DateTime.Now.ToString("HH:mm:ss");
         var message = string.IsNullOrWhiteSpace(detail) ? action : $"{action}  {detail}";
         LogEntries.Add(new LogEntry
@@ -2052,170 +2088,24 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private IReadOnlyList<string> CorrectionSettingsDetails(HandshakeDocument? handshake = null, bool applyOnly = false)
     {
         var options = BuildOptions();
-        var lines = new List<string> { $"{options.Summary()} → {options.CliModel()}" };
-        if (options.Method != "ccm")
-        {
-            lines.Add(options.Method == "rpcc"
-                ? $"Root-polynomial degree {options.Degree}"
-                : options.IncludeCombinations
-                    ? $"Polynomial degree {options.Degree} · combinations on"
-                    : $"Polynomial degree {options.Degree} · combinations off");
-        }
-
-        if (options.Method == "pls")
-        {
-            lines.Add(options.PlsComponents > 0 ? $"PLS components {options.PlsComponents}" : "PLS components auto");
-            lines.Add($"Tolerance {options.NnTol:0.###E+0}");
-        }
-
-        if (options.Method == "nn")
-        {
-            lines.Add($"NN hidden {CorrectionOptions.FormatHiddenLayers(options.HiddenLayers)}, {options.NnOptimizer.ToUpperInvariant()}, BN {(options.NnBatchNormalization ? "on" : "off")}, dropout {options.NnDropout:0.##}");
-            lines.Add($"NN lr {options.NnLr}, epochs {options.NnEpochs}, patience {options.NnPatience}, tol {options.NnTol:0.###E+0}");
-        }
-
-        lines.Add($"Spaces {SelectedInputSpace.Label} / {SelectedInputWhite.Label} → {SelectedTargetSpace.Label} / {SelectedTargetWhite.Label}");
-        lines.Add(options.FitSamples <= 1
-            ? "Fit samples: patch mean only"
-            : $"Fit samples: mean + min + max + {options.FitSamples} random pixels");
-        lines.Add($"Crop inset {Crop:0.00}");
-        lines.Add(BuildProcessSummary(options));
-        if (options.DoFfc)
-        {
-            lines.Add(options.FfcFitMethod is "nn" or "pls"
-                ? $"FFC {ColorSpaces.FfcMethodLabel(options.FfcFitMethod)} · bins {options.FfcBins} · smooth {options.FfcSmoothWindow} · degree {options.FfcDegree} · {options.FfcNnMaxIter} iter · tol {options.FfcTol:0.###E+0} · gain {options.FfcCutOff:0.##}→{options.FfcMaxVal:0.##}"
-                : $"FFC {ColorSpaces.FfcMethodLabel(options.FfcFitMethod)} · bins {options.FfcBins} · smooth {options.FfcSmoothWindow} · degree {options.FfcDegree} · gain {options.FfcCutOff:0.##}→{options.FfcMaxVal:0.##}");
-        }
-
-        if (options.DoGc)
-        {
-            lines.Add("GC monotonic safe curve");
-        }
-
-        lines.Add($"Skip saturated patches {(options.SkipSaturated ? "yes" : "no")}");
-        if (!options.SkipSaturated)
-        {
-            lines.Add($"Working clip [{options.ClipLo:0.##}, {options.ClipHi:0.##}]");
-        }
-        lines.Add($"Output format {options.OutputFormat.ToUpperInvariant()}");
-        if (!string.IsNullOrWhiteSpace(options.OutputDir))
-        {
-            lines.Add($"Output folder {options.OutputDir}");
-        }
-
-        if (applyOnly && !string.IsNullOrWhiteSpace(options.LoadedModelPath))
-        {
-            lines.Add($"Using saved model {options.LoadedModelPath}");
-        }
-
-        handshake ??= Active?.Handshake;
-        if (handshake is not null)
-        {
-            var patches = handshake.PatchCount;
-            lines.Add($"Chart {ColorSpaces.ChartLabel(handshake.ChartType)} · {(patches > 0 ? patches.ToString() : "?")} patches");
-        }
-
-        return lines;
+        return [BuildProcessSummary(options),
+            $"{SelectedInputSpace.Label} / {SelectedInputWhite.Label} → {SelectedTargetSpace.Label} / {SelectedTargetWhite.Label}"];
     }
 
     private IReadOnlyList<string> DetectDetails(SessionItemViewModel item, DetectOutcome result, HandshakeDocument? handshake)
     {
-        var lines = new List<string>();
-        var chart = handshake is not null
-            ? ColorSpaces.ChartLabel(handshake.ChartType)
-            : ColorSpaces.ChartLabel(result.ChartType);
-        if (!string.IsNullOrWhiteSpace(chart))
-        {
-            lines.Add($"Chart {chart}");
-        }
-
-        if (handshake is not null)
-        {
-            var patches = handshake.PatchCount;
-            var dets = handshake.DetectionCount;
-            var charts = Math.Max(1, result.ChartCount > 0 ? result.ChartCount : handshake.ChartCount);
-            lines.Add($"{(patches > 0 ? patches.ToString() : "?")} patches · {(dets > 0 ? dets.ToString() : "?")} detections · {charts} chart(s)");
-            var detector = string.Join(" · ", new[] { handshake.Runtime, handshake.Backend }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            if (!string.IsNullOrWhiteSpace(detector))
-            {
-                lines.Add($"Detector {detector}");
-            }
-
-            var compute = handshake.Device;
-            if (string.IsNullOrWhiteSpace(compute))
-            {
-                compute = _worker.Device;
-            }
-
-            if (!string.IsNullOrWhiteSpace(compute))
-            {
-                lines.Add(_worker.Warmed ? $"Compute {compute}, warm worker" : $"Compute {compute}");
-            }
-
-            if (!string.IsNullOrWhiteSpace(handshake.CliChart))
-            {
-                lines.Add($"CLI chart {handshake.CliChart}");
-            }
-        }
-
-        lines.Add($"Crop inset {Crop:0.00}");
-        if (_sourceWidth > 1 && _sourceHeight > 1)
-        {
-            lines.Add($"Image {_sourceWidth}×{_sourceHeight}");
-        }
-        else if (OriginalPreview is { } bitmap)
-        {
-            lines.Add($"Image {bitmap.PixelSize.Width}×{bitmap.PixelSize.Height}");
-        }
-
-        lines.Add($"Path {item.Path}");
-        if (!result.Ok && !string.IsNullOrWhiteSpace(result.Error))
-        {
-            lines.Add(result.Error.Trim());
-        }
-
-        return lines;
+        if (handshake is null) return [];
+        return [$"{handshake.PatchCount} patches · {LabelStage(handshake.Device)}"];
     }
 
     private static IReadOnlyList<string> DeltaEDetails(CorrectionReport? report)
     {
-        if (report is null || !report.HasMetrics)
-        {
-            return ["No chart ΔE."];
-        }
-
-        var lines = new List<string>
-        {
-            $"ΔE₀₀ mean {report.MeanBefore:0.00} → {report.MeanAfter:0.00}",
-            $"ΔE₀₀ median {report.MedianBefore:0.00} → {report.MedianAfter:0.00}",
-            $"ΔE₀₀ max {report.MaxBefore:0.00} → {report.MaxAfter:0.00}",
-        };
+        if (report is null || !report.HasMetrics) return [];
+        var lines = new List<string> { $"Fit ΔE₀₀ {report.MeanBefore:0.00} → {report.MeanAfter:0.00}" };
         if (double.IsFinite(report.ValidationMean))
-        {
-            lines.Add($"Held-out {report.ValidationFolds}-fold ΔE₀₀ mean {report.ValidationMean:0.00} · median {report.ValidationMedian:0.00} · max {report.ValidationMax:0.00}");
-        }
+            lines.Add($"CC-only {report.ValidationFolds}-fold ΔE₀₀ {report.ValidationMean:0.00}");
         lines.AddRange(report.FitWarnings);
-        foreach (var stage in report.EffectiveStages)
-        {
-            lines.Add($"{stage.Name} ΔE {stage.MeanBefore:0.00} → {stage.MeanAfter:0.00}");
-        }
-        if (!string.IsNullOrWhiteSpace(report.Model))
-        {
-            lines.Add($"Fitted model {report.Model.ToUpperInvariant()}");
-        }
-
-        if (report.FeatureCount > 0)
-        {
-            lines.Add($"{report.FeatureCount} features");
-        }
-
-        lines.Add($"{report.SaturatedPatches} saturated patch{(report.SaturatedPatches == 1 ? "" : "es")}");
-        var worst = report.Patches.OrderByDescending(p => p.After).FirstOrDefault();
-        if (worst is not null && !string.IsNullOrWhiteSpace(worst.Name))
-        {
-            lines.Add($"Worst after: {worst.Name} ΔE {worst.After:0.00} (was {worst.Before:0.00})");
-        }
-
+        if (report.SaturatedPatches > 0) lines.Add($"{report.SaturatedPatches} saturated patches");
         return lines;
     }
 
@@ -2226,23 +2116,29 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         return _jobCts.Token;
     }
 
-    private IReadOnlyList<string>? WorkerErrorDetails()
+    private IReadOnlyList<string>? WorkerErrorDetails() => null;
+
+    private string WithWorkerStderr(string message) => ConciseProcessingError(message);
+
+    internal static string ConciseProcessingError(string message)
     {
-        var lines = _worker.RecentStderr(8);
-        return lines.Count == 0 ? null : lines;
+        if (message.Contains("No hardware", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("No compatible hardware", StringComparison.OrdinalIgnoreCase))
+            return "No compatible GPU is available. Check the graphics driver and selected inference mode.";
+        if (message.Contains("Couldn't load Vulkan", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("vulkan GPU-only inference unavailable", StringComparison.OrdinalIgnoreCase))
+            return "Vulkan inference could not start. Check the Vulkan driver or choose another inference mode.";
+        if (message.Contains("no detect execution provider", StringComparison.OrdinalIgnoreCase))
+            return "GPU inference could not start. Check the selected inference mode and graphics driver.";
+        var first = message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Processing failed.";
+        return first.Length > 280 ? first[..280] + "…" : first;
     }
 
-    private string WithWorkerStderr(string message)
-    {
-        var extra = _worker.FormatRecentStderr();
-        return string.IsNullOrWhiteSpace(extra) ? message : message + Environment.NewLine + extra;
-    }
-
-    private async Task<bool> EnsureOutputAllowedAsync()
+    private Task<bool> EnsureOutputAllowedAsync()
     {
         if (string.IsNullOrWhiteSpace(OutputDir))
         {
-            return true;
+            return Task.FromResult(true);
         }
 
         string full;
@@ -2255,36 +2151,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         catch (Exception ex)
         {
             Status = ex.Message;
-            return false;
+            return Task.FromResult(false);
         }
 
         if (RunPaths.ContainsParentSegment(OutputDir))
         {
             Status = "Output folder cannot contain '..'.";
             Log("Output", Status, LogLevel.Error);
-            return false;
+            return Task.FromResult(false);
         }
 
-        if (RunPaths.IsUnderRepo(full, _worker.RepoRoot) || _trusted.Contains(full))
-        {
-            return true;
-        }
-
-        if (Dialogs is null)
-        {
-            return false;
-        }
-
-        var ok = await Dialogs.ConfirmAsync(
-            "Write outside the project?",
-            $"Corrected files will be written to:\n\n{full}\n\nThis folder is outside the ColorCorrect Studio project. Confirm the resolved path before continuing.");
-        if (ok)
-        {
-            _trusted.Add(full);
-            ScheduleSave();
-        }
-
-        return ok;
+        // Choosing or entering Save to is the user's destination decision. A
+        // packaged app has no user-facing project boundary to approve again.
+        OutputDir = full;
+        return Task.FromResult(true);
     }
 
     private void ScheduleSave()
@@ -2328,14 +2208,19 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 Path = item.Path,
                 Name = item.Name,
                 HandshakeJson = item.Handshake?.Json ?? "",
+                ReferenceProfiles = item.ReferenceProfiles.Select(p => p.Snapshot()).ToList(),
+                ReferenceAssignments = item.ReferenceAssignments.ToList(),
+                ReferencesNeedAssignment = item.ReferencesNeedAssignment,
                 CorrectedPath = item.CorrectedPath,
                 ReportPath = item.ReportPath,
                 ModelPath = item.ModelPath,
+                CompletedContext = item.CompletedContext,
+                SourceIdentity = item.SourceIdentity,
                 FaceChoice = item.FaceChoice,
                 UseAllFaces = item.UseAllFaces,
                 IncludeInBatch = item.IncludeInBatch,
+                PreviewSuppressed = item.PreviewSuppressed,
                 PreviewDir = item.PreviewDir,
-                IsVideo = false, // Retained DTO field for legacy session compatibility.
                 FfcPlane = item.FfcPlane is { } plane
                     ? [plane.X, plane.Y, plane.Width, plane.Height]
                     : null,
@@ -2351,9 +2236,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Theme = IsLightTheme ? "Light" : "Dark",
         TrustedOutputDirs = _trusted.ToList(),
         CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
-        ForceCpu = SelectedAccelPolicy.Value == "cpu",
+        ForceCpu = ForceCpu,
         AccelPolicy = SelectedAccelPolicy.Value,
-        CudaOfferDismissed = _cudaOfferDismissed,
         ShowLattice = ShowLattice,
         ShowSample = ShowSample,
         ShowDim = ShowDim,
@@ -2378,7 +2262,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             CatalogFolders.Clear();
-            foreach (var folder in state.CatalogFolders.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var folder in state.CatalogFolders.Distinct(PathIdentity.Comparer))
             {
                 if (Directory.Exists(folder))
                 {
@@ -2394,10 +2278,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
                 ? state.AccelPolicy
                 : state.ForceCpu ? "cpu" : "auto";
-            SelectedAccelPolicy = Pick(AccelPolicies, policy);
-            ForceCpu = SelectedAccelPolicy.Value == "cpu";
+            SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
+            ForceCpu = state.ForceCpu || policy == "cpu";
             _worker.Policy = SelectedAccelPolicy.Value;
-            _cudaOfferDismissed = state.CudaOfferDismissed;
             ShowLattice = state.ShowLattice ?? true;
             ShowSample = state.ShowSample ?? true;
             ShowDim = state.ShowDim ?? true;
@@ -2428,23 +2311,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
                 OverlayCrop = Crop;
             }
-
-            return RestoreWorkingItemsCore(state);
+            RestoreWorkingItemsCore(state);
+            var skipped = state.Items.Count - Session.Count;
+            if (skipped > 0) Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
+            return skipped;
         }
         finally
         {
             _restoring = wasRestoring;
-            UpdateCcSummary();
-            NotifyRunCommands();
-            ScheduleSave();
-            MaybeAutoDetect();
+            UpdateCcSummary(); NotifyRunCommands(); ScheduleSave();
         }
     }
 
-    private int RestoreWorkingItemsCore(SessionState state)
+    private void RestoreWorkingItemsCore(SessionState state)
     {
-        // Invalidate in-flight decodes before replacing a session, including a
-        // legacy session whose items are all unsupported in the still-only app.
         _previewGeneration++;
         foreach (var item in Session.ToList())
         {
@@ -2463,16 +2343,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         FaceOptions.Clear();
         ClearPicker();
         ApplyReport(null);
-        var unsupported = 0;
         foreach (var dto in state.Items)
         {
             if (dto.IsVideo || !IsImage(dto.Path))
-            {
-                unsupported++;
-                continue;
-            }
-
-            if (!File.Exists(dto.Path) || Session.Count >= MaxWorking)
             {
                 continue;
             }
@@ -2482,10 +2355,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 FaceChoice = dto.FaceChoice,
                 UseAllFaces = dto.UseAllFaces,
                 IncludeInBatch = dto.IncludeInBatch,
-                CorrectedPath = File.Exists(dto.CorrectedPath) ? dto.CorrectedPath : "",
-                ReportPath = File.Exists(dto.ReportPath) ? dto.ReportPath : "",
-                ModelPath = File.Exists(dto.ModelPath) ? dto.ModelPath : "",
-                PreviewDir = Directory.Exists(dto.PreviewDir) ? dto.PreviewDir : "",
+                CorrectedPath = dto.CorrectedPath,
+                ReportPath = dto.ReportPath,
+                ModelPath = dto.ModelPath,
+                PreviewDir = dto.PreviewDir,
+                CompletedContext = dto.CompletedContext,
+                PreviewSuppressed = dto.PreviewSuppressed,
+                SourceIdentity = dto.SourceIdentity ?? dto.CompletedContext?.Source,
                 IsCorrected = File.Exists(dto.CorrectedPath)
                     || (Directory.Exists(dto.PreviewDir) && ResolvePreviewFile(dto.PreviewDir, "corrected") is not null),
                 IncludeInSave = File.Exists(dto.CorrectedPath) || Directory.Exists(dto.PreviewDir),
@@ -2506,12 +2382,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 }
             }
 
+            item.ReferenceProfiles = dto.ReferenceProfiles.Select(p => p.Snapshot()).ToList();
+            item.ReferenceAssignments = dto.ReferenceAssignments.Select(a => new ChartReferenceAssignment { ChartId = a.ChartId, ProfileId = a.ProfileId, ProfileRevision = a.ProfileRevision }).ToList();
+            item.ReferencesNeedAssignment = dto.ReferencesNeedAssignment;
+            ValidateRestoredReferences(item);
             Session.Add(item);
         }
 
         if (Session.Count > 0)
         {
-            var active = Session.FirstOrDefault(item => string.Equals(item.Path, state.ActivePath, StringComparison.OrdinalIgnoreCase))
+            var active = Session.FirstOrDefault(item => PathIdentity.Equal(item.Path, state.ActivePath))
                          ?? Session[0];
             Activate(active);
             LibraryExpanded = false;
@@ -2520,12 +2400,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         RefreshSessionUi();
         EnsureWhiteInSession(activate: false);
         NotifyRunCommands();
-        if (unsupported > 0)
-        {
-            Status = $"Skipped {unsupported} unsupported session item(s). Video is not supported; only JPEG, PNG and TIFF still images are restored.";
-            Log("Session", Status, LogLevel.Warning);
-        }
-        return unsupported;
+
     }
 
     private static FfcPlane? PlaneFromDto(SessionItemDto dto)
@@ -2549,6 +2424,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyOptions(CorrectionOptions options)
     {
+        _numericText.Clear();
+        ForceCpu = options.CpuLut;
+        SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
+        FastMode = options.FastMode;
+        BatchPreviewResults = options.BatchPreviewResults;
         options.Normalize();
         SelectedMethod = Pick(Methods, options.Method);
         SyncDegreeAndAdvanced();
@@ -2658,10 +2538,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task StartWorkerAsync()
     {
+        var cancellation = BeginJob();
         try
         {
             _worker.Policy = SelectedAccelPolicy.Value;
-            await _worker.StartAsync().ConfigureAwait(false);
+            await _worker.StartAsync(cancellation).ConfigureAwait(false);
             await OnUi(() =>
             {
                 WorkerReady = true;
@@ -2672,11 +2553,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     : _worker.Title;
                 Status = "Ready.";
                 CurrentStage = "";
-                Log("Worker", WorkerLine, LogLevel.Success, [
-                    $"Executable {_worker.ExePath}",
-                    string.IsNullOrWhiteSpace(_worker.Device) ? "Device unknown" : $"Device {_worker.Device}",
-                    _worker.Warmed ? "Opt2 1280 warmed" : "Worker process up (warmup pending or LibTorch missing)",
-                ]);
+                Log("Engine", _worker.Warmed ? $"Ready · {LabelStage(_worker.Device)}" : "Ready; GPU inference has not completed warmup.", LogLevel.Info);
                 // Status bar already shows ready. A toast here covers the viewer.
             }).ConfigureAwait(false);
             await RefreshAccelAsync().ConfigureAwait(false);
@@ -2799,6 +2676,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 && hit.Length == info.Length
                 && hit.MtimeTicks == info.LastWriteTimeUtc.Ticks)
             {
+                _originalLeases[hit.Bitmap] = _originalLeases.GetValueOrDefault(hit.Bitmap) + 1;
                 return hit.Bitmap;
             }
         }
@@ -2842,30 +2720,30 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         lock (_originalCacheLock)
         {
-            if (_originalCache.Values.Any(row => ReferenceEquals(row.Bitmap, bitmap)))
-            {
-                return;
-            }
+            if (_originalLeases.TryGetValue(bitmap, out var leases))
+                if (leases > 1) _originalLeases[bitmap] = leases - 1;
+                else _originalLeases.Remove(bitmap);
         }
-
-        bitmap.Dispose();
+        DisposeIfUnused(bitmap);
     }
 
     private void RememberOriginal(string path, FileInfo info, Bitmap bitmap)
     {
+        var retired = new List<Bitmap>();
         lock (_originalCacheLock)
         {
+            _originalLeases[bitmap] = _originalLeases.GetValueOrDefault(bitmap) + 1;
+            if (_disposed) return;
             if (_originalCache.TryGetValue(path, out var existing)
-                && !ReferenceEquals(existing.Bitmap, bitmap)
-                && !ReferenceEquals(existing.Bitmap, OriginalPreview))
+                && !ReferenceEquals(existing.Bitmap, bitmap))
             {
-                existing.Bitmap.Dispose();
+                retired.Add(existing.Bitmap);
             }
 
             while (_originalCache.Count >= OriginalCacheLimit)
             {
                 var evict = _originalCache.FirstOrDefault(row =>
-                    !string.Equals(row.Key, path, StringComparison.OrdinalIgnoreCase)
+                    !PathIdentity.Equal(row.Key, path)
                     && !ReferenceEquals(row.Value.Bitmap, OriginalPreview));
                 if (evict.Key is null)
                 {
@@ -2874,7 +2752,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
                 if (!ReferenceEquals(evict.Value.Bitmap, bitmap))
                 {
-                    evict.Value.Bitmap.Dispose();
+                    retired.Add(evict.Value.Bitmap);
                 }
 
                 _originalCache.Remove(evict.Key);
@@ -2887,6 +2765,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 MtimeTicks = info.LastWriteTimeUtc.Ticks,
             };
         }
+        foreach (var retiredBitmap in retired.Distinct()) DisposeIfUnused(retiredBitmap);
     }
 
     internal static string OriginalCachePath(string path, FileInfo info)
@@ -2925,7 +2804,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private async Task LoadPreviewsAsync(SessionItemViewModel item, int gen)
     {
         var path = item.Path;
-        var correctedPath = ResolveCorrectedViewPath(item);
+        var correctedPath = item.PreviewSuppressed ? "" : ResolveCorrectedViewPath(item);
         Bitmap? original = null;
         Bitmap? corrected = null;
         try
@@ -2964,13 +2843,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 SetSourceSize(original.PixelSize.Width, original.PixelSize.Height);
             }
 
+            if (item.PreviewSuppressed) { corrected?.Dispose(); corrected = null; }
             SetPreview(original, corrected);
             HasCorrected = CorrectedPreview is not null;
+            ReleaseIfUncached(original);
         }).ConfigureAwait(false);
     }
 
     private async Task LoadCorrectedPreviewAsync(SessionItemViewModel item)
     {
+        if (item.PreviewSuppressed) return;
         var gen = _previewGeneration;
         var path = ResolveCorrectedViewPath(item);
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -2988,7 +2870,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (corrected is null || gen != _previewGeneration || !ReferenceEquals(Active, item))
+        if (corrected is null || item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Active, item))
         {
             corrected?.Dispose();
             return;
@@ -2996,7 +2878,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         await OnUi(() =>
         {
-            if (gen != _previewGeneration || !ReferenceEquals(Active, item))
+            if (item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Active, item))
             {
                 corrected.Dispose();
                 return;
@@ -3011,7 +2893,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }).ConfigureAwait(false);
     }
 
-    private static bool IsImage(string path) => SupportedStillImage.IsSupportedFile(path);
+    private static bool IsImage(string path)
+    {
+        var ext = Path.GetExtension(path);
+        return ext.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || ext.Equals(".png", StringComparison.OrdinalIgnoreCase)
+               || ext.Equals(".tif", StringComparison.OrdinalIgnoreCase)
+               || ext.Equals(".tiff", StringComparison.OrdinalIgnoreCase);
+    }
+
+
 
     private static List<NamedValue> Map((string Id, string Label)[] items) =>
         items.Select(item => new NamedValue(item.Id, item.Label)).ToList();
@@ -3041,6 +2933,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     partial void OnIsBatchingChanged(bool value) => CancelBatchCommand.NotifyCanExecuteChanged();
     partial void OnLoadedModelPathChanged(string value)
     {
+        try { _loadedModelIdentity = File.Exists(value) ? AssetIdentity.Capture(value) : null; }
+        catch (IOException) { _loadedModelIdentity = null; }
         ModelLabel = File.Exists(value) ? $"Model · {Path.GetFileName(value)}" : "No model loaded";
         SavedModelSummary = DescribeSavedModel(value);
         HasSavedModelSummary = !string.IsNullOrWhiteSpace(SavedModelSummary);
@@ -3117,6 +3011,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     partial void OnActiveChanged(SessionItemViewModel? value)
     {
+        OnPropertyChanged(nameof(IsResultPreviewSuppressed));
+        OnPropertyChanged(nameof(ReferenceSummary));
         OnPropertyChanged(nameof(ShowStillPreview));
         OnPropertyChanged(nameof(ShowChartSection));
         RefreshSessionNavigation();
@@ -3147,8 +3043,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    partial void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    partial void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
+    partial void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
     partial void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
     partial void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
     partial void OnSelectedOutputFormatChanged(NamedValue value) { if (!_restoring) ScheduleSave(); }

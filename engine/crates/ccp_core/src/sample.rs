@@ -276,6 +276,7 @@ where
     ];
     let saturated = measured.iter().any(|&c| c >= SATURATION_THRESHOLD);
     Ok(ChartPatch {
+        provenance: None,
         name: name.to_string(),
         index,
         reference_lab_d50,

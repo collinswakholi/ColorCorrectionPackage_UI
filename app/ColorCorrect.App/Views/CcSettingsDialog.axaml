@@ -41,12 +41,13 @@
                     BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0">
                 <Button x:Name="CcSettingsDoneBtn" Content="Done" Theme="{StaticResource PrimaryButton}"
                         Click="Close_Click" HorizontalAlignment="Stretch"
-                        IsEnabled="{Binding NnSettingsValid}"
+
                         AutomationProperties.Name="Done"/>
             </Border>
             <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="16,12">
+                    <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                     <TextBlock Text="Method" Classes="settingsLabel"/>
                     <ComboBox x:Name="ModelSelect" Classes="config" ItemsSource="{Binding Methods}"
                               SelectedItem="{Binding SelectedMethod}" Margin="0,0,0,10"
@@ -82,13 +83,13 @@
 
                     <TextBlock Text="Samples per patch" Classes="settingsLabel"/>
                     <TextBox x:Name="FitSamples" Classes="config" Margin="0,0,0,10"
-                             Text="{Binding FitSamples, Converter={StaticResource NumericToString}}"
+                             Text="{Binding FitSamplesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="Samples per patch"/>
 
                     <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
                         <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>
                         <TextBox Classes="config"
-                                 Text="{Binding PlsComponents, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding PlsComponentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="PLS components"/>
                     </StackPanel>
 
@@ -129,27 +130,27 @@
                         </CheckBox>
                         <TextBlock Text="Dropout rate (0–0.8)" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnDropout, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding NnDropoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Dropout rate"
                                  AutomationProperties.HelpText="Zero disables dropout"/>
                         <TextBlock Text="Learning rate" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnLr, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding NnLrText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Learning rate"/>
                         <TextBlock Text="Epochs" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnEpochs, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding NnEpochsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Epochs"/>
                         <TextBlock Text="Patience" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnPatience, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding NnPatienceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Patience"/>
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding ShowCcIterParams}" Margin="0,0,0,10">
                         <TextBlock Text="Tolerance" Classes="settingsLabel"/>
                         <TextBox Classes="config"
-                                 Text="{Binding NnTol, Converter={StaticResource NumericToString}}"
+                                 Text="{Binding NnTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Convergence tolerance"/>
                     </StackPanel>
 
@@ -207,13 +208,17 @@
                               AutomationProperties.Name="Output format"/>
 
                     <CheckBox IsChecked="{Binding Phase2Teacher}" FontSize="12" Margin="0,0,0,10"
-                              AutomationProperties.Name="Phase 2 teacher">
-                        <TextBlock TextWrapping="Wrap" FontSize="12" Text="Phase 2 teacher"/>
+                              AutomationProperties.Name="Export training data">
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Text="Export training data"/>
                     </CheckBox>
 
-                    <Button x:Name="CcSettingsResetBtn" Content="Reset settings" Theme="{StaticResource SecondaryButton}"
+                    <TextBlock Text="{Binding ReferenceSummary}" Classes="caption" TextWrapping="Wrap" Margin="0,8,0,6"/>
+                    <Button x:Name="ChartReferencesBtn" Content="Chart references…" Theme="{StaticResource SecondaryButton}"
+                            Click="References_Click" HorizontalAlignment="Stretch" Margin="0,0,0,10"
+                            AutomationProperties.Name="Edit chart references"/>
+                    <Button x:Name="CcSettingsResetBtn" Content="Reset all processing settings" Theme="{StaticResource SecondaryButton}"
                             Command="{Binding ResetSettingsCommand}" HorizontalAlignment="Stretch"
-                            AutomationProperties.Name="Reset settings"/>
+                            AutomationProperties.Name="Reset all processing settings"/>
                 </StackPanel>
             </ScrollViewer>
         </DockPanel>

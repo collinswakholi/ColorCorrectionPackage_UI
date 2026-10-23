@@ -47,6 +47,10 @@ internal static class VisualRegression
         var baselinePath = File.Exists(deployedPath) ? deployedPath : sourcePath;
         if (!File.Exists(baselinePath))
         {
+            var missing = $"SKIPPED visual comparison: missing reviewed baseline {fileName}; actual frame retained in {reviewDirectory}.";
+            Console.WriteLine(missing);
+            File.AppendAllText(Path.Combine(reviewDirectory, "missing-baselines.log"), missing + Environment.NewLine);
+            Assert.False(Environment.GetEnvironmentVariable("CCP_REQUIRE_UI_BASELINES") == "1", missing);
             return;
         }
 

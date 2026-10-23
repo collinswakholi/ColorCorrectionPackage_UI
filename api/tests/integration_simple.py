@@ -11,9 +11,14 @@ from colorcorrect import Engine
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
 parser.add_argument("--engine", type=Path)
+parser.add_argument("--samples", type=Path, help="Public sample directory; defaults to <root>/test_images")
 parser.add_argument("--policy", default="cpu")
 args = parser.parse_args()
-samples = args.root / "test_images"
+samples = (args.samples or args.root / "test_images").resolve()
+missing = [name for name in ("ColorCard_Big.JPG", "Blank.JPG", "Sample_3572.JPG")
+           if not (samples / name).is_file()]
+if missing:
+    parser.error(f"Required public fixtures are missing from {samples}: {', '.join(missing)}")
 folder = tempfile.mkdtemp(prefix="colorcorrect-simple-")
 with Engine(args.engine, root=args.root, policy=args.policy) as engine:
     devices = engine.devices()
@@ -29,5 +34,4 @@ with Engine(args.engine, root=args.root, policy=args.policy) as engine:
         "fit_apply_backend": calibration.report.get("apply_backend"),
         "apply_backend": applied.get("apply_backend"),
         "delta_e": calibration.report["report_json"]["delta_e_2000"]}, indent=2))
-    if args.policy in ('cuda', 'directml'):
-        assert applied.get("apply_backend") == args.policy, f"{args.policy} policy fell back: do not claim GPU execution"
+    assert calibration.report.get("detect_backend") in ("directml", "webgpu", "vulkan")

@@ -6,6 +6,22 @@ namespace ColorCorrect.App.Services;
 /// <summary>Use the same oriented, display-sRGB coordinate system as the worker.</summary>
 internal static class StillImageDecoder
 {
+    private static MemoryStream ReadSnapshot(string path)
+    {
+        // Preview jobs may finish after a session item is removed. Allow deletion
+        // or atomic replacement while reading the original handle, but not writes
+        // into that file. Decode from a detached snapshot once the read completes.
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        var snapshot = new MemoryStream(checked((int)file.Length));
+        try
+        {
+            file.CopyTo(snapshot);
+            snapshot.Position = 0;
+            return snapshot;
+        }
+        catch { snapshot.Dispose(); throw; }
+    }
+
     internal static bool SwapsAxes(SKEncodedOrigin origin) =>
         origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop
             or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
@@ -13,7 +29,7 @@ internal static class StillImageDecoder
     public static bool TrySize(string path, out int width, out int height)
     {
         width = height = 0;
-        using var source = new MemoryStream(File.ReadAllBytes(path));
+        using var source = ReadSnapshot(path);
         using var codec = SKCodec.Create(source);
         if (codec is null) return false;
         width = SwapsAxes(codec.EncodedOrigin) ? codec.Info.Height : codec.Info.Width;
@@ -23,7 +39,7 @@ internal static class StillImageDecoder
 
     public static Bitmap Decode(string path, int maxWidth)
     {
-        using var source = new MemoryStream(File.ReadAllBytes(path));
+        using var source = ReadSnapshot(path);
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException("Unsupported image");
         var swapped = SwapsAxes(codec.EncodedOrigin);
         var displayWidth = swapped ? codec.Info.Height : codec.Info.Width;

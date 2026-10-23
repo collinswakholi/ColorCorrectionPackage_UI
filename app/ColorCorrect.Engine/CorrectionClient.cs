@@ -23,15 +23,35 @@ public sealed class CorrectionClient
         double crop,
         CancellationToken cancellationToken = default)
     {
-        var runDir = RunPaths.NewRunDir(_repoRoot);
-        var ext = options.OutputExtension();
-        var outputPath = Path.Combine(runDir, "corrected" + ext);
+        cancellationToken.ThrowIfCancellationRequested();
+        // Capture before the first await: caller edits must not change a queued calibration.
+        options = JsonSerializer.Deserialize<CorrectionOptions>(JsonSerializer.Serialize(options))!;
+        foreach (var profile in options.ReferenceProfiles) profile.Validate();
+        var prepared = await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var run = RunPaths.NewRunDir(_repoRoot);
+            OwnWhiteReference(options, run);
+            cancellationToken.ThrowIfCancellationRequested();
+            var chart = Path.Combine(run, "chart.json");
+            handshake.WriteForCorrection(chart, faceChoice, useAllFaces, crop);
+            cancellationToken.ThrowIfCancellationRequested();
+            var preview = Path.Combine(run, "previews");
+            Directory.CreateDirectory(preview);
+            var identity = AssetIdentity.Capture(inputPath);
+            cancellationToken.ThrowIfCancellationRequested();
+            return (Run: run, Chart: chart, Preview: preview, Source: identity);
+        }, cancellationToken).ConfigureAwait(false);
+        var (runDir, chartPath, previewDir, source) = prepared;
+        var outputPath = Path.Combine(runDir, "corrected" + options.OutputExtension());
         var reportPath = Path.Combine(runDir, "report.json");
         var modelPath = Path.Combine(runDir, "model.json");
-        var chartPath = Path.Combine(runDir, "chart.json");
-        var previewDir = Path.Combine(runDir, "previews");
-        handshake.WriteForCorrection(chartPath, faceChoice, useAllFaces, crop);
-        Directory.CreateDirectory(previewDir);
+        if (options.ReferenceProfiles.Count > 0 || options.ReferenceAssignments.Count > 0)
+        {
+            await _worker.RequireCapabilityAsync("custom_references_v1", cancellationToken).ConfigureAwait(false);
+            await _worker.RequireCapabilityAsync("chart_identity_v1", cancellationToken).ConfigureAwait(false);
+        }
+        if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
 
         var payload = BaseRun(inputPath, outputPath, reportPath, modelPath, previewDir, options);
         payload["cmd"] = "run";
@@ -41,6 +61,11 @@ public sealed class CorrectionClient
         payload["crop"] = crop;
         payload["face"] = faceChoice;
         payload["use_all"] = useAllFaces;
+        if (options.ReferenceProfiles.Count > 0)
+        {
+            payload["reference_profiles"] = options.ReferenceProfiles.Select(p => p.Snapshot()).ToArray();
+            payload["reference_assignments"] = options.ReferenceAssignments;
+        }
         if (!string.IsNullOrWhiteSpace(options.WhiteImagePath))
         {
             payload["white"] = options.WhiteImagePath;
@@ -50,7 +75,7 @@ public sealed class CorrectionClient
             payload["crop_rect"] = options.CropRect;
         }
 
-        return await RunTypedAsync(payload, runDir, outputPath, reportPath, modelPath, previewDir, hasMetrics: true, options, inputPath, cancellationToken)
+        return await RunTypedAsync(payload, runDir, outputPath, reportPath, modelPath, previewDir, hasMetrics: true, options, inputPath, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -70,31 +95,62 @@ public sealed class CorrectionClient
         CorrectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(modelPath))
-        {
-            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = "Load or fit a model first." }).ToArray();
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
+        options = JsonSerializer.Deserialize<CorrectionOptions>(JsonSerializer.Serialize(options))!;
+        inputPaths = inputPaths.ToArray();
         if (inputPaths.Count == 0)
         {
             return [];
         }
 
-        var runDir = RunPaths.NewRunDir(_repoRoot, inputPaths.Count > 1 ? "apply-batch" : "apply");
-        var destDir = string.IsNullOrWhiteSpace(options.OutputDir)
-            ? runDir
-            : Path.IsPathRooted(options.OutputDir)
-                ? Path.GetFullPath(options.OutputDir)
-                : Path.GetFullPath(Path.Combine(_repoRoot, options.OutputDir));
-        var previewRoot = Path.Combine(runDir, "previews");
-        Directory.CreateDirectory(destDir);
-        Directory.CreateDirectory(previewRoot);
+        var prepared = await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(modelPath)) return null;
+            var run = RunPaths.NewRunDir(_repoRoot, inputPaths.Count > 1 ? "apply-batch" : "apply");
+            // Use the owned model for the request itself, not only for later previews.
+            var ownedModel = Path.Combine(run, "model.json");
+            File.Copy(modelPath, ownedModel);
+            cancellationToken.ThrowIfCancellationRequested();
+            OwnWhiteReference(options, run);
+            cancellationToken.ThrowIfCancellationRequested();
+            var identities = new AssetIdentity?[inputPaths.Count];
+            for (var index = 0; index < inputPaths.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try { identities[index] = AssetIdentity.Capture(inputPaths[index]); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            var destination = string.IsNullOrWhiteSpace(options.OutputDir)
+                ? run
+                : Path.IsPathRooted(options.OutputDir)
+                    ? Path.GetFullPath(options.OutputDir)
+                    : Path.GetFullPath(Path.Combine(_repoRoot, options.OutputDir));
+            var preview = Path.Combine(run, "previews");
+            Directory.CreateDirectory(destination);
+            Directory.CreateDirectory(preview);
+            return new PreparedApply(run, ownedModel, destination, preview, identities);
+        }, cancellationToken).ConfigureAwait(false);
+        if (prepared is null)
+            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = "Load or fit a model first." }).ToArray();
+        var runDir = prepared.Run;
+        modelPath = prepared.Model;
+        var destDir = prepared.Destination;
+        var previewRoot = prepared.Preview;
+        var sourceIdentities = prepared.Sources;
 
         try
         {
+            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "apply",
+                ["cpu_lut"] = options.CpuLut,
+                ["lut_device"] = options.LutDevice,
+                ["fast_mode"] = options.FastMode,
+                ["policy"] = _worker.Policy,
                 ["model"] = modelPath,
                 ["images"] = inputPaths.ToArray(),
                 ["output_dir"] = destDir,
@@ -119,18 +175,7 @@ public sealed class CorrectionClient
 
             var timeout = TimeSpan.FromMinutes(Math.Clamp(8 + inputPaths.Count * 2, 8, 40));
             var result = await _worker.SendAsync(payload, timeout, cancellationToken).ConfigureAwait(false);
-            var byPath = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            if (result.TryGetProperty("results", out var list) && list.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var row in list.EnumerateArray())
-                {
-                    var image = row.TryGetProperty("image", out var img) ? img.GetString() ?? "" : "";
-                    if (!string.IsNullOrWhiteSpace(image))
-                    {
-                        byPath[image] = row.Clone();
-                    }
-                }
-            }
+            var matchedRows = MatchApplyResults(inputPaths, result);
 
             var artifactBases = BuildArtifactBases(inputPaths);
             var outcomes = new List<CorrectionOutcome>(inputPaths.Count);
@@ -142,7 +187,7 @@ public sealed class CorrectionClient
                 var fallbackPrev = inputPaths.Count > 1
                     ? Path.Combine(previewRoot, artifactBase)
                     : previewRoot;
-                if (!byPath.TryGetValue(inputPath, out var row))
+                if (matchedRows[inputIndex] is not { } row)
                 {
                     outcomes.Add(new CorrectionOutcome
                     {
@@ -160,8 +205,20 @@ public sealed class CorrectionClient
                     ? prevEl.GetString() ?? fallbackPrev
                     : fallbackPrev;
                 var error = row.TryGetProperty("error", out var oneErr) ? oneErr.GetString() ?? "" : "";
+                if (ok && options.WriteOutput && !File.Exists(outputPath))
+                {
+                    ok = false;
+                    error = "The worker did not create the requested corrected image.";
+                }
+                CompletedResultContext? context = null;
+                if (ok)
+                {
+                    try { context = CompletedResultContext.Capture(sourceIdentities[inputIndex] ?? throw new IOException("The source image is unavailable."), modelPath, options); }
+                    catch (Exception ex) { ok = false; error = ex.Message; }
+                }
                 outcomes.Add(new CorrectionOutcome
                 {
+                    CompletedContext = context,
                     Ok = ok,
                     HasChartMetrics = false,
                     Error = ok ? "" : (string.IsNullOrWhiteSpace(error) ? "apply failed" : error),
@@ -177,11 +234,14 @@ public sealed class CorrectionClient
 
             return outcomes;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = ex.Message, RunDir = runDir, Stderr = ex.Message }).ToArray();
         }
     }
+
+    private sealed record PreparedApply(string Run, string Model, string Destination, string Preview, AssetIdentity?[] Sources);
 
     public async Task<bool> PreviewStageAsync(
         string inputPath,
@@ -191,6 +251,7 @@ public sealed class CorrectionClient
         CorrectionOptions options,
         CancellationToken cancellationToken = default)
     {
+        options = JsonSerializer.Deserialize<CorrectionOptions>(JsonSerializer.Serialize(options))!;
         if (!File.Exists(modelPath) || string.IsNullOrWhiteSpace(previewDir))
         {
             return false;
@@ -199,9 +260,14 @@ public sealed class CorrectionClient
         Directory.CreateDirectory(previewDir);
         try
         {
+            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "preview_stage",
+                ["cpu_lut"] = options.CpuLut,
+                ["lut_device"] = options.LutDevice,
+                ["fast_mode"] = options.FastMode,
+                ["policy"] = _worker.Policy,
                 ["model"] = modelPath,
                 ["image"] = inputPath,
                 ["preview_dir"] = previewDir,
@@ -243,6 +309,9 @@ public sealed class CorrectionClient
         return new Dictionary<string, object?>
         {
             ["policy"] = _worker.Policy,
+            ["cpu_lut"] = options.CpuLut,
+            ["lut_device"] = options.LutDevice,
+                ["fast_mode"] = options.FastMode,
             ["image"] = inputPath,
             ["output"] = outputPath,
             ["report"] = reportPath,
@@ -292,6 +361,7 @@ public sealed class CorrectionClient
         bool hasMetrics,
         CorrectionOptions options,
         string inputPath,
+        AssetIdentity source,
         CancellationToken cancellationToken)
     {
         JsonElement result;
@@ -299,6 +369,7 @@ public sealed class CorrectionClient
         {
             result = await _worker.SendAsync(payload, TimeSpan.FromMinutes(8), cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             return new CorrectionOutcome { Ok = false, Error = ex.Message, RunDir = runDir, Stderr = ex.Message };
@@ -323,18 +394,25 @@ public sealed class CorrectionClient
 
         var previewCorrected = PreviewExists(previewDir, "corrected");
         var engineOk = result.TryGetProperty("ok", out var okEl) && okEl.ValueKind != JsonValueKind.False && okEl.GetBoolean();
-        var ok = engineOk && (File.Exists(outputPath) || previewCorrected || File.Exists(modelPath));
+        var ok = engineOk && (options.WriteOutput ? File.Exists(outputPath) : previewCorrected || File.Exists(modelPath));
+        var report = CorrectionReport.TryLoad(reportPath);
+        var error = ok ? "" : (result.TryGetProperty("error", out var err) ? err.GetString() ?? "" : "run failed");
+        if (engineOk && options.WriteOutput && !File.Exists(outputPath)) error = "The worker did not create the requested corrected image.";
+        var hasDelta = result.TryGetProperty("has_delta_e", out var de) && de.ValueKind == JsonValueKind.True && de.GetBoolean();
+        CompletedResultContext? context = null;
+        if (ok)
+        {
+            try { context = CompletedResultContext.Capture(source, modelPath, options); }
+            catch (Exception ex) { ok = false; error = ex.Message; }
+        }
         if (ok && options.WriteOutput && File.Exists(outputPath))
         {
             Publish(options.OutputDir, inputPath, outputPath, reportPath, modelPath);
         }
 
-        var report = CorrectionReport.TryLoad(reportPath);
-        var error = ok ? "" : (result.TryGetProperty("error", out var err) ? err.GetString() ?? "" : "run failed");
-        var hasDelta = result.TryGetProperty("has_delta_e", out var de) && de.ValueKind == JsonValueKind.True && de.GetBoolean();
-
         return new CorrectionOutcome
         {
+            CompletedContext = context,
             Ok = ok,
             HasChartMetrics = hasMetrics && hasDelta && report?.HasMetrics == true,
             Error = error,
@@ -351,6 +429,15 @@ public sealed class CorrectionClient
         };
     }
 
+    private static void OwnWhiteReference(CorrectionOptions options, string runDir)
+    {
+        if (!options.DoFfc) return;
+        if (!File.Exists(options.WhiteImagePath)) throw new InvalidDataException("Choose a readable white reference before using FFC.");
+        var owned = Path.Combine(runDir, "white-reference" + Path.GetExtension(options.WhiteImagePath));
+        File.Copy(options.WhiteImagePath, owned);
+        options.WhiteImagePath = owned;
+    }
+
     private static bool PreviewExists(string previewDir, string stem) =>
         File.Exists(Path.Combine(previewDir, stem + ".rgb"))
         || File.Exists(Path.Combine(previewDir, stem + ".png"))
@@ -364,7 +451,27 @@ public sealed class CorrectionClient
     private static string FirstNonEmpty(string a, string b) =>
         string.IsNullOrWhiteSpace(a) ? b : a;
 
-    internal static IReadOnlyList<string> BuildArtifactBases(IReadOnlyList<string> inputPaths)
+    internal static IReadOnlyList<JsonElement?> MatchApplyResults(IReadOnlyList<string> inputPaths, JsonElement result, StringComparer? comparer = null)
+    {
+        // Preserve one result for every occurrence, including repeated inputs.
+        // Case-distinct paths must remain distinct on case-sensitive hosts.
+        comparer ??= OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var queues = new Dictionary<string, Queue<JsonElement>>(comparer);
+        if (result.TryGetProperty("results", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var row in list.EnumerateArray())
+            {
+                var image = row.TryGetProperty("image", out var img) ? img.GetString() ?? "" : "";
+                if (string.IsNullOrWhiteSpace(image)) continue;
+                if (!queues.TryGetValue(image, out var queue)) queues[image] = queue = new();
+                queue.Enqueue(row.Clone());
+            }
+        }
+        return inputPaths.Select(path => queues.TryGetValue(path, out var queue) && queue.TryDequeue(out var row)
+            ? (JsonElement?)row : null).ToArray();
+    }
+
+    public static IReadOnlyList<string> BuildArtifactBases(IReadOnlyList<string> inputPaths)
     {
         var stems = inputPaths
             .Select(path => string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(path))
@@ -374,18 +481,23 @@ public sealed class CorrectionClient
         var totals = stems
             .GroupBy(stem => stem, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        var reserved = new HashSet<string>(stems, StringComparer.OrdinalIgnoreCase);
+        var allocated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var occurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         return stems.Select(stem =>
         {
             if (totals[stem] <= 1)
             {
+                allocated.Add(stem);
                 return stem;
             }
 
             occurrences.TryGetValue(stem, out var occurrence);
-            occurrence++;
+            string candidate;
+            do { candidate = $"{stem}_{++occurrence}"; }
+            while (reserved.Contains(candidate) || !allocated.Add(candidate));
             occurrences[stem] = occurrence;
-            return $"{stem}_{occurrence}";
+            return candidate;
         }).ToArray();
     }
 

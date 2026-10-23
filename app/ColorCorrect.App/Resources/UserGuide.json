@@ -57,7 +57,7 @@
     "Title": "Apply & save",
     "Paragraphs": [
       "To apply an existing fit, expand Model and select Use loaded; load model JSON first if needed. Select the sample image and run Apply model. Fit from image is a different mode. No chart is needed on an apply-only image, but capture conditions must match. In Batch, choose Apply current model to reuse the model; Fit from chart calibrates each chart image separately.",
-      "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S, choose corrected images, stage images, and reports, then Save selected. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
+      "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S and choose Corrected (full size) for a full-resolution corrected image. FFC, GC, WB, and CC stage exports are preview-resolution images for inspection. Reports contain the chart measurements. Choose an output folder and Save selected; existing files require replacement confirmation. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
       "Keep the source files unchanged and store outputs separately. Compare corrected results in a color-managed viewer before downstream measurement or publication."
     ]
   },
@@ -65,7 +65,7 @@
     "Title": "API & notebooks",
     "Paragraphs": [
       "The same Rust worker used by the GUI accepts sequential newline-delimited JSON commands without opening a window. The bundled Python SDK and command-line interface provide a friendlier route for scripts, automation, and Jupyter notebooks; Python is optional for the desktop app.",
-      "Find api/, docs/api/, and notebooks/ beside the packaged application. The short Python workflow is Engine.calibrate(chart, white=blank, folder=results), then calibration.apply(images). Calibration detects automatically and retains all advanced fit options; the original detect, fit, apply and request interfaces remain available. Start with the API README for a complete runnable example.",
+      "Find api/, docs/api/, and notebooks/ beside the packaged application. Use ColorCorrection(Config(save_path=\"results\")), then run(Image=\"chart.jpg\") and predict_images(images=[\"sample.jpg\"]). The typed Client interface and legacy Engine protocol are also available. See the API README for complete examples and differences from the original Python package.",
       "Use a separate worker per independent session and send one request at a time. Treat model state as belonging to that worker. A timeout must terminate the worker before another request, so a late reply cannot be mistaken for the next operation.",
       "The API is a local process interface, not an internet server. The app does not open a network listener by default. Use explicit output directories and retain your model, configuration, chart reference, and reports for reproducibility."
     ]
@@ -76,8 +76,7 @@
       "No chart found: check focus, exposure, framing, and patch visibility, then press Detect again. Verify the detected chart type and overlay. Do not use Blank.JPG as the chart. Try a clear chart-bearing image from the same setup.",
       "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
       "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
-      "Worker or native-library error: open Accelerators from the app title, inspect the status, try CPU, and restart the worker. CUDA download installs a separate per-user libtorch-cuda add-on and preserves CPU. CUDA can run detection and explicitly selected LUT application; NN fitting remains CPU. Auto still-image LUT application intentionally uses CPU. Device availability alone does not prove a particular operation used CUDA; inspect apply_backend in API replies. Keep the bundled executable, models, references, and runtime libraries together.",
-      "Unsupported media: this preview supports JPEG, PNG and TIFF still images only. Video is not supported; older sessions skip video entries and preserve their still images."
+      "Worker or native-library error: open Accelerators, inspect the error, and restart the worker. Chart and plane inference require DirectML or WebGPU; there is no CPU inference fallback. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
     ]
   },
   {

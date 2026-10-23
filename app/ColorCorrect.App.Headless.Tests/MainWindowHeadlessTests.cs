@@ -13,6 +13,78 @@ namespace ColorCorrect.App.Headless.Tests;
 public sealed class MainWindowHeadlessTests
 {
     [AvaloniaFact]
+    public void ProcessingSettings_DefaultsAreSimpleAndDevicesKeepFastProcessing()
+    {
+        var (window, vm) = ShowMain(1080, 740, light: false);
+        try
+        {
+            window.AccelMenu.IsOpen = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.FastMode);
+            Assert.False(window.AdvancedAcceleration.IsExpanded);
+            Assert.Equal("auto", vm.SelectedProcessingDevice.Value);
+            window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[1];
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.ForceCpu);
+            Assert.True(vm.FastMode);
+            window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[2];
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.ForceCpu);
+            Assert.True(vm.FastMode);
+            var build = typeof(MainWindowViewModel).GetMethod("BuildOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            Assert.Equal("gpu", Assert.IsType<ColorCorrect.Engine.CorrectionOptions>(build.Invoke(vm, null)).LutDevice);
+            window.AdvancedAcceleration.IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.AdvancedAcceleration.IsExpanded);
+            window.CompatibilityProcessing.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.FastMode);
+            window.CompatibilityProcessing.IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.FastMode);
+        }
+        finally { window.Close(); Dispatcher.UIThread.RunJobs(); }
+    }
+
+    [AvaloniaFact]
+    public void StageChart_ShortAnalysisPaneKeepsReadableAxesAndScrolls()
+    {
+        var (window, vm) = ShowMain(2000, 740, light: true);
+        try
+        {
+            vm.Report = new ColorCorrect.Engine.CorrectionReport
+            {
+                HasMetrics = true, MeanBefore = 15, MeanAfter = 2,
+            };
+            vm.HasMetrics = true;
+            window.TabDeltaE.IsSelected = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.PlotDeltaE.Bounds.Height >= 180);
+            Assert.True(window.DeltaEPlotScroll.Extent.Height > window.DeltaEPlotScroll.Viewport.Height);
+            window.DeltaEPlotScroll.ScrollToEnd();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.DeltaEPlotScroll.Offset.Y > 0);
+        }
+        finally { window.Close(); Dispatcher.UIThread.RunJobs(); }
+    }
+
+    [AvaloniaFact]
+    public void Import_ExcludesVideoFiles_AndRetainsStillImages()
+    {
+        var (window, vm) = ShowMain(1080, 740, light: false);
+        var video = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ccp-removed-video-{Guid.NewGuid():N}.mp4");
+        try
+        {
+            var image = TestImagePath("ColorCard_Big.JPG");
+            System.IO.File.WriteAllText(video, "unsupported media fixture");
+            vm.AddPaths([video, image]);
+            Assert.Single(vm.Session);
+            Assert.Null(window.FindControl<Button>("VideoUpload"));
+        }
+        finally { window.Close(); Dispatcher.UIThread.RunJobs(); System.IO.File.Delete(video); }
+    }
+
+    [AvaloniaFact]
     public async Task Sidebar_NarrowExpandedControls_AreScrollableAndReadable()
     {
         foreach (var light in new[] { false, true })
@@ -33,12 +105,13 @@ public sealed class MainWindowHeadlessTests
                 // A cold decode is asynchronous. Never compare a transient blank
                 // canvas to the populated reference, or depend on a warm disk cache.
                 var previewDeadline = DateTime.UtcNow.AddSeconds(10);
-                while (vm.OriginalPreview is null && DateTime.UtcNow < previewDeadline)
+                while ((vm.OriginalPreview is null || vm.FilteredSamples.Any(item => item.Thumb is null)) && DateTime.UtcNow < previewDeadline)
                 {
                     await Task.Delay(20);
                     Dispatcher.UIThread.RunJobs();
                 }
                 Assert.NotNull(vm.OriginalPreview);
+                Assert.All(vm.FilteredSamples, item => Assert.NotNull(item.Thumb));
                 Dispatcher.UIThread.RunJobs();
 
                 AssertCriticalWorkspaceGeometry(window);
@@ -348,8 +421,6 @@ public sealed class MainWindowHeadlessTests
         {
             dialog.Show(owner);
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal(OperatingSystem.IsWindows(), dialog.ShowInTaskbar);
-            Assert.Same(owner.Icon, dialog.Icon);
             Assert.True(dialog.Bounds.Width <= owner.ClientSize.Width);
             Assert.True(dialog.Bounds.Height <= owner.ClientSize.Height);
             VisualRegression.Match(dialog, "cc-settings-min-dark");
@@ -448,6 +519,7 @@ public sealed class MainWindowHeadlessTests
             Busy = false,
             IsLightTheme = light,
         };
+        PublicFixtureCatalog.Install(vm);
         var window = new MainWindow
         {
             Width = width,

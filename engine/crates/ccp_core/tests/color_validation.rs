@@ -253,6 +253,7 @@ fn held_out_linear_fits_are_scored_in_every_output_space() {
             );
             let rgb = lab_d50_to_srgb(lab).unwrap();
             ChartPatch {
+                provenance: None,
                 name: format!("test{i}"),
                 index: i,
                 reference_lab_d50: lab,

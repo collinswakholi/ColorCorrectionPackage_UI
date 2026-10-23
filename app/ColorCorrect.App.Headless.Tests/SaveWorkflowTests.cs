@@ -40,11 +40,15 @@ public sealed class SaveWorkflowTests
     }
 
     [AvaloniaTheory]
-    [InlineData("png", false)]
-    [InlineData("jpg", false)]
-    [InlineData("png", true)]
-    [InlineData("jpg", true)]
-    public async Task Export_RawStagesAndCorrected_UseSelectedCodecAndDistinctNames(string format, bool correctedAlreadyAtDestination)
+    [InlineData("png", false, true)]
+    [InlineData("jpg", false, true)]
+    [InlineData("png", true, true)]
+    [InlineData("jpg", true, true)]
+    [InlineData("png", false, false)]
+    [InlineData("jpg", false, false)]
+    [InlineData("png", true, false)]
+    [InlineData("jpg", true, false)]
+    public async Task Export_RawStagesAndCorrected_UseSelectedCodecAndDistinctNames(string format, bool correctedAlreadyAtDestination, bool stagesEnabled)
     {
         var scratch = Path.Combine(Path.GetTempPath(), "colorcorrect-save-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
@@ -54,13 +58,14 @@ public sealed class SaveWorkflowTests
         foreach (var stage in new[] { "ffc", "gc", "wb", "corrected" })
             PreviewRgb.Write(Path.Combine(previews, stage + ".rgb"), 16, 16, rgb);
         Directory.CreateDirectory(output);
-        // Lazy full-resolution materialization writes directly to OutputDir.
+        // A completed artifact may already occupy its requested destination.
         var corrected = correctedAlreadyAtDestination
             ? Path.Combine(output, $"sample_corrected.{format}")
             : Path.Combine(scratch, "full-corrected.png");
         using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) BitmapExport.Save(bitmap, corrected);
         var vm = CreateViewModel(Path.Combine(scratch, "unused-report.json"), output);
         vm.SaveCorrected = vm.SaveFfc = vm.SaveGc = vm.SaveWb = vm.SaveCc = true;
+        vm.DoFfc = vm.DoGc = vm.DoWb = vm.DoCc = stagesEnabled;
         vm.SaveReport = false;
         vm.SelectedOutputFormat = vm.OutputFormats.Single(option => option.Value == format);
         vm.Session[0].PreviewDir = previews;
@@ -73,11 +78,11 @@ public sealed class SaveWorkflowTests
         try
         {
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
-            await Task.Run(() => dialogs.Result.SetResult(true));
             await saving;
-            Assert.StartsWith("Saved 5 file(s) as", vm.Status);
-            Assert.Equal(5, Directory.GetFiles(output).Length);
-            foreach (var stage in new[] { "corrected", "ffc", "gc", "wb", "cc" })
+            Assert.False(dialogs.WasRequested); // The explicit destination needs no second approval.
+            Assert.StartsWith($"Saved {(stagesEnabled ? 5 : 1)} file(s) as", vm.Status);
+            Assert.Equal(stagesEnabled ? 5 : 1, Directory.GetFiles(output).Length);
+            foreach (var stage in stagesEnabled ? new[] { "corrected", "ffc", "gc", "wb", "cc" } : new[] { "corrected" })
             {
                 var path = Path.Combine(output, $"sample_{stage}.{format}");
                 var bytes = await File.ReadAllBytesAsync(path);
@@ -105,13 +110,15 @@ public sealed class SaveWorkflowTests
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Export_AfterAsyncOutsideFolderConfirmation_StaysOnUiThread(bool accept)
+    public async Task Export_AfterAsyncOverwriteConfirmation_StaysOnUiThread(bool accept)
     {
         var scratch = Path.Combine(Path.GetTempPath(), "colorcorrect-save-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
         var report = Path.Combine(scratch, "source-report.json");
         await File.WriteAllTextAsync(report, "{\"ok\":true}");
         var output = Path.Combine(scratch, "exports");
+        Directory.CreateDirectory(output);
+        await File.WriteAllTextAsync(Path.Combine(output, "sample_report.json"), "existing report");
         var vm = CreateViewModel(report, output);
         var window = new MainWindow { DataContext = vm };
         window.Show();
@@ -142,8 +149,8 @@ public sealed class SaveWorkflowTests
             }
             else
             {
-                Assert.Equal(0, changes);
-                Assert.False(Directory.Exists(output));
+                Assert.Equal(2, changes);
+                Assert.Equal("existing report", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
             }
         }
         finally
@@ -153,6 +160,36 @@ public sealed class SaveWorkflowTests
             vm.Session[0].Dispose();
             Directory.Delete(scratch, recursive: true);
         }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Export_UnavailableReferenceReportsPartialFailureWhileKeepingTheCompletedResult(bool changed)
+    {
+        var scratch = Path.Combine(Path.GetTempPath(), "colorcorrect-partial-save-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(scratch);
+        var report = Path.Combine(scratch, "report.json"); var output = Path.Combine(scratch, "exports");
+        var photo = Path.Combine(scratch, "sample.png"); var model = Path.Combine(scratch, "model.json"); var white = Path.Combine(scratch, "white.png");
+        await File.WriteAllTextAsync(report, "{\"ok\":true}"); await File.WriteAllTextAsync(photo, "source");
+        await File.WriteAllTextAsync(model, "{}"); await File.WriteAllTextAsync(white, "white A");
+        var vm = CreateViewModel(report, output); var item = vm.Session[0]; vm.SaveCorrected = true;
+        item.ModelPath = model;
+        item.CompletedContext = ColorCorrect.Engine.CompletedResultContext.Capture(ColorCorrect.Engine.AssetIdentity.Capture(photo), model,
+            new() { DoFfc = true, WhiteImagePath = white });
+        var context = item.CompletedContext;
+        if (changed) await File.WriteAllTextAsync(white, "white B"); else File.Delete(white);
+        var window = new MainWindow { DataContext = vm }; window.Show();
+        try
+        {
+            await vm.ExecuteSaveCommand.ExecuteAsync(null);
+            Assert.StartsWith("Saved 1 file(s); 1 file(s) failed", vm.Status);
+            Assert.Equal("{\"ok\":true}", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
+            Assert.False(File.Exists(Path.Combine(output, "sample_corrected.jpg")));
+            Assert.Contains(vm.LogEntries, entry => entry.Message.Contains("corrected image is unavailable"));
+            Assert.True(item.IsCorrected); Assert.Same(context, item.CompletedContext); Assert.Equal(model, item.ModelPath);
+            Assert.False(vm.IsSaving); Assert.False(vm.ShowSaveProgress);
+        }
+        finally { window.Close(); Dispatcher.UIThread.RunJobs(); item.Dispose(); Directory.Delete(scratch, true); }
     }
 
     [AvaloniaTheory]
@@ -183,9 +220,8 @@ public sealed class SaveWorkflowTests
         try
         {
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
-            Assert.True(dialogs.WasRequested);
-            await Task.Run(() => dialogs.Result.SetResult(true));
             await saving;
+            Assert.False(dialogs.WasRequested);
             Assert.StartsWith("Save failed:", vm.Status);
             Assert.False(vm.IsSaving);
             Assert.False(vm.ShowSaveProgress);

@@ -50,7 +50,7 @@ public sealed class PatchRowViewModel
 {
     public PatchRowViewModel(PatchRow row)
     {
-        Name = string.IsNullOrWhiteSpace(row.Name) ? "—" : row.Name;
+        Name = string.IsNullOrWhiteSpace(row.Name) ? "—" : row.DisplayName;
         Before = Format(row.Before);
         After = Format(row.After);
         Sat = row.Saturated ? "yes" : "";

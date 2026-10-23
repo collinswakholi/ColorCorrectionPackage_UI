@@ -1,9 +1,33 @@
-# Compatibility entry point: samples are now tracked files, never junctions.
-$ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
-foreach ($name in @('Blank.JPG','ColorCard_Big.JPG','ColorCard_Combo.JPG','Sample_3572.JPG','Sample_3573.JPG')) {
-    $sample = Join-Path $root "test_images\$name"
-    if (-not (Test-Path -LiteralPath $sample -PathType Leaf)) { throw "Missing public sample: $name" }
-    if ((Get-Item -LiteralPath $sample).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Sample must not be a junction: $name" }
+# Junction Speedy catalog + oracle stills into CCP_New_UI. Do not copy blobs.
+$ErrorActionPreference = "Stop"
+$here = Split-Path -Parent $PSScriptRoot
+$workspace = Split-Path -Parent $here
+$candidates = @(
+    (Join-Path $workspace "Speedy_CC_build_1\assets\test_images"),
+    (Join-Path $workspace "assets\test_images")
+)
+$src = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $src) {
+    Write-Host "No Speedy test_images found. Catalog will stay empty until you link one."
+    exit 0
 }
-Write-Host 'Five public sample files available; no links or sibling projects required.'
+
+function Ensure-Junction([string]$link, [string]$target) {
+    if (Test-Path $link) {
+        $item = Get-Item $link -Force
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            return
+        }
+        Write-Host "Skip $link (exists and is not a junction)"
+        return
+    }
+    $parent = Split-Path -Parent $link
+    if (-not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Path $parent | Out-Null
+    }
+    New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+    Write-Host "Linked $link -> $target"
+}
+
+Ensure-Junction (Join-Path $here "assets\test_images") $src
+Ensure-Junction (Join-Path $here "testdata\samples") $src

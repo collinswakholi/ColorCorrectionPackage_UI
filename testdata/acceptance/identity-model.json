@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "kind": "ccm",
+  "do_ffc": false,
+  "do_gc": false,
+  "do_wb": false,
+  "do_cc": false,
+  "gc_coeffs": null,
+  "wb_diag": null,
+  "correction": null,
+  "input_space_id": "srgb",
+  "input_white_id": "d65",
+  "target_space_id": "srgb",
+  "target_white_id": "d65",
+  "gain_map_path": null
+}

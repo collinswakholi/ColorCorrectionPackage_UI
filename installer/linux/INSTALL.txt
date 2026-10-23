@@ -1,0 +1,29 @@
+ColorCorrect Studio - Ubuntu 24.04 x64 or ARM64
+
+Install the matching .deb with: sudo apt install ./colorcorrect-studio_*.deb
+The package manager displays required system dependencies before installation.
+Alternatively, extract the portable archive and run ./check-system, then
+./ColorCorrect-Studio. The desktop app does not require Python, Rust or a separate
+.NET installation. ./install-dependencies shows missing-prerequisite guidance;
+./install-dependencies --install explicitly requests apt installation on Ubuntu
+24.04. No command downloads or changes a GPU driver automatically.
+
+Detection requires a working hardware GPU/Vulkan driver. CPU fallback applies to
+image correction. Native Wayland is not certified; this version uses X11/XWayland.
+
+WSL GPU support is an optional experimental x64 add-on. If included, enable it
+with ./wsl-gpu-setup enable and restart the app/client. Disable it with
+./wsl-gpu-setup disable. It only affects the ColorCorrect worker, never system
+Mesa or global Vulkan configuration. WSL 2, /dev/dxg, WSL graphics libraries and
+a compatible Windows GPU driver are required. ARM64 WSL add-on support is pending.
+
+Python API (optional): python3 -m pip install --no-deps python/*.whl
+Pass this app folder as root= to Client; examples are in python/examples.
+
+Uninstalling preserves user settings/models/sessions. To disable an add-on after
+uninstalling, remove ~/.config/colorcorrect/wsl-gpu.enabled (or the equivalent
+XDG_CONFIG_HOME path). Do not remove the legacy CCP-New application data folder.
+
+These are local release candidates. Native hardware/architecture support remains
+pending until the corresponding acceptance evidence is reviewed. See
+runtime-support.json, dependency-report.json and package-manifest.json.

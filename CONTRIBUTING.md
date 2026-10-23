@@ -1,20 +1,15 @@
 # Contributing
 
-Start with [building.md](docs/building.md), the [migration boundaries](docs/migration.md)
-and [color-science validation](docs/color-science-validation.md). Open a focused PR
-with reproduction steps, tests and user-visible behavior. Keep mathematical,
-UI and packaging changes separable. Preserve NDJSON and SDK 1.1 compatibility.
+Start with [building](docs/building.md), [compatibility](docs/migration.md) and [color-science validation](docs/color-science-validation.md). Keep mathematical, UI and packaging changes reviewable separately. Preserve existing Engine imports, the NDJSON contract and saved-model/session behavior.
 
-Do not commit private photos, sessions, machine paths, junctions, outputs or
-executables. The five `test_images` files are the public sample corpus. Additional
-coverage should use synthetic fixtures with documented encodings/orientations.
-All detector weights are regular Git blobs; no individual file may reach 100 MiB.
-Update their hash manifest and provenance deliberately, not automatically.
+Run `python scripts/export_source.py --check` before preparing source. It inspects current files, including unstaged and untracked additions; it does not export an old Git HEAD. Keep notebooks unexecuted, model hashes pinned and visual baselines individually reviewed. Do not add private photos, machine paths, credentials, runtime binaries, junctions or generated outputs.
 
-Review failed visual comparisons individually. Include before/after evidence;
-never mass-refresh baselines merely to pass tests. SDK examples must run in fresh
-notebook kernels against the packaged worker. Keep notebook source outputs empty.
+Keep regression tests for color math, reference identities, FFC, batch recovery, worker lifecycle and package integrity. Research programs and raw evidence belong in ignored local folders. `python scripts/cleanup_local.py` reports reproducible caches without deleting anything; perform cleanup only after final validation and review.
 
-Read-only PR checks cannot publish releases. The maintainer merges; the separate
-manual workflow builds that exact merged commit and prepares an unsigned draft
-prerelease only. Publication is a separate human review. See [releasing.md](docs/releasing.md).
+The build/workflow contract tests use Python 3.12.10 and the hashed build-only
+requirements in `scripts/requirements-ci.txt`; see the component commands in
+the build guide. Native product and SDK versions are checked as separate groups.
+
+Model license notices apply independently of the project's MIT source license. Follow [model provenance](docs/model-provenance.md) when sanitizing metadata; never replace learned weights implicitly.
+
+CI builds and uploads validation artifacts only. Publishing, signing, commits and pushes require explicit maintainer action. See [release preparation](docs/releasing.md).

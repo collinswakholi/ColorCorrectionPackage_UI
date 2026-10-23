@@ -1,0 +1,13 @@
+#!/bin/sh
+# Bootstrap check: requires only Ubuntu's shell/core utilities, never Python/.NET.
+set -eu
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+case "$(uname -m)" in x86_64) actual=x64 ;; aarch64) actual=arm64 ;; *) echo 'A 64-bit x64 or ARM64 Linux system is required.' >&2; exit 1 ;; esac
+expected=$(cat "$APP_DIR/package-architecture")
+[ "$actual" = "$expected" ] || { echo "This package requires $expected; this machine is $actual." >&2; exit 1; }
+for file in app/ColorCorrect.App app/libSkiaSharp.so libonnxruntime.so libonnxruntime_providers_webgpu.so ccp-engine; do
+    [ -r "$APP_DIR/$file" ] || { echo "The application package is incomplete: $file is missing." >&2; exit 1; }
+    result=$(LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$APP_DIR/$file" 2>&1) || { echo "$result" >&2; exit 1; }
+    case "$result" in *'not found'*) printf '%s\n' "$result" >&2; echo 'Install the Ubuntu dependencies listed in INSTALL.txt, then retry.' >&2; exit 1 ;; esac
+done
+echo 'Application libraries are present. GPU availability is checked separately by the worker.'

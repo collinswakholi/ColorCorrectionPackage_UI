@@ -174,10 +174,3 @@ fn parse_crop_rect_xyxy() {
     assert_eq!(full.width, 640);
     assert_eq!(full.height, 480);
 }
-
-#[test]
-fn libtorch_disabled_message_without_tch() {
-    let err = ccp_detect::libtorch_required_error();
-    assert!(!err.ok);
-    assert!(err.error.contains("without LibTorch") || err.error.contains("tch"));
-}

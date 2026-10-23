@@ -41,6 +41,7 @@
             </Border>
             <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="16,12">
+                    <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                 <TextBlock Text="Fit method" Classes="settingsLabel"/>
                 <ComboBox x:Name="FfcMethodSelect" Classes="config" ItemsSource="{Binding FfcFitMethods}"
                           SelectedItem="{Binding SelectedFfcFitMethod}" Margin="0,0,0,10"
@@ -52,25 +53,25 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <TextBlock Text="Bins" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcBins, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
+                <TextBlock Text="Sampling grid (4–200)" Classes="settingsLabel"/>
+                <TextBox Classes="config" Text="{Binding FfcBinsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC bins"/>
-                <TextBlock Text="Smooth window" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcSmoothWindow, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
+                <TextBlock Text="Smoothing window (odd, 1–51)" Classes="settingsLabel"/>
+                <TextBox Classes="config" Text="{Binding FfcSmoothWindowText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC smooth window"/>
-                <TextBlock Text="Degree" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcDegree, Converter={StaticResource NumericToString}}" Margin="0,0,0,10"
-                         AutomationProperties.Name="FFC degree"/>
+                <TextBlock Text="Polynomial degree (1–7)" Classes="settingsLabel" IsVisible="{Binding ShowFfcDegree}"/>
+                <TextBox Classes="config" Text="{Binding FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                         AutomationProperties.Name="FFC degree" IsVisible="{Binding ShowFfcDegree}"/>
                 <StackPanel IsVisible="{Binding ShowFfcIter}" Margin="0,0,0,10">
                     <TextBlock Text="Tolerance" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcTol, Converter={StaticResource NumericToString}}"
+                    <TextBox Classes="config" Text="{Binding FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC tolerance"/>
                 </StackPanel>
                 <StackPanel IsVisible="{Binding ShowFfcNn}" Margin="0,0,0,10">
                     <TextBlock Text="NN max iterations" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcNnMaxIter, Converter={StaticResource NumericToString}}"
+                    <TextBox Classes="config" Text="{Binding FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC NN max iterations"/>
                 </StackPanel>
             </StackPanel>

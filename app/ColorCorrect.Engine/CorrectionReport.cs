@@ -78,7 +78,7 @@ public sealed class CorrectionReport
         if (!HasMetrics) return "";
         var fit = $"fit ΔE {MeanAfter:0.00}";
         return double.IsFinite(ValidationMean)
-            ? $"{fit} · {ValidationFolds}-fold held-out ΔE {ValidationMean:0.00}"
+            ? $"{fit} · {ValidationFolds}-fold CC-only ΔE {ValidationMean:0.00}"
             : $"{fit} · median {MedianAfter:0.00} · max {MaxAfter:0.00}";
     }
 
@@ -111,6 +111,10 @@ public sealed class CorrectionReport
         {
             foreach (var p in arr.EnumerateArray())
             {
+                var provenance = p.TryGetProperty("provenance", out var provenanceValue) ? provenanceValue : default;
+                var chartId = provenance.ValueKind == JsonValueKind.Object ? GetStr(provenance, "chart_id") : "";
+                var ordinal = string.IsNullOrWhiteSpace(chartId) ? 0 : patches.Select(row => row.ChartId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList().IndexOf(chartId) + 1;
+                if (!string.IsNullOrWhiteSpace(chartId) && ordinal == 0) ordinal = patches.Select(row => row.ChartId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Count() + 1;
                 patches.Add(new PatchRow(
                     GetStr(p, "name"),
                     GetNum(p, "before_delta_e"),
@@ -118,7 +122,12 @@ public sealed class CorrectionReport
                     p.TryGetProperty("saturated", out var sat) && sat.ValueKind == JsonValueKind.True,
                     ReadDisplayRgb(p, "measured"),
                     ReadDisplayRgb(p, "reference"),
-                    ReadDisplayRgb(p, "corrected")));
+                    ReadDisplayRgb(p, "corrected"))
+                {
+                    ChartId = chartId,
+                    ChartNumber = ordinal,
+                    ProfileId = provenance.ValueKind == JsonValueKind.Object ? GetStr(provenance, "profile_id") : "",
+                });
             }
         }
 
@@ -238,4 +247,10 @@ public sealed record PatchRow(
     bool Saturated,
     double[] Measured,
     double[] Reference,
-    double[] Corrected);
+    double[] Corrected)
+{
+    public string ChartId { get; init; } = "";
+    public string ProfileId { get; init; } = "";
+    public int ChartNumber { get; init; }
+    public string DisplayName => ChartNumber > 0 ? $"{Name} · chart {ChartNumber}" : Name;
+}
