@@ -29,10 +29,10 @@ class DiscoveryTests(unittest.TestCase):
             with patch.dict(os.environ, {"CCP_ENGINE_EXE": str(root / "developer-worker"),
                                          "ORT_DYLIB_PATH": str(root / "developer-runtime")}):
                 engine = Engine(root=root)
-                self.assertEqual(engine.executable, worker)
-                self.assertEqual(engine._environment()["ORT_DYLIB_PATH"], str(runtime))
+                self.assertEqual(engine.executable, worker.resolve())
+                self.assertEqual(engine._environment()["ORT_DYLIB_PATH"], str(runtime.resolve()))
                 runtime.unlink()
-                self.assertEqual(engine._environment()["ORT_DYLIB_PATH"], str(runtime))
+                self.assertEqual(engine._environment()["ORT_DYLIB_PATH"], str(runtime.resolve()))
                 worker.unlink()
                 with self.assertRaises(FileNotFoundError):
                     Engine(root=root)
@@ -45,8 +45,8 @@ class DiscoveryTests(unittest.TestCase):
             for name in ("ccp-engine", "ccp-engine-launch"):
                 (root / name).touch()
             with patch("colorcorrect.sys.platform", "linux"):
-                self.assertEqual(Engine(root=root).executable, root / "ccp-engine-launch")
-                self.assertEqual(Engine(root / "ccp-engine", root=root).executable, root / "ccp-engine")
+                self.assertEqual(Engine(root=root).executable, (root / "ccp-engine-launch").resolve())
+                self.assertEqual(Engine(root / "ccp-engine", root=root).executable, (root / "ccp-engine").resolve())
 
 
 class ClientTests(unittest.TestCase):

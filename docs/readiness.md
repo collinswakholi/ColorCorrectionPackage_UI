@@ -1,14 +1,16 @@
 # Readiness ledger
 
-This ledger distinguishes corrected source from validated packages. No commit, push, remote workflow or publication is part of the local readiness run.
+This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. Current CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). Candidates remain unsigned, with no publishing or macOS binary distribution.
 
 ## Current 0.2.0 source
 
 The native app and internal Rust packages are now version 0.2.0; the independently versioned Python SDK remains 2.2.1. Current source adds cancellation before input preparation, background preparation with captured chart-face/rendering inputs, verified atomic repair of interrupted session assets, and responsive session disk operations guarded against stale asynchronous completion. Previous successful results and sessions remain available when an operation fails or is canceled.
 
-Host checks pass: 126 headless UI tests, 63 engine component tests with one explicit real-worker skip, and 51 source/packaging tests. Related 29-test and focused 13-test/one-test checks overlap those suites and are not additional totals. The unchanged SDK has 48 host contract tests. These component results do not establish installed application acceptance.
+Before CI, host checks passed: 130 headless UI tests, 63 engine component tests with one explicit real-worker skip, and 51 source/packaging tests. Related focused runs overlap those suites and are not additional totals. The SDK had 48 host contract tests. Additional CI regressions and native results are recorded with the relevant Actions run. These component results do not establish installed application acceptance.
 
-Fresh Windows Sandbox and WSL acceptance for the final 0.2.0 packages is pending and will be recorded separately in ignored `_implementation/retest-ten` evidence. Native ARM64 and Apple-silicon macOS validation remains outstanding; prepared workflows have not been run.
+The final local 0.2.0 Windows Sandbox and WSL packages passed ten individual corrections (five with FFC and five without), a ten-image chart-fitting queue with previews, and a ten-image fixed-model application queue with previews disabled. Both guests also repeated identical-content relinking, GC/Original/Corrected previews, theme changes and session restart, then closed without orphan workers. Separate installed SDK checks produced thirty full-output outcomes per guest; actual GPU execution is recorded for those SDK runs. These are bounded acceptance results for the preserved x64 package hashes, not controlled performance measurements or certification of every control and display configuration. Exact identities and evidence are retained in the local archive referenced by ignored `_implementation/LOCAL_ARCHIVE.json`.
+
+Native Windows/Linux x64 and ARM64 build, installation and SDK smoke checks, plus Apple-silicon macOS source validation, now run in the linked PR. Hosted checks do not certify hardware GPU execution or interactive UI behavior. The Mac job uploads text evidence only; no application binary, archive or installer is distributed.
 
 ## Historical candidate evidence
 

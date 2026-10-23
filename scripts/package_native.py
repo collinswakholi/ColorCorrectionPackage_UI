@@ -224,6 +224,13 @@ def main() -> int:
                         "-c", "Release", "-r", args.rid, "--self-contained", "true", "--nologo",
                         "-p:UseAppHost=true", "-p:PublishSingleFile=false", "-p:RestoreLockedMode=true",
                         "-p:DebugType=none", "-p:DebugSymbols=false", "-o", str(publish)], check=True)
+    # NuGet native assets can carry PDBs despite DebugSymbols=false. Setup
+    # excludes these development files, so omit them before hashing either
+    # distribution rather than producing a manifest the installer cannot meet.
+    for symbols in publish.rglob("*"):
+        if symbols.is_file() and symbols.suffix.lower() == ".pdb":
+            symbols.resolve(strict=True).relative_to(publish.resolve(strict=True))
+            symbols.unlink()
     application_name = "ColorCorrect.App.exe" if expected[0] == "Windows" else "ColorCorrect.App"
     require_architecture(publish / application_name, expected)
     if expected[0] != "Windows":

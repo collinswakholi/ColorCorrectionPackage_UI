@@ -6,3 +6,8 @@ members = [
     "crates/ccp_bridge",
     "crates/ccp_wgpu_infer",
 ]
+exclude = ["vendor/gemm-common-0.19.0"]
+
+[patch.crates-io]
+# Preserve the generic AArch64 baseline: only FP16 kernels enable FP16 locally.
+gemm-common = { path = "vendor/gemm-common-0.19.0" }

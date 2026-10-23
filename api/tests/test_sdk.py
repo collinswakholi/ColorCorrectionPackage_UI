@@ -350,7 +350,7 @@ class SDKTests(unittest.TestCase):
         echo = result.raw_reply["echo"]
         self.assertTrue(echo["do_ffc"])
         self.assertEqual(echo["ffc"]["method"], "pls")
-        self.assertEqual(echo["white"], str(self.folder / "white.jpg"))
+        self.assertEqual(echo["white"], str((self.folder / "white.jpg").resolve()))
         (self.folder / "white.jpg").unlink()
         with self.assertRaises(InvalidInputError):
             loaded.apply(self.folder / "scene.jpg", output_dir=self.folder)
@@ -420,7 +420,7 @@ class SDKTests(unittest.TestCase):
                 path.write_text(json.dumps(saved), encoding="utf-8")
                 model = self.client.load_calibration(path)
                 self.assertIsNone(model.metrics)
-                self.assertEqual(model.path, path)
+                self.assertEqual(model.path, path.resolve())
                 with self.assertRaisesRegex(InvalidInputError, "WB.*absent"):
                     model.apply(self.folder / "scene.jpg", output_dir=self.folder,
                                 options=ApplyOptions(do_wb=True))

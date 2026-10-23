@@ -1,5 +1,6 @@
 """Installer/bootstrap boundaries; no installers or target binaries are executed."""
 from pathlib import Path
+import hashlib
 import importlib.util
 import json
 import os
@@ -20,6 +21,39 @@ import test_package_native as fixtures
 
 
 class ReleaseContracts(unittest.TestCase):
+    def test_gemm_arm_patch_changes_only_four_function_feature_annotations(self):
+        root = SCRIPTS.parent
+        relative = "engine/vendor/gemm-common-0.19.0"
+        vendor = root / relative
+        provenance = json.loads((vendor / "upstream-sha256.json").read_text(encoding="utf-8"))
+        self.assertEqual(provenance["schema"], 1)
+        self.assertEqual(provenance["package"], {
+            "name": "gemm-common", "version": "0.19.0",
+            "registry_archive_sha256": "88027625910cc9b1085aaaa1c4bc46bb3a36aad323452b33c25b5e4e7c8e2a3e",
+            "git_commit": "86102c5b712737978371ac9ef7a11982f686d7bc"})
+        restored = (vendor / "src/simd.rs").read_bytes()
+        annotation = b'    #[target_feature(enable = "fp16,neon")]\n'
+        for name in ("vmulq_f16", "vaddq_f16", "vfmaq_f16", "vfmaq_laneq_f16"):
+            function = b"    #[inline]\n    pub unsafe fn " + name.encode()
+            self.assertEqual(restored.count(annotation + function), 1, name)
+            restored = restored.replace(annotation + function, function, 1)
+        # Reversing exactly those four insertions must recover every upstream byte,
+        # including the original FP16 runtime guards and all arithmetic/assembly.
+        self.assertEqual(len(provenance["files"]), 14)
+        for name, expected in provenance["files"].items():
+            with self.subTest(upstream_file=name):
+                contents = restored if name == "src/simd.rs" else (vendor / name).read_bytes()
+                self.assertEqual(hashlib.sha256(contents).hexdigest(), expected)
+        cargo = (root / "engine/Cargo.toml").read_text()
+        self.assertIn('gemm-common = { path = "vendor/gemm-common-0.19.0" }', cargo)
+        vcs = json.loads((vendor / ".cargo_vcs_info.json").read_text())
+        self.assertEqual(vcs["git"]["sha1"], provenance["package"]["git_commit"])
+        import export_source
+        exported = {entry["path"] for entry in export_source.inventory(root)}
+        self.assertTrue({relative + "/" + name for name in provenance["files"]} <= exported)
+        self.assertIn(relative + "/CCP-PATCH.md", exported)
+        self.assertIn(relative + "/upstream-sha256.json", exported)
+
     def test_native_rust_component_checks_cover_every_shipping_crate(self):
         root = SCRIPTS.parent
         workspace = set(re.findall(r'"crates/([^"]+)"', (root / "engine/Cargo.toml").read_text()))

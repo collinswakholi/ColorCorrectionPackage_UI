@@ -206,6 +206,10 @@ public sealed class ReliabilityTests : IDisposable
             Directory.CreateDirectory(engineDir);
             var engine = Path.Combine(engineDir, OperatingSystem.IsWindows() ? "ccp-engine.exe" : "ccp-engine");
             File.WriteAllBytes(engine, []);
+            // macOS exposes its temporary folder through /var -> /private/var.
+            // Compare the same OS-resolved spelling returned for the discovery cwd.
+            Directory.SetCurrentDirectory(engineDir);
+            var expectedEngine = Path.Combine(Directory.GetCurrentDirectory(), Path.GetFileName(engine));
             var nested = Path.Combine(_root, "app", "ColorCorrect.App", "bin", "Release", "net9.0");
             Directory.CreateDirectory(nested);
             Directory.SetCurrentDirectory(nested);
@@ -213,7 +217,7 @@ public sealed class ReliabilityTests : IDisposable
             Environment.SetEnvironmentVariable("COLORCORRECT_EXE", null);
 
             Assert.True(EnginePaths.TryFindExecutable(out var found));
-            Assert.Equal(Path.GetFullPath(engine), Path.GetFullPath(found));
+            Assert.Equal(expectedEngine, Path.GetFullPath(found));
         }
         finally
         {

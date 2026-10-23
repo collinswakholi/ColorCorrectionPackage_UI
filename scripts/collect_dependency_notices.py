@@ -34,6 +34,55 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
+def vendored_source(root: Path, package: dict, folder: Path) -> dict | None:
+    """Recognize explicitly inventoried third-party path patches, not workspace crates."""
+    vendor = root.resolve() / "engine/vendor"
+    folder = folder.absolute()
+    if not folder.is_relative_to(vendor):
+        return None
+    expected = vendor / (package["name"] + "-" + package["version"])
+    if folder != expected or folder.resolve(strict=True) != expected:
+        raise ValueError("Vendored dependency must be contained without links: " + str(folder))
+    provenance = read_json(folder / "upstream-sha256.json")
+    upstream = provenance.get("package", {})
+    vcs = read_json(folder / ".cargo_vcs_info.json")
+    commit = vcs.get("git", {}).get("sha1")
+    if (provenance.get("schema") != 1 or upstream.get("name") != package["name"]
+            or upstream.get("version") != package["version"]
+            or not re.fullmatch(r"[0-9a-f]{40}", commit or "")
+            or upstream.get("git_commit") != commit
+            or not re.fullmatch(r"[0-9a-f]{64}", upstream.get("registry_archive_sha256", ""))
+            or not github(package.get("repository"))):
+        raise ValueError("Invalid vendored dependency provenance: " + str(folder))
+    originals = provenance.get("files")
+    if not isinstance(originals, dict) or not originals:
+        raise ValueError("Missing vendored upstream source inventory: " + str(folder))
+    for name, sha in originals.items():
+        if (not isinstance(name, str) or "\\" in name or ":" in name
+                or name.startswith("/") or any(part in ("", ".", "..") for part in name.split("/"))
+                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
+            raise ValueError("Invalid vendored upstream source inventory: " + str(folder))
+    files = {}
+    for path in folder.rglob("*"):
+        if path.resolve(strict=True) != path.absolute():
+            raise ValueError("Vendored dependency must be contained without links: " + str(path))
+        if path.is_file():
+            files[path.relative_to(folder).as_posix()] = path
+    if set(files) != set(originals) | {"CCP-PATCH.md", "upstream-sha256.json"}:
+        raise ValueError("Untracked or missing vendored source files: " + str(folder))
+    if not any(LEGAL.match(Path(name).name) for name in originals):
+        raise ValueError("Missing vendored upstream license text: " + str(folder))
+    for name, sha in originals.items():
+        immutable = LEGAL.match(Path(name).name) or name in ("Cargo.toml", "Cargo.toml.orig", ".cargo_vcs_info.json")
+        if immutable and digest(files[name]) != sha:
+            raise ValueError("Changed vendored upstream license or package identity: " + name)
+    if not (folder / "CCP-PATCH.md").read_text(encoding="utf-8").strip():
+        raise ValueError("Vendored dependency must document local changes: " + str(folder))
+    return {"path": folder.relative_to(root.resolve()).as_posix(), "upstream": provenance,
+            "source_hashes": {path.relative_to(root.resolve()).as_posix(): digest(path)
+                              for path in files.values()}}
+
+
 def validate_notices(folder: Path, rid: str, root: Path, published: Path | None = None) -> dict:
     report = read_json(folder / "manifest.json")
     if report.get("rid") != rid or report.get("unresolved"):
@@ -69,6 +118,7 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
         "-p", "ccp_bridge", "--target", TARGETS[rid][2], "--edges", "normal,build", "--prefix", "none", "--format", "{p}"],
         text=True, encoding="utf-8", errors="strict")
     active = {tuple(line.split()[:2]) for line in tree.splitlines() if len(line.split()) >= 2}
+    vendor_hashes = {}
     vcs_repositories = {}
     for package in metadata["packages"]:
         folder = Path(package["manifest_path"]).parent
@@ -78,15 +128,23 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
         if commit and repository:
             vcs_repositories[commit] = repository
     for package in metadata["packages"]:
-        if not package["source"] or (package["name"], "v" + package["version"]) not in active:
+        if (package["name"], "v" + package["version"]) not in active:
             continue
         folder = Path(package["manifest_path"]).parent
+        vendor = vendored_source(root, package, folder) if package["source"] is None else None
+        if package["source"] is None and vendor is None:
+            continue
         vcs = read_json(folder / ".cargo_vcs_info.json") if (folder / ".cargo_vcs_info.json").exists() else {}
         commit = vcs.get("git", {}).get("sha1")
+        package_metadata = {"authors": package.get("authors"), "source": package["source"], "license_file": package.get("license_file")}
+        if vendor:
+            package_metadata.update({"vendored_source": vendor["path"], "upstream_provenance": vendor["upstream"],
+                                     "local_change_notice": "CCP-PATCH.md"})
+            vendor_hashes.update(vendor["source_hashes"])
         sources.append({"ecosystem": "cargo", "name": package["name"], "version": package["version"],
             "license": package.get("license"), "repository": github(package.get("repository")) or github(package.get("homepage")) or vcs_repositories.get(commit),
             "commit": commit, "prefix": vcs.get("path_in_vcs", ""), "folder": folder,
-            "package_metadata": {"authors": package.get("authors"), "source": package["source"], "license_file": package.get("license_file")}})
+            "package_metadata": package_metadata, "vendored": bool(vendor)})
     assets = read_json(root / "app/ColorCorrect.App/obj/project.assets.json")
     package_roots = [Path(p) for p in assets["packageFolders"]]
     for identity, description in read_json(published / "ColorCorrect.App.deps.json")["libraries"].items():
@@ -131,6 +189,8 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
     wanted_repos = set()
     for source in sources:
         source["local_files"] = sorted(p for p in source["folder"].rglob("*") if p.is_file() and LEGAL.match(p.name))
+        if source.get("vendored"):
+            source["local_files"].append(source["folder"] / "CCP-PATCH.md")
         # Inter's font license is separate from Avalonia's code license.
         if (not source["local_files"] or source["name"] == "Avalonia.Fonts.Inter") and source["repository"] and re.fullmatch(r"[0-9a-fA-F]{40}", source["commit"] or ""):
             wanted_repos.add((source["repository"], source["commit"]))
@@ -157,11 +217,17 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
     report = {"schema": 1, "rid": rid, "scope": "Published NuGet runtime assets and active normal/build Rust dependency graph; developer-only and inactive optional backends excluded",
         "source_hashes": {name: digest(root / name) for name in ("engine/Cargo.lock", "app/ColorCorrect.App/ColorCorrect.App.csproj", "global.json", "rust-toolchain.toml")},
         "published_deps_sha256": digest(published / "ColorCorrect.App.deps.json"), "components": [], "unresolved": [], "sha256": {}}
+    if vendor_hashes:
+        report["source_hashes"].update(vendor_hashes)
+        report["source_hashes"]["engine/Cargo.toml"] = digest(root / "engine/Cargo.toml")
     (output / "texts").mkdir()
     for source in sorted(sources, key=lambda s: (s["ecosystem"], s["name"], s["version"])):
         component = {k: source[k] for k in ("ecosystem", "name", "version", "license", "repository", "commit", "package_metadata")}
         component["notices"] = []
-        documents = [(p.relative_to(source["folder"]).as_posix(), p.read_bytes(), "restored package") for p in source["local_files"]]
+        local_origin = "vendored source" if source.get("vendored") else "restored package"
+        documents = [(p.relative_to(source["folder"]).as_posix(), p.read_bytes(), local_origin) for p in source["local_files"]]
+        if source.get("vendored"):
+            component["corresponding_source"] = f"https://github.com/{source['repository']}/tree/{source['commit']}"
         documents += [(name, fetched[url], url) for name in source["upstream_files"] for url in [f"https://raw.githubusercontent.com/{source['repository']}/{source['commit']}/{name}"]]
         standard = STANDARD_TEXT.get((source["name"], source["version"]))
         if not documents and standard:

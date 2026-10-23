@@ -153,6 +153,10 @@ class NativePackageTests(unittest.TestCase):
                     name = "ColorCorrect.App.exe" if system == "Windows" else "ColorCorrect.App"
                     (destination / name).write_bytes(executable(system, architecture))
                     (destination / "ColorCorrect.App.deps.json").write_text("{}")
+                    (destination / "libHarfBuzzSharp.pdb").write_bytes(b"NuGet native debug symbols")
+                    (destination / "native").mkdir()
+                    (destination / "native/Other.PDB").write_bytes(b"nested debug symbols")
+                    (destination / "native/runtime-data.bin").write_bytes(b"required runtime data")
 
                 with patch.object(sys, "argv", arguments), patch.object(package.platform, "system", return_value=system), \
                      patch.object(package, "native_architecture", return_value=architecture), \
@@ -187,6 +191,9 @@ class NativePackageTests(unittest.TestCase):
                 self.assertTrue((output / f"ColorCorrect-Studio-2.0.0-{rid}{suffix}").is_file())
                 self.assertEqual(manifest["native_validation"], "pending")
                 self.assertIn(launcher.relative_to(stage).as_posix(), manifest["sha256"])
+                self.assertFalse(any(Path(name).suffix.lower() == ".pdb" for name in manifest["sha256"]))
+                self.assertFalse(any(path.suffix.lower() == ".pdb" for path in (payload / "app").rglob("*")))
+                self.assertEqual((payload / "app/native/runtime-data.bin").read_bytes(), b"required runtime data")
                 self.assertEqual(set(manifest["sha256"]), {path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()} - {"package-manifest.json"})
                 self.assertEqual(manifest["worker_features_declared"], ["ort-plane"])
                 if system == "Windows":
@@ -216,6 +223,7 @@ class NativePackageTests(unittest.TestCase):
             published.mkdir()
             app = published / "ColorCorrect.App"
             (published / "ColorCorrect.App.deps.json").write_text("{}")
+            (published / "Native.PDB").write_bytes(b"prebuilt native debug symbols")
             app.write_bytes(executable("Linux", "arm64"))
             arguments.extend(["--app-publish", str(published)])
             with patch.object(sys, "argv", arguments), patch.object(package.platform, "system", return_value="Linux"), \
@@ -228,6 +236,8 @@ class NativePackageTests(unittest.TestCase):
                 self.assertEqual(package.main(), 0)
                 build.assert_not_called()
             self.assertEqual((root / "dist/package/payload/app/ColorCorrect.App").read_bytes(), app.read_bytes())
+            self.assertFalse((root / "dist/package/payload/app/Native.PDB").exists())
+            self.assertEqual((published / "Native.PDB").read_bytes(), b"prebuilt native debug symbols")
 
     def test_removed_video_feature_rejected_before_publish(self):
         with patch.object(sys, "argv", ["package_native.py", "--rid", "win-x64", "--worker", "none", "--ort-runtime", "none", "--features", "video"]), \

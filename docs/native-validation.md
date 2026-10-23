@@ -16,7 +16,7 @@ Hosted runners may not expose usable graphics hardware. Tests must distinguish u
 
 ## Earlier candidate evidence
 
-This section records native 0.1.0 candidates through RC8 and their intervening fixes. It is a historical snapshot, including its component-test counts and resource observations. The current 0.2.0 source checks are summarized in the [readiness ledger](readiness.md); fresh installed 0.2.0 acceptance is pending and is recorded separately in private `_implementation/retest-ten` evidence.
+This section records native 0.1.0 candidates through RC8 and their intervening fixes. It is a historical snapshot, including its component-test counts and resource observations. The [readiness ledger](readiness.md) summarizes the subsequent local 0.2.0 installed acceptance. Native architecture CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4); those build/install/smoke checks remain separate from hardware GPU and interactive UI acceptance.
 
 On 23 October 2026 the corrected Windows/Linux x64 worker and installed wheel passed five isolated suites in each guest: prerequisite/bootstrap, inference, Python API, edge cases and stress. Source checkouts were hidden, working directories were neutral and runtime/model/module paths were package-owned. Windows verified 381 installed package files and three SDK modules; Linux verified 506 files and three modules. Offline Windows installation also exercised the bundled VC prerequisite.
 
