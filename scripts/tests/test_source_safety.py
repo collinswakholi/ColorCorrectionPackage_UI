@@ -93,6 +93,54 @@ class SourceSafetyTests(unittest.TestCase):
                     self.assertNotIn(b"\r\n", contents)
                     self.assertTrue(contents.startswith(b"#!/bin/sh\n"))
 
+    @unittest.skipUnless(shutil.which("git"), "Git is required to verify fixture checkout integrity")
+    def test_acceptance_fixture_hashes_survive_windows_and_posix_checkout(self):
+        source = Path(__file__).resolve().parents[2]
+        fixtures = source / "testdata/acceptance"
+        expected = json.loads((fixtures / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(expected), {path.name for path in fixtures.iterdir()
+                                         if path.is_file() and path.name != "manifest.json"})
+        for system, automatic, line_endings in (("Windows", "true", "crlf"), ("POSIX", "input", "lf")):
+            with self.subTest(checkout=system), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                environment = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+                def git(*arguments):
+                    return subprocess.check_output(
+                        ["git", "-C", str(root), "-c", f"core.autocrlf={automatic}",
+                         "-c", f"core.eol={line_endings}", *arguments],
+                        env=environment, stderr=subprocess.STDOUT)
+
+                git("init", "--quiet")
+                shutil.copy2(source / ".gitattributes", root / ".gitattributes")
+                target = root / "testdata/acceptance"
+                shutil.copytree(fixtures, target)
+                paths = [path.relative_to(root).as_posix() for path in sorted(target.iterdir()) if path.is_file()]
+                fields = git("check-attr", "-z", "text", "eol", "--", *paths).decode().split("\0")[:-1]
+                attributes = {(fields[index], fields[index + 1]): fields[index + 2]
+                              for index in range(0, len(fields), 3)}
+                for relative in paths:
+                    if Path(relative).suffix in (".csv", ".json"):
+                        self.assertEqual(attributes[relative, "text"], "set", relative)
+                        self.assertEqual(attributes[relative, "eol"], "lf", relative)
+                    elif Path(relative).suffix.lower() == ".jpg":
+                        self.assertEqual(attributes[relative, "text"], "unset", relative)
+                git("add", "--", ".gitattributes", *paths)
+                # Removing the copied files forces an actual index-to-disk checkout.
+                # This catches hashes computed over pre-normalization working bytes.
+                for relative in paths:
+                    (root / relative).unlink()
+                git("checkout-index", "--all", "--force")
+                checked_out = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+                self.assertEqual(checked_out, expected)
+                for name, checksum in checked_out.items():
+                    with self.subTest(checkout=system, fixture=name):
+                        self.assertEqual(digest(target / name), checksum)
+                        if Path(name).suffix in (".csv", ".json"):
+                            self.assertNotIn(b"\r\n", (target / name).read_bytes())
+                        elif Path(name).suffix.lower() == ".jpg":
+                            self.assertEqual(digest(target / name), digest(fixtures / name))
+
     def test_extensionless_installer_scripts_are_scanned_for_private_content(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

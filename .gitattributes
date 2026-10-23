@@ -1,6 +1,8 @@
 * text=auto
 *.sh text eol=lf
 installer/linux/* text eol=lf
+testdata/acceptance/*.csv text eol=lf
+testdata/acceptance/*.json text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.ps1 text eol=crlf
