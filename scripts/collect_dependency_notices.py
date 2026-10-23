@@ -61,9 +61,13 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
     command = ["cargo", "metadata", "--manifest-path", str(root / "engine/Cargo.toml"), "--locked", "--format-version", "1"]
     if not fetch:
         command.append("--offline")
-    metadata = read_json(metadata_file) if metadata_file else json.loads(subprocess.check_output(command, text=True))
+    # Cargo emits UTF-8, including package paths and author names. Windows' ANSI
+    # code page is unrelated to this protocol; keep malformed output an error.
+    metadata = read_json(metadata_file) if metadata_file else json.loads(
+        subprocess.check_output(command, text=True, encoding="utf-8", errors="strict"))
     tree = subprocess.check_output(["cargo", "tree", "--manifest-path", str(root / "engine/Cargo.toml"), "--locked", "--offline",
-        "-p", "ccp_bridge", "--target", TARGETS[rid][2], "--edges", "normal,build", "--prefix", "none", "--format", "{p}"], text=True)
+        "-p", "ccp_bridge", "--target", TARGETS[rid][2], "--edges", "normal,build", "--prefix", "none", "--format", "{p}"],
+        text=True, encoding="utf-8", errors="strict")
     active = {tuple(line.split()[:2]) for line in tree.splitlines() if len(line.split()) >= 2}
     vcs_repositories = {}
     for package in metadata["packages"]:

@@ -91,9 +91,18 @@ def main():
     report["free_disk_bytes_start"] = shutil.disk_usage(work).free
 
     def run(command, **kwargs):
+        arguments = [str(x) for x in command]
+        print("Running: " + repr(arguments), flush=True)
         with (evidence / "commands.log").open("a", encoding="utf-8") as log:
-            log.write(repr([str(x) for x in command]) + "\n"); log.flush()
-            subprocess.run([str(x) for x in command], check=True, stdout=log, stderr=subprocess.STDOUT, **kwargs)
+            log.write(repr(arguments) + "\n"); log.flush()
+            try:
+                subprocess.run(arguments, check=True, stdout=log, stderr=subprocess.STDOUT, **kwargs)
+            except subprocess.CalledProcessError:
+                log.flush()
+                with (evidence / "commands.log").open("rb") as diagnostic:
+                    diagnostic.seek(max(0, diagnostic.seek(0, os.SEEK_END) - 16384))
+                    print(diagnostic.read().decode("utf-8", errors="replace"), flush=True)
+                raise
 
     try:
         if (platform.system(), native_architecture()) != TARGETS[args.rid][:2]:

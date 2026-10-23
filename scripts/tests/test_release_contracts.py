@@ -14,7 +14,7 @@ sys.path.insert(0, str(SCRIPTS))
 from package_support import check_runtime_manifest, check_model_manifest, pe_details, dependency_audit, digest
 from native_ci_acceptance import clean_environment
 from package_wsl_addon import validate_addon
-from collect_dependency_notices import validate_notices
+from collect_dependency_notices import collect, validate_notices
 import test_package_native as fixtures
 
 
@@ -146,6 +146,66 @@ class ReleaseContracts(unittest.TestCase):
             deps.write_text("original deps"); (notices / "unexpected.dll").write_bytes(b"untracked")
             with self.assertRaisesRegex(ValueError, "Untracked"):
                 validate_notices(notices, "win-x64", root, published)
+
+    @staticmethod
+    def _notice_inputs(root):
+        """One restored crate with non-ASCII authors and a Unicode package path."""
+        for name in ("engine/Cargo.lock", "app/ColorCorrect.App/ColorCorrect.App.csproj",
+                     "global.json", "rust-toolchain.toml"):
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture", encoding="utf-8")
+        crate = root / "restored-ā-依存"
+        crate.mkdir()
+        (crate / "LICENSE").write_text("Copyright Māori 作者\nFixture license\n", encoding="utf-8")
+        assets = root / "app/ColorCorrect.App/obj/project.assets.json"
+        assets.parent.mkdir()
+        assets.write_text(json.dumps({"packageFolders": {}}), encoding="utf-8")
+        published = root / "published"
+        published.mkdir()
+        (published / "ColorCorrect.App.deps.json").write_text(json.dumps({"libraries": {}}), encoding="utf-8")
+        metadata = {"packages": [{"name": "fixture", "version": "1.0.0", "license": "MIT",
+            "source": "registry+https://example.invalid/index", "manifest_path": str(crate / "Cargo.toml"),
+            "authors": ["Māori 作者"]}]}
+        return published, json.dumps(metadata, ensure_ascii=False).encode("utf-8"), f"fixture v1.0.0 ({crate})\n".encode("utf-8")
+
+    def test_notice_tool_output_is_utf8_under_windows_legacy_default(self):
+        real_check_output = subprocess.check_output
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            published, metadata, tree = self._notice_inputs(root)
+
+            def cargo_output(command, **kwargs):
+                data = metadata if command[1] == "metadata" else tree
+                # Keep actual subprocess text decoding, but simulate the Windows
+                # cp1252 default regardless of the host running this regression.
+                return real_check_output([sys.executable, "-c",
+                    "import sys; sys.stdout.buffer.write(bytes.fromhex('" + data.hex() + "'))"], **kwargs)
+
+            with patch("collect_dependency_notices.subprocess.check_output", side_effect=cargo_output), \
+                 patch("subprocess._text_encoding", return_value="cp1252"):
+                report = collect(root, "win-x64", published, root / "notices", root / "cache")
+            self.assertEqual(len(report["components"]), 1)
+            component = report["components"][0]
+            self.assertEqual(component["package_metadata"]["authors"], ["Māori 作者"])
+            notice = root / "notices" / component["notices"][0]["path"]
+            self.assertEqual(notice.read_text(encoding="utf-8"), "Copyright Māori 作者\nFixture license\n")
+            validate_notices(root / "notices", "win-x64", root, published)
+
+    def test_notice_tool_output_rejects_invalid_utf8_without_replacement(self):
+        real_check_output = subprocess.check_output
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            published, _, _ = self._notice_inputs(root)
+
+            def malformed_output(command, **kwargs):
+                return real_check_output([sys.executable, "-c",
+                    "import sys; sys.stdout.buffer.write(b'{\"packages\":[],\"invalid\":\"\\xff\"}')"], **kwargs)
+
+            with patch("collect_dependency_notices.subprocess.check_output", side_effect=malformed_output), \
+                 patch("subprocess._text_encoding", return_value="cp1252"), \
+                 self.assertRaises(UnicodeDecodeError):
+                collect(root, "win-x64", published, root / "notices", root / "cache")
 
 
 if __name__ == "__main__":

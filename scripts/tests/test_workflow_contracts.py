@@ -1,5 +1,6 @@
 """Parse prepared workflows offline; never dispatch jobs or contact GitHub."""
 from pathlib import Path
+import re
 import unittest
 import yaml
 
@@ -61,6 +62,25 @@ class WorkflowContracts(unittest.TestCase):
                         self.assertRegex(step["uses"], r"^actions/(checkout|setup-python|setup-dotnet|upload-artifact)@[0-9a-f]{40}$")
                     self.assertNotRegex(step.get("run", ""), r"(?im)\b(gh\s+release|twine\s+upload|cargo\s+publish|npm\s+publish|docker\s+push|fetch_libtorch|install_libtorch)\b")
             self.assertNotIn("pull_request_target", workflow["on"])
+
+    def test_ci_uses_the_installed_pinned_native_rust_toolchain(self):
+        workflow = load("native-builds.yml")
+        channel = re.search(r'(?m)^channel\s*=\s*"([^"]+)"',
+                            (ROOT / "rust-toolchain.toml").read_text())[1]
+        self.assertRegex(channel, r"^\d+\.\d+\.\d+$")
+        for name, suffix in (("packages", "${{ matrix.rust }}"),
+                             ("macos_source", "aarch64-apple-darwin")):
+            with self.subTest(job=name):
+                job = workflow["jobs"][name]
+                # Environment overrides the local optional rustfmt/clippy component
+                # request while retaining the exact compiler and native host target.
+                self.assertEqual(job["env"]["RUSTUP_TOOLCHAIN"], channel + "-" + suffix)
+                setup = next(step["run"] for step in job["steps"]
+                             if "rustup toolchain install" in step.get("run", ""))
+                self.assertIn('rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal', setup)
+                self.assertIn('rustup default "$RUSTUP_TOOLCHAIN"', setup)
+                self.assertIn("rustup show active-toolchain", setup)
+                self.assertIn("rustc -Vv", setup)
 
     def test_source_only_mac_artifacts_and_separate_hardware_gate(self):
         workflow = load("native-builds.yml")
