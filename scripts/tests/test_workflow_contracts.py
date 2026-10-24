@@ -29,6 +29,26 @@ def load(name):
 
 
 class WorkflowContracts(unittest.TestCase):
+    def test_concurrency_separates_main_pull_request_dispatch_and_version_tag(self):
+        concurrency = load("native-builds.yml")["concurrency"]
+
+        def group(event, reference, pull_request=None):
+            values = {"github.workflow": "Native release candidates and source checks",
+                      "github.event_name": event, "github.ref": reference,
+                      "github.event.pull_request.number || github.ref": str(pull_request or reference)}
+            return re.sub(r"\$\{\{\s*(.*?)\s*\}\}", lambda match: values[match[1]], concurrency["group"]).lower()
+
+        main = group("push", "refs/heads/main")
+        merged_pr = group("pull_request", "refs/heads/main", 4)
+        dispatch = group("workflow_dispatch", "refs/heads/main")
+        tag = group("push", "refs/tags/v0.2.0")
+        self.assertEqual(len({main, merged_pr, dispatch, tag}), 4)
+        # A queued PR must retain its own cancellation group even if its ref
+        # resolves to main after merging. New commits in that PR still supersede it.
+        self.assertEqual(merged_pr, group("pull_request", "refs/pull/4/merge", 4))
+        self.assertNotEqual(merged_pr, group("pull_request", "refs/pull/5/merge", 5))
+        self.assertEqual(concurrency["cancel-in-progress"], "true")
+
     def test_native_targets_pins_and_source_filters(self):
         workflow = load("native-builds.yml")
         matrix = workflow["jobs"]["packages"]["strategy"]["matrix"]["include"]

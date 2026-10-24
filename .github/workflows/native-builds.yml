@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-${{ github.workflow }}-${{ github.ref }}
+  group: native-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
   CARGO_BUILD_JOBS: 2
