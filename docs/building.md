@@ -30,7 +30,11 @@ Use `linux-arm64` on native ARM64. See the installer guide for portable archives
 
 ## Apple-silicon macOS: source only
 
-Use macOS 14 or later on Apple silicon. These instructions are prepared for native validation; no Mac host has yet executed them for this candidate. No macOS installer, application binary or runtime archive is distributed.
+Use macOS 14 or later on Apple silicon. The native source build, component tests,
+installed SDK smoke and application launch passed on an Apple-silicon macOS 15.7.9
+GitHub runner in [run 40042855625](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/runs/40042855625).
+Interactive UI and hardware GPU acceptance remain separate, outstanding gates.
+No macOS installer, application binary or runtime archive is distributed.
 
 Install [Apple's command-line tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/), the **Arm64 .NET SDK 10.0.402** using [Microsoft's macOS instructions](https://learn.microsoft.com/en-us/dotnet/core/install/macos), [Rust through rustup](https://rust-lang.github.io/rustup/installation/), and a native Python 3.10+ interpreter from [Python's macOS downloads](https://www.python.org/downloads/macos/). The Python universal2 distribution can run natively on Apple silicon. Open a native Terminal rather than a Rosetta shell. From the source checkout, verify:
 
@@ -55,7 +59,7 @@ bash scripts/build_macos.sh "$PWD/dist/local-macos"
 "$PWD/dist/local-macos/launch"
 ```
 
-The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. Native app/GPU acceptance remains outstanding. Intel macOS is outside scope. No signing or notarization is performed.
+The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. CI checks source compilation, tests and a ten-second launch; complete interactive UI and hardware GPU workflows remain unvalidated. Intel macOS is outside scope. No signing or notarization is performed.
 
 Install the Python API in a local virtual environment and point it at that local build:
 
@@ -97,16 +101,43 @@ dependency. The listed wheels cover the five native CI targets.
 ```text
 python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-ci.txt
 dotnet test app/ColorCorrect.sln -c Release -p:RestoreLockedMode=true
-cargo test --release --manifest-path engine/Cargo.toml --workspace --lib --tests --locked
+cargo test --release --manifest-path engine/Cargo.toml --locked -p ccp_core -p ccp_detect -p ccp_bridge --no-default-features --features ccp_bridge/ort-plane,ccp_bridge/wgpu-lut,ccp_bridge/rust-inference
 python -m unittest discover -s api/tests -p test_*.py
 python -m unittest discover -s scripts/tests -p test_*.py
 python scripts/export_source.py --check
 python -m pip install ./api
 ```
 
-For this validation effort, component/unit checks run on the Windows host; the extracted final application and installed wheel are exercised in Sandbox and WSL. GitHub Actions builds native Windows/Linux x64 and ARM64 packages; actual hardware GPU acceptance is recorded separately. [Validation split](native-validation.md)
+On Linux, add `-p ccp_wgpu_infer` to the Cargo command to test the Linux inference
+implementation too. CI selects the crates that ship on each platform rather than
+building an inactive Linux inference crate as a separate Mac or Windows test.
+
+Local component/unit checks run on the Windows host; final application and
+installed-wheel workflows are exercised in Sandbox and WSL. GitHub Actions also
+builds and tests native Windows/Linux x64 and ARM64 packages and the Apple-silicon
+source build. Actual hardware GPU and complete interactive UI acceptance are
+recorded separately. [Validation split](native-validation.md)
 
 The SDK discovers an intact native package with `Client(root=...)` or `ColorCorrection(..., root=...)`. It never downloads GPU drivers. No server or Python ML package is needed.
+
+## Automated builds and releases
+
+Pushes to `main` run the four Windows/Linux native package jobs and the
+Apple-silicon source-validation job. Their build artifacts and evidence are
+available from the Actions run; a main-branch build does not create a release.
+
+A version tag matching the application version, such as `v0.2.0`, runs the same
+five checks. After all succeed, the release publisher verifies the tag, source
+identity and package inventories before creating a GitHub prerelease. It publishes
+Windows/Linux installers and portable packages, checksums and package manifests.
+The SDK wheel is included inside those native packages. Existing published releases
+and assets are not replaced. Apple-silicon CI uploads text evidence only; no Mac
+application, runtime, installer or binary archive is released.
+
+Published packages remain unsigned, and hosted build/install/smoke checks do not
+certify every graphics driver or desktop workflow. See
+[packaging and release assets](../installer/README.md) and
+[release procedures](releasing.md) for the artifact contract and validation limits.
 
 ## Reproducible source export
 

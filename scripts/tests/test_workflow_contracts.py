@@ -50,18 +50,38 @@ class WorkflowContracts(unittest.TestCase):
                 if step.get("uses", "").startswith("actions/setup-dotnet@"):
                     self.assertEqual(step["with"], {"global-json-file": "global.json"})
 
-    def test_readonly_full_action_pins_and_no_publishing(self):
+    def test_readonly_builds_full_action_pins_and_scoped_release_permissions(self):
         for name in ("native-builds.yml", "hardware-gpu-acceptance.yml"):
             workflow = load(name)
             self.assertEqual(workflow["permissions"], {"contents": "read"})
-            for job in workflow["jobs"].values():
+            for job_name, job in workflow["jobs"].items():
                 if "permissions" in job:
-                    self.assertEqual(job["permissions"], {"contents": "read"})
+                    expected = {"contents": "write", "actions": "read"} if name == "native-builds.yml" and job_name == "publish" else {"contents": "read"}
+                    self.assertEqual(job["permissions"], expected)
                 for step in job["steps"]:
                     if "uses" in step:
                         self.assertRegex(step["uses"], r"^actions/(checkout|setup-python|setup-dotnet|upload-artifact)@[0-9a-f]{40}$")
                     self.assertNotRegex(step.get("run", ""), r"(?im)\b(gh\s+release|twine\s+upload|cargo\s+publish|npm\s+publish|docker\s+push|fetch_libtorch|install_libtorch)\b")
             self.assertNotIn("pull_request_target", workflow["on"])
+
+    def test_only_version_tag_pushes_publish_after_all_native_jobs(self):
+        workflow = load("native-builds.yml")
+        self.assertEqual(workflow["on"]["push"], {"branches": ["main"], "tags": ["v*"]})
+        publish = workflow["jobs"]["publish"]
+        self.assertEqual(set(publish["needs"]), {"packages", "macos_source"})
+        checkout = next(step for step in publish["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+        self.assertEqual(checkout["with"], {"persist-credentials": "false"})
+        for condition in ("github.event_name == 'push'", "startsWith(github.ref, 'refs/tags/v')",
+                          "needs.packages.result == 'success'", "needs.macos_source.result == 'success'"):
+            self.assertIn(condition, publish["if"])
+        for name, job in workflow["jobs"].items():
+            for step in job["steps"]:
+                if "GH_TOKEN" in step.get("env", {}):
+                    self.assertEqual(name, "publish")
+                    self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+                    self.assertEqual(step["run"], 'python scripts/publish_release.py --publish --output "$RUNNER_TEMP/release-assets"')
+                if "publish_release.py" in step.get("run", ""):
+                    self.assertEqual(name, "publish")
 
     def test_ci_uses_the_installed_pinned_native_rust_toolchain(self):
         workflow = load("native-builds.yml")

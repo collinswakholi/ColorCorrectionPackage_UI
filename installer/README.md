@@ -1,4 +1,4 @@
-# Native installation candidates
+# Windows and Linux packages
 
 The desktop application includes a self-contained .NET runtime, the Rust worker,
 three detector models and architecture-matched GPU inference libraries. Python is
@@ -26,7 +26,7 @@ python3 scripts/fetch_gpu_runtime.py --rid linux-x64 --output artifacts/runtime
 CCP_ORT_RUNTIME="$PWD/artifacts/runtime" bash scripts/package_linux.sh --fetch-notices
 ```
 
-Outputs are a `.deb` with explicit system-library dependencies and a portable
+On Ubuntu 24.04, outputs are an architecture-matched `.deb` with explicit system-library dependencies and a portable
 archive. Filenames include the native app version, for example
 `ColorCorrect-Studio-0.2.0-win-x64-Setup.exe`,
 `ColorCorrect-Studio-0.2.0-linux-arm64.tar.gz` and
@@ -53,9 +53,40 @@ Apple-silicon macOS is source-only. Use `scripts/build_macos.sh`; the source CI 
 uploads text evidence only. There is no Mac installer, binary archive or Intel Mac
 target. See the repository installation guide for prerequisites.
 
-CI uses native architectures and pinned actions, builds unsigned candidates, and
+## Automated builds and release assets
+
+Pushes to `main` build and test native Windows 11 x64/ARM64 and Ubuntu 24.04
+x64/ARM64 packages, alongside Apple-silicon macOS source validation. Pull requests
+and manual runs also produce build evidence. A main build retains candidates in
+Actions artifacts; it does not create a GitHub release.
+
+A tag matching the application version, such as `v0.2.0`, runs all five checks
+and publishes a GitHub prerelease only after they all pass. The publisher verifies
+the current tag, its source on `main`, the run identity, and the package inventories.
+It uploads to a draft first, verifies every asset, then publishes the prerelease
+without promoting it to the latest stable release. Existing published releases
+and assets are not replaced.
+
+Each prerelease contains:
+
+| Target | Distributions |
+| --- | --- |
+| Windows x64 | `ColorCorrect-Studio-<version>-win-x64-Setup.exe`, `ColorCorrect-Studio-<version>-win-x64.zip` |
+| Windows ARM64 | `ColorCorrect-Studio-<version>-win-arm64-Setup.exe`, `ColorCorrect-Studio-<version>-win-arm64.zip` |
+| Ubuntu 24.04 x64 | `colorcorrect-studio_<version>_amd64.deb`, `ColorCorrect-Studio-<version>-linux-x64.tar.gz` |
+| Ubuntu 24.04 ARM64 | `colorcorrect-studio_<version>_arm64.deb`, `ColorCorrect-Studio-<version>-linux-arm64.tar.gz` |
+
+The release also includes `SHA256SUMS`, plus `SHA256SUMS-<rid>.txt` and
+`package-manifest-<rid>.json` for each of `win-x64`, `win-arm64`, `linux-x64` and
+`linux-arm64`. The separate Python SDK wheel is inside the native packages under
+`python/`; its version need not match the application version. Apple-silicon macOS
+has source instructions and text-only CI evidence, with no downloadable Mac
+application, runtime, installer or binary archive.
+
+CI uses native architectures and pinned actions, builds unsigned packages, and
 performs separate extracted-archive and installed-package checks. Hosted runner
 labels do not establish hardware GPU or complete UI acceptance. The optional
 hardware job requires a provisioned runner and an explicit dispatch opt-in. Native
-UI, hardware, clean installation, redistribution review and signing gates remain
-visible in package/evidence manifests. No workflow publishes a GitHub release.
+UI, hardware, redistribution review and signing gates remain visible in
+package/evidence manifests. A successful build or published prerelease does not
+change those acceptance limits.

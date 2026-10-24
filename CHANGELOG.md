@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — Unreleased local candidate
+## 0.2.0 — Preview release
 
 - Increment the native app and internal Rust packages from 0.1.0 to 0.2.0.
   The independently versioned Python SDK remains 2.2.1; protocol and saved-data
@@ -15,6 +15,11 @@
 - Current test/package evidence remains separate from historical release notes below.
 - Native CI pins Python 3.12.10, locks component restores, reuses release Rust
   builds, checks packaging/source contracts and retains explicit artifact allowlists.
+- Build Windows/Linux x64 and ARM64 applications automatically on `main`; publish
+  version-tagged preview releases only after all five native validation jobs pass.
+  Apple-silicon macOS remains source-only, with text evidence uploads.
+- Replace the animated README demo with a static workflow illustration and add
+  architecture-specific downloads, installation steps and current API examples.
 - Honor cancellation before preparing inputs and move expensive preparation off
   the UI thread; canceled operations retain the previous successful result.
 - Capture the selected chart face and rendering inputs before background

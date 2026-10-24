@@ -1,6 +1,6 @@
 # Readiness ledger
 
-This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. Current CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). Candidates remain unsigned, with no publishing or macOS binary distribution.
+This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). The subsequent version-tag workflow publishes unsigned Windows/Linux preview packages after native checks pass. Apple-silicon macOS remains source-only, with no application binary distribution.
 
 ## Current 0.2.0 source
 
@@ -10,7 +10,7 @@ Before CI, host checks passed: 130 headless UI tests, 63 engine component tests 
 
 The final local 0.2.0 Windows Sandbox and WSL packages passed ten individual corrections (five with FFC and five without), a ten-image chart-fitting queue with previews, and a ten-image fixed-model application queue with previews disabled. Both guests also repeated identical-content relinking, GC/Original/Corrected previews, theme changes and session restart, then closed without orphan workers. Separate installed SDK checks produced thirty full-output outcomes per guest; actual GPU execution is recorded for those SDK runs. These are bounded acceptance results for the preserved x64 package hashes, not controlled performance measurements or certification of every control and display configuration. Exact identities and evidence are retained in the local archive referenced by ignored `_implementation/LOCAL_ARCHIVE.json`.
 
-Native Windows/Linux x64 and ARM64 build, installation and SDK smoke checks, plus Apple-silicon macOS source validation, now run in the linked PR. Hosted checks do not certify hardware GPU execution or interactive UI behavior. The Mac job uploads text evidence only; no application binary, archive or installer is distributed.
+Native Windows/Linux x64 and ARM64 build, installation and SDK smoke checks, plus Apple-silicon macOS source validation, run for pull requests, updates to `main`, and version tags. Hosted checks do not certify hardware GPU execution or interactive UI behavior. The Mac job uploads text evidence only; no application binary, archive or installer is distributed.
 
 ## Historical candidate evidence
 
