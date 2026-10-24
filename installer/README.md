@@ -39,6 +39,14 @@ Portable users can inspect `install-dependencies` and explicitly run it with
 `--install`. Neither route changes GPU drivers. Launchers check prerequisites using
 OS tools before invoking the application/worker; they do not require Python.
 
+## Experimental WSL GPU setup
+
+Official 0.2.0 Linux release assets omit this add-on. They target native Ubuntu
+with a compatible OS/vendor GPU driver. WSL chart/plane inference on the tested system
+requires the separately built component below; merely enabling the setting in a
+standard release package cannot install the missing files. A separately published
+add-on download is not currently available.
+
 The experimental WSL x64 add-on is optional and defaults off. Build it privately
 with `scripts/build_wsl_addon.sh NEW_DIRECTORY`, then pass its `addon` folder to
 `package_native.py --wsl-addon`. Its Mesa 25.2.8 driver has a relative ICD path and
@@ -48,6 +56,8 @@ activates it after `wsl-gpu-setup enable`, or with explicit
 selection, system driver, or GUI graphics environment is changed. WSL's host
 `libd3d12.so`, `libdxcore.so` and `/dev/dxg` remain prerequisites. Add-on rebuild
 reproducibility and each new artifact's hardware correctness must be validated.
+
+## Apple-silicon source delivery
 
 Apple-silicon macOS is source-only. Use `scripts/build_macos.sh`; the source CI job
 uploads text evidence only. There is no Mac installer, binary archive or Intel Mac

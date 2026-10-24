@@ -14,6 +14,25 @@ Windows/Linux x64 and ARM64 are packaging targets. Apple-silicon macOS has sourc
 
 Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available; inference must never silently switch to CPU.
 
+## Public 0.2.0 download qualification
+
+The 24 October 2026 UTC audit downloaded all 17 public release assets and verified
+their GitHub digests. All eight application distributions match the tagged native
+CI candidates; public, embedded, candidate, and native-installed manifests match.
+Static inspection verified 1,736 payload hashes and all four native architectures.
+This establishes package identity, not additional GPU or UI execution coverage.
+
+The native ARM64 jobs installed those exact packages and passed component and CPU
+SDK checks. Their GPU enumeration returned no GPUs. ARM64 GPU chart/plane inference and native
+interactive workflows remain unvalidated; ARM64 downloads remain experimental.
+
+Official Linux 0.2.0 assets omit the optional experimental WSL add-on. A fresh WSL
+installation can launch and apply a saved model on CPU, but chart/plane inference on the
+tested host requires a separately built Mesa Dozen 25.2.8 component. Acceptance
+with that component must be identified as **public payload plus the experimental
+add-on**. It does not establish out-of-the-box WSL GPU operation or physical
+Ubuntu desktop GPU certification. See the [WSL setup requirements](../installer/README.md#experimental-wsl-gpu-setup).
+
 ## Earlier candidate evidence
 
 This section records native 0.1.0 candidates through RC8 and their intervening fixes. It is a historical snapshot, including its component-test counts and resource observations. The [readiness ledger](readiness.md) summarizes the subsequent local 0.2.0 installed acceptance. Native architecture CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4); those build/install/smoke checks remain separate from hardware GPU and interactive UI acceptance.

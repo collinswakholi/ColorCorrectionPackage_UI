@@ -32,6 +32,10 @@ separate checks. See the [validation record](docs/native-validation.md).
 **x64** means 64-bit Intel/AMD; **ARM64** means 64-bit Arm. Choose your operating
 system's native architecture. These packages do not target 32-bit x86.
 
+ARM64 packages have passed native build, installation, component, and CPU API
+checks. Chart/plane inference on ARM64 GPUs and interactive UI workflows remain unvalidated;
+these downloads remain experimental.
+
 On **Windows**, run Setup and open **ColorCorrect Studio**. For a portable install,
 extract the entire ZIP and run `ColorCorrect-Studio.cmd`. Setup offers the included
 Microsoft Visual C++ prerequisite when needed; it does not replace GPU drivers.
@@ -55,6 +59,13 @@ intact; its libraries and models are private to that installation.
 Release assets include SHA-256 checksums and a manifest for each architecture.
 See [installation details](installer/README.md) for prerequisites, verification,
 portable use, and the optional experimental WSL GPU setup.
+
+**WSL GPU use is experimental.** Official 0.2.0 Linux downloads do not include the
+optional Mesa Dozen add-on. On the tested WSL system, chart detection required a
+separately built, verified add-on; the standard download alone could only apply
+saved models on CPU. Native Ubuntu uses its OS/vendor GPU driver. The current
+[WSL setup instructions](installer/README.md#experimental-wsl-gpu-setup) require a
+source build; there is no separately published add-on installer.
 
 ## Your first correction
 
