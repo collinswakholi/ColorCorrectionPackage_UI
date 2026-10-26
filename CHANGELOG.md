@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 — Unreleased
+
+- Refresh existing log and ΔE colors when switching themes, preserving completed results.
+- Let CC/FFC settings use the available height when resized, while keeping the Done action reachable in small windows.
+- Simplify Processing settings with full-width controls, ordinary disclosure rows, scrollable device details, and a visible rounded keyboard focus ring.
+- Improve light-theme plot-label contrast, hide the interaction checkbox where the fitting method ignores it, and label the sampling grid in samples per side.
+- Run lightweight documentation checks for root README/demo-only edits while retaining native checks for code, packaged documentation, tags and manual runs.
+- Rewrite the Python guides and notebooks around the installed SDK, with editable FFC/GC/WB/CC options and clean-environment execution checks.
+- Restore research/software attribution and prepare an authentic dark-mode demonstration with expanded analysis figures.
+- Keep published 0.2.0 assets unchanged. Local UI repair candidates explicitly retain their published worker/runtime/model components; they are not full native release builds.
+
 ## 0.2.0 — Preview release
 
 - Increment the native app and internal Rust packages from 0.1.0 to 0.2.0.

@@ -1,12 +1,20 @@
-# ColorCorrect without the GUI
+# Advanced Engine API and NDJSON protocol
 
 All native correction operations are already callable through the bundled `ccp-engine` worker. The public Python API and command-line wrapper now make that interface usable by default: **no GUI, HTTP server, API key, network connection, or Python ML dependencies**. Python 3.10+ is optional; any language that can launch a process and exchange JSON lines can use the worker directly. Desktop-only interactions such as catalog selection and window layout are not processing API operations.
 
-## Start here
+## Legacy Engine workflow
 
-### Short Python workflow (SDK 1.1)
+For everyday work start with the [installed run/predict SDK](../../api/README.md)
+and [typed configuration guide](README.md#configuration-reference). This reference
+documents the preserved low-level `Engine` interface and transport. Its raw reply
+shapes and legacy defaults differ from the typed SDK. Install the wheel or use
+`python -m pip install ./api`; no `sys.path` modification is needed.
 
-Add the packaged `api/` folder to Python's import path, then:
+```python
+from colorcorrect import Engine
+```
+
+A legacy fit/apply example:
 
 ```python
 from colorcorrect import Engine
@@ -47,7 +55,8 @@ workers reject it explicitly.
 
 ![Calibration, validation, and application workflow](../images/workflow.svg)
 
-In the SDK, this is `detect` → `fit` → inspect the report → `apply`.
+In this legacy interface, the flow is `detect` → `fit` → inspect the report → `apply`.
+The current typed SDK uses `Client.calibrate()` or `ColorCorrection.run()`.
 The notebooks display the source, corrected result, and FFC preview so the numeric
 results can be checked visually as well as through assertions.
 
@@ -60,12 +69,10 @@ python api/colorcorrect.py detect --json '{"image":"test_images/ColorCard_Big.JP
 
 For Windows shells with JSON-quoting differences, put parameters in a UTF-8 JSON file and use `--json @request.json`, or pipe JSON through `--json -`. The CLI writes progress to stderr and one result object to stdout; exit code 0 means complete success, 1 means failure (including partial batch failure). `--engine`, `--root`, `--policy` and `--timeout` work for every command. The CLI defaults to `auto`. Legacy `Engine()` retains its `cpu` policy default, which selects CPU LUT processing while detection still requires GPU inference.
 
-Python import (add the shipped `api/` folder to `sys.path` or `PYTHONPATH`):
+Python import after installing the SDK:
 
 ```python
 from pathlib import Path
-import sys
-sys.path.insert(0, str(Path("api").resolve()))
 from colorcorrect import Engine
 
 root = Path.cwd().resolve()
@@ -97,10 +104,14 @@ with Engine(root=root, policy="cpu", progress=print) as engine:
 
 ## Runnable notebooks and tests
 
-- [01: full chart-to-image workflow](../../notebooks/01_headless_workflow.ipynb): detection, FFC, fitting, held-out metrics, batch apply, preview and LUT.
-- [02: all fit families and NN options](../../notebooks/02_compare_fit_methods.ipynb): six methods, then Adam/SGD/RMSprop with editable layers, normalization and dropout.
+- [01: full chart-to-image workflow](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/01_headless_workflow.ipynb): detection, FFC, fitting, held-out metrics, batch apply, preview and LUT.
+- [02: all fit families and NN options](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/02_compare_fit_methods.ipynb): six methods, then Adam/SGD/RMSprop with editable layers, normalization and dropout.
 
-Open notebooks from the app root or `notebooks/`. They create fresh temporary artifact directories and print their paths. The sample corpus is in the source checkout; set `COLORCORRECT_SAMPLES` to its directory when using a packaged app. Install `python -m pip install jupyterlab pillow` for the notebook interface and compact inline result thumbnails; the SDK itself is standard-library-only. Restart the kernel and Run All. Do not reuse stale detection coordinates on another image. Both tutorials display real before/after images, and the first isolates the FFC result.
+The notebooks use the installed SDK from any working directory, with explicit app,
+sample, and durable output directories. Follow the [notebook setup guide](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md)
+for environment variables, QA-only dependencies, and the fresh-kernel acceptance
+runner. Both tutorials display real before/after images; the first isolates FFC.
+Never reuse a detection on another image.
 
 ```powershell
 python -m unittest discover -s api/tests -v
@@ -111,7 +122,7 @@ The first command runs fast isolated transport tests, not color-science tests. T
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are discovered beside the worker; `ORT_DYLIB_PATH` can select an explicit compatible runtime. The legacy `cpu` policy controls LUT processing only: chart and plane inference always require DirectML or WebGPU. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference always require DirectML or WebGPU. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
@@ -151,17 +162,17 @@ Required `image`, `handshake` (path or JSON object), `output`. Always provide `r
 |---|---|
 | `model` | `ccm`, `rpcc2` (default), `rpcc3`, `linear`, `pls`, `nn` |
 | `face`, `use_all` | Zero-based detected chart face (0); combine detected faces (false) |
-| `crop`, `fit_samples` | Interior patch crop (.75); samples per patch (9) |
+| `crop`, `fit_samples` | Interior patch crop (.75); samples per axis within each patch (9, a 9×9 grid) |
 | `do_ffc`, `white`, `crop_rect` | FFC (defaults on when white supplied), white image, optional integer pixel rectangle string `x1,y1,x2,y2` |
 | `do_gc`, `do_wb`, `do_cc` | Enable automatic range-safe GC, WB, CC (all true); no GC degree |
 | `do_sat`, `skip_saturated` | Saturated-patch extrapolation (true), skip saturated fit samples (false) |
-| `degree`, `include_combinations` | Polynomial feature degree (2), cross terms (true) for applicable models |
+| `degree`, `include_combinations` | Polynomial feature degree (2; native effective range 1–7) for linear/PLS/NN; cross-term toggle (true) affects linear only, while PLS/NN always include interactions |
 | `pls.components` | PLS component count; 0 selects automatically |
 | `nn` | See NN options below |
 | `spaces.input`, `spaces.target` | Actual input/output pixel encodings (both `srgb`) |
 | `whites.input`, `whites.target` | White points (both `d65`) |
 | `clip_lo`, `clip_hi` | Fit/extrapolation bounds (-.2, 1.3); output image serialization clips to [0,1] |
-| `cross_validate` | Held-out chart validation (true) |
+| `cross_validate` | CC-only held-out chart validation (true); prior stages remain fitted on the full chart |
 | `phase2_teacher` | Auxiliary teacher artifacts (true); set false unless needed |
 | `write_output` | Write final image (true); false still writes report/model |
 | `preview_dir`, `preview_mode` | Optional preview artifacts; `none`, `corrected` (default), `all`, or stage name |

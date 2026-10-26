@@ -31,11 +31,9 @@ internal static class DialogLayout
         var y = owner.Position.Y + (int)Math.Round((owner.Bounds.Height - dialog.Height) * owner.RenderScaling / 2);
         dialog.Position = new PixelPoint(x, y);
 
-        if (dialog.FindControl<ScrollViewer>("SettingsScroll") is { } scroll)
-        {
-            scroll.MaxHeight = Math.Max(120, dialog.Height - 150);
-        }
-
+        // The settings DockPanel gives its final ScrollViewer the remaining
+        // finite height. An opening-time MaxHeight becomes stale after resize
+        // and centers a clipped viewport inside an otherwise larger dialog.
         dialog.InvalidateMeasure();
         dialog.InvalidateArrange();
     }

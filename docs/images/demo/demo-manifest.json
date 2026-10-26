@@ -1,0 +1,586 @@
+{
+  "source_color_space": "srgb",
+  "capture": {
+    "application_version": "0.2.1 UI-repair candidates v2 and v3; see per-frame package manifests",
+    "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+    "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+    "fixture": "ColorCard_Big.JPG with Blank.JPG FFC; batch uses four public sample photographs"
+  },
+  "encoder": {
+    "script_sha256": "4dfb87dd45721c65102ff708693d924282b817bc1b4a134405d6590af2c81104",
+    "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "pillow": "12.3.0",
+    "apng_compression_level": 9,
+    "gif_palette": "per-frame median cut, 256 colors, Floyd-Steinberg dither"
+  },
+  "storyboard_sha256": "73b563f98d6a90b153d129c9683defe5fe3bb13eae973568936357b5254f3ef2",
+  "dimensions": [
+    1440,
+    900
+  ],
+  "total_duration_ms": 50640,
+  "loop": "continuous",
+  "apng_frames": 30,
+  "gif_frames": 30,
+  "apng_hold_pixels_exact": true,
+  "gallery_pixels_exact": true,
+  "gif_quality_note": "Encoded sRGB pixel differences measure palette loss, not physical color accuracy.",
+  "frames": [
+    {
+      "id": "01-photo",
+      "caption": "A public chart photograph loaded",
+      "source_name": "01-photo.png",
+      "source_sha256": "e4608ddfe7cf1337f73f6e1eeb11d820811a0b6cec4c3445a070d0a10f8ea1b3",
+      "source_rgb_sha256": "45fa5b7dbf55b7a7f21040364f2e18f3830dc209bc95261641c2c29743d80f20",
+      "rendered_rgb_sha256": "45fa5b7dbf55b7a7f21040364f2e18f3830dc209bc95261641c2c29743d80f20",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "duration_ms": 3500,
+      "transition_ms": 0,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 1.3918894032921811,
+        "p95_absolute_channel_error_8bit": 5,
+        "max_absolute_channel_error_8bit": 95,
+        "rgb_sha256": "5507376bbdd370e15d1a99ef5c06982fc78f18c51c07c8f4ddf8233f530ef9e7"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "02-detected",
+      "caption": "Detected chart and patch overlay",
+      "source_name": "02-detected.png",
+      "source_sha256": "7994b058bf66ebc55de47bac1edc5143a921337f0a5a96399789edccdf1d1c5e",
+      "source_rgb_sha256": "3635485d2b411cccc2d1d44e7b1df2b16521a1f034f7ca5479e9640843454514",
+      "rendered_rgb_sha256": "3635485d2b411cccc2d1d44e7b1df2b16521a1f034f7ca5479e9640843454514",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "duration_ms": 3500,
+      "transition_ms": 160,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 1.4090874485596707,
+        "p95_absolute_channel_error_8bit": 5,
+        "max_absolute_channel_error_8bit": 115,
+        "rgb_sha256": "714c50385aaf3a6b5959c3d1b5e89a93fd8472da9601e947f4d2dedcd7acedc6"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "03-processing-menu",
+      "caption": "Simple correction device and detection-engine settings",
+      "source_name": "14-processing-menu.png",
+      "source_sha256": "680f912d767bca92f1f84a07010211abdb831dc6310831fb508c869dd31c6342",
+      "source_rgb_sha256": "c85beecd9527ce268c24b9280d11014842431bda1eeb3d5558c8b3c6df1c0882",
+      "rendered_rgb_sha256": "432295883c655e062bba82e1dafe0731d95c972cdbbe9b33500a0d167e372a7c",
+      "presentation": "popup-closeup",
+      "capture_region": [
+        524,
+        208,
+        916,
+        692
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "duration_ms": 3000,
+      "transition_ms": 160,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.03639711934156378,
+        "p95_absolute_channel_error_8bit": 0,
+        "max_absolute_channel_error_8bit": 62,
+        "rgb_sha256": "a0014b348412f6ad729e4adbe40c75523faf4bfcfcab9a1736b90a6b998841d5"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "03-cc-options",
+      "caption": "Color-correction settings",
+      "source_name": "03-cc-options.png",
+      "source_sha256": "e5789c6936f9927f99420acc8ecf85ef50a9ec300a3c3bf52873ea157d04da7d",
+      "source_rgb_sha256": "53728b324944ea8ba53f3ec2fcaeb45dd96ad29d3140982b65e81b57d564fcd9",
+      "rendered_rgb_sha256": "98584b8b49736fa3f2ea9d26fe7638c47863b314c3e919a5ffae7dbb776caa3c",
+      "presentation": "dialog-closeup",
+      "capture_region": [
+        490,
+        50,
+        950,
+        850
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 5000,
+      "transition_ms": 160,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.11816615226337449,
+        "p95_absolute_channel_error_8bit": 1,
+        "max_absolute_channel_error_8bit": 63,
+        "rgb_sha256": "a30cc503bb560d36d4a421bd241bc9d52756c0390c6cf3806720509289eb5883"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "04-processing",
+      "caption": "Actual correction in progress",
+      "source_name": "04-processing.png",
+      "source_sha256": "69a1eb8d9386cb34cbc223666a01d13544f77e62d3b943ccda621a33ee382ca8",
+      "source_rgb_sha256": "ce8b469f926ec53d6b66779cb3067a0f88dcba96482e53f6b67ba84b89a6934e",
+      "rendered_rgb_sha256": "ce8b469f926ec53d6b66779cb3067a0f88dcba96482e53f6b67ba84b89a6934e",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "duration_ms": 2500,
+      "transition_ms": 160,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.8167420267489712,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 125,
+        "rgb_sha256": "7c4391f68792735d5371416176cbb5962d5c75925da1e716baf3a95998c1fb67"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "05-original",
+      "caption": "Original photograph",
+      "source_name": "05-original.png",
+      "source_sha256": "d71eaacd4757c7024014d5ffd594212462bbc32655b56a5bc708ee654decf474",
+      "source_rgb_sha256": "df20455ede16a2d32c6bc566ec9142e11ad4a0f7d1c6cc34aa5e901462390931",
+      "rendered_rgb_sha256": "df20455ede16a2d32c6bc566ec9142e11ad4a0f7d1c6cc34aa5e901462390931",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3000,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 1.1116090534979424,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 122,
+        "rgb_sha256": "06b714a5d678693179f3e7555ca03be52f81eb2e786e671a61e7d57dd955e730"
+      },
+      "gif_region_differences": {
+        "chart": {
+          "box": [
+            670,
+            170,
+            1100,
+            470
+          ],
+          "mean_absolute_channel_error_8bit": 2.7016770025839794,
+          "p95_absolute_channel_error_8bit": 12,
+          "max_absolute_channel_error_8bit": 88,
+          "rgb_sha256": "ea974421bd3747dd8c2638229a1fa978ff3fa7878fbf3e9d84072ff9e5cba913"
+        }
+      }
+    },
+    {
+      "id": "06-ffc",
+      "caption": "After flat-field correction",
+      "source_name": "06-ffc.png",
+      "source_sha256": "4a1a93e8c307274f06b522ac609ae28139acffd35a92f5220110c95c7cb09296",
+      "source_rgb_sha256": "96bda0fa61dce4034c4d83f86ce49db61a499daad17ea5c2ffc2472189f96590",
+      "rendered_rgb_sha256": "96bda0fa61dce4034c4d83f86ce49db61a499daad17ea5c2ffc2472189f96590",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3000,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.8497178497942387,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 83,
+        "rgb_sha256": "66b20622b5fdf838d76cc1d5777e3893b1ed1dd75d553e46bfd9cffa92279aa1"
+      },
+      "gif_region_differences": {
+        "chart": {
+          "box": [
+            670,
+            170,
+            1100,
+            470
+          ],
+          "mean_absolute_channel_error_8bit": 1.9541447028423773,
+          "p95_absolute_channel_error_8bit": 6,
+          "max_absolute_channel_error_8bit": 83,
+          "rgb_sha256": "57a4bad605f11838a0758aed93c860b75f341fc05171fcfed7c83cfd305fcde8"
+        }
+      }
+    },
+    {
+      "id": "07-gc",
+      "caption": "After tone-response correction",
+      "source_name": "07-gc.png",
+      "source_sha256": "20462218a2bdd7518a8c184e8478b9f21772324c66822df954a7e35311b20782",
+      "source_rgb_sha256": "35dc408e6c5698d07876c3a004c621b32d80fd8144702d94f7d9044b8afbd4ac",
+      "rendered_rgb_sha256": "35dc408e6c5698d07876c3a004c621b32d80fd8144702d94f7d9044b8afbd4ac",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3000,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.9069192386831276,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 109,
+        "rgb_sha256": "532b6424d5f7137a75afe74eedf8ef71c9d7da16a22faffc981c6fb542850d70"
+      },
+      "gif_region_differences": {
+        "chart": {
+          "box": [
+            670,
+            170,
+            1100,
+            470
+          ],
+          "mean_absolute_channel_error_8bit": 2.9900852713178296,
+          "p95_absolute_channel_error_8bit": 13,
+          "max_absolute_channel_error_8bit": 109,
+          "rgb_sha256": "65271503c1ba46f6761a47e41f05d375d96d1546a523183039955785da207f64"
+        }
+      }
+    },
+    {
+      "id": "08-wb",
+      "caption": "After white balance",
+      "source_name": "08-wb.png",
+      "source_sha256": "4623f8f1b2c414fc8d4eba06e3d1695a6bec6b143aec61e7461336e2915e9935",
+      "source_rgb_sha256": "c94c5673f1d45c0dcf68fe9e9296ee5bd6becdd65584431e7e1bad59aa5c85fc",
+      "rendered_rgb_sha256": "c94c5673f1d45c0dcf68fe9e9296ee5bd6becdd65584431e7e1bad59aa5c85fc",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3000,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.8777106481481481,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 92,
+        "rgb_sha256": "7440e03170ec3e85039692532a6aaf5dbec9222b96fabc9ec4fd11f286b7d462"
+      },
+      "gif_region_differences": {
+        "chart": {
+          "box": [
+            670,
+            170,
+            1100,
+            470
+          ],
+          "mean_absolute_channel_error_8bit": 2.0853979328165373,
+          "p95_absolute_channel_error_8bit": 8,
+          "max_absolute_channel_error_8bit": 92,
+          "rgb_sha256": "d0c4849d4a8ba4235943d5b3a9201a39234de15f5f1129523a25e9a8e3504ed2"
+        }
+      }
+    },
+    {
+      "id": "09-corrected",
+      "caption": "Corrected result",
+      "source_name": "09-corrected.png",
+      "source_sha256": "02f9d4d4ed24aa19bc823596a908b82424a98431a9523a00084328611403392d",
+      "source_rgb_sha256": "2ca6c56b1573c1f21490d961bde9cb0dd039a185006ed7128b4f67bb05d2a796",
+      "rendered_rgb_sha256": "2ca6c56b1573c1f21490d961bde9cb0dd039a185006ed7128b4f67bb05d2a796",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3500,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.8167561728395062,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 126,
+        "rgb_sha256": "e8e5d6a0380c0e91198299d386a30ce51cd4622b82acb96dc4108ab7108c1d93"
+      },
+      "gif_region_differences": {
+        "chart": {
+          "box": [
+            670,
+            170,
+            1100,
+            470
+          ],
+          "mean_absolute_channel_error_8bit": 2.487124031007752,
+          "p95_absolute_channel_error_8bit": 9,
+          "max_absolute_channel_error_8bit": 126,
+          "rgb_sha256": "2be4f34ba9e72897e4ed4a31d58206b433d2dd970af270796f9864a88a6d1b48"
+        }
+      }
+    },
+    {
+      "id": "10-deltae",
+      "caption": "Expanded color-difference analysis",
+      "source_name": "10-deltae.png",
+      "source_sha256": "1101b54fe8a293b78acd607cee350f86141cee5f6cbc05ab88205df46f856713",
+      "source_rgb_sha256": "616b668d9e8b3a8904ac3efb1e34ef3984ea9f2489b65b01a963a66eb1d3ab13",
+      "rendered_rgb_sha256": "616b668d9e8b3a8904ac3efb1e34ef3984ea9f2489b65b01a963a66eb1d3ab13",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 4500,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.5429711934156378,
+        "p95_absolute_channel_error_8bit": 2,
+        "max_absolute_channel_error_8bit": 129,
+        "rgb_sha256": "fcb8587a7a5176bda710cf68a7d8ad55bc84d91db5eefb9d97945eda9e8bc95f"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "11-color-analysis",
+      "caption": "Expanded color analysis",
+      "source_name": "11-color-analysis.png",
+      "source_sha256": "1e210cfa1099fa38c3a035f6a2eb3958055a1319a60d2393aaf8792fc06c3835",
+      "source_rgb_sha256": "936d98555b309ac212c4c5c0870a109566fe340e2c131914448cb64958fbc945",
+      "rendered_rgb_sha256": "936d98555b309ac212c4c5c0870a109566fe340e2c131914448cb64958fbc945",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 4500,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 1.0450012860082305,
+        "p95_absolute_channel_error_8bit": 2,
+        "max_absolute_channel_error_8bit": 164,
+        "rgb_sha256": "d68b1e1dcc65403190bdd5e547b49d521d16965142ea1dabe0c1cd58920ea494"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "12-rendition",
+      "caption": "Expanded chart rendition",
+      "source_name": "12-rendition.png",
+      "source_sha256": "8e861d7e79860924a3cb251149097172c4a3c6fa320ac4d0d2a9943ce99cf780",
+      "source_rgb_sha256": "7a8f77fd42873c52f0efde06407d5e90517140ab2759c1eede947ea6eb9aa948",
+      "rendered_rgb_sha256": "7a8f77fd42873c52f0efde06407d5e90517140ab2759c1eede947ea6eb9aa948",
+      "presentation": "window",
+      "capture_region": [
+        0,
+        0,
+        1440,
+        900
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 4500,
+      "transition_ms": 0,
+      "comparison": true,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.943650720164609,
+        "p95_absolute_channel_error_8bit": 3,
+        "max_absolute_channel_error_8bit": 84,
+        "rgb_sha256": "0899303628d9af740f4969ee327a56d7564d7073d8efda7ed755c01a2bf8369e"
+      },
+      "gif_region_differences": {}
+    },
+    {
+      "id": "13-batch-options",
+      "caption": "Four-image batch with previews disabled",
+      "source_name": "13-batch-options.png",
+      "source_sha256": "64898b5486b39d7574ba1ad28cd4c305c8ac2bba635fe0ebd857457f9cb7d7a8",
+      "source_rgb_sha256": "9012df965ff18857a03186a5e3302cad9954156799f6722dd061980539fa2260",
+      "rendered_rgb_sha256": "fffa58e13339e5ff9f941994ec8d4f67d1ea71a96d39a53b33ada9ff521d8df3",
+      "presentation": "popup-closeup",
+      "capture_region": [
+        570,
+        245,
+        870,
+        655
+      ],
+      "captured_pixels_exact": true,
+      "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "duration_ms": 3500,
+      "transition_ms": 0,
+      "comparison": false,
+      "apng_hold_rgb_exact": true,
+      "gallery_rgb_exact": true,
+      "gif_pixel_difference": {
+        "mean_absolute_channel_error_8bit": 0.029594650205761318,
+        "p95_absolute_channel_error_8bit": 0,
+        "max_absolute_channel_error_8bit": 49,
+        "rgb_sha256": "dbd32850f9e261bd5b0570a299ac2b2fbcbe201722cfe34affdf31ddaa26d765"
+      },
+      "gif_region_differences": {}
+    }
+  ],
+  "artifacts": {
+    "studio-dark.png": {
+      "bytes": 6354051,
+      "sha256": "fa95f5684170cf86a984e751895d6f74670e86d3d28cc21c2acb55acbd9dda4b"
+    },
+    "studio-dark.gif": {
+      "bytes": 5978817,
+      "sha256": "fcd2d5d601429e14abdffd3b821c2f10c4e4168a00b5db453e95216392b22ca1"
+    },
+    "stills/01-photo.png": {
+      "bytes": 332697,
+      "sha256": "4ca4fd765ad1ba6b49489ba4e4a6d3b05ceb272c7a23674b8812a595f04462b2"
+    },
+    "stills/02-detected.png": {
+      "bytes": 332194,
+      "sha256": "2f3edf937579d70e9947309d5189338af8fb223773f86a3c485200b3b37cb2b9"
+    },
+    "stills/03-processing-menu.png": {
+      "bytes": 29206,
+      "sha256": "89e4cafef0d15afdf2edf5e451ca785ba916c3845219411826de38348e13dc1e"
+    },
+    "stills/03-cc-options.png": {
+      "bytes": 32636,
+      "sha256": "a8d478d4acd04702b81f63b2b4e2bd8808a340c20aba87a2b9469babbeeeac18"
+    },
+    "stills/04-processing.png": {
+      "bytes": 436917,
+      "sha256": "93d6227df142bcbd7f39bc7d36b8892910f7733b25e763d2f3a6ba3c17ad124b"
+    },
+    "stills/05-original.png": {
+      "bytes": 395308,
+      "sha256": "dcf1e9e7026d0116049c351d2bbda68df12681435d88dc7f07d0b9e4888b8a8d"
+    },
+    "stills/06-ffc.png": {
+      "bytes": 413968,
+      "sha256": "7b0e462ed13170542d6d9c894177784ad0515dcac4e842b022cdfba2d3e129d9"
+    },
+    "stills/07-gc.png": {
+      "bytes": 429924,
+      "sha256": "b1a4dc4a646e1ad4d3c16da341dc5d20d4745c2cae5290018246aaad020fe40e"
+    },
+    "stills/08-wb.png": {
+      "bytes": 422313,
+      "sha256": "ce5623ecaddbc6b50687415ee2520e37b76f6a2047bd3a7b7e56979a8655c6dc"
+    },
+    "stills/09-corrected.png": {
+      "bytes": 440123,
+      "sha256": "44c4b4bd9c0f5949b413f601bd7704cb3e22eabf1fbc04be7c0b89b07c46a708"
+    },
+    "stills/10-deltae.png": {
+      "bytes": 153569,
+      "sha256": "ca2dbf5f9db528d6e91dc224e4556be7e4bf1a2fe716ae5bc5d4b08c082d4e6f"
+    },
+    "stills/11-color-analysis.png": {
+      "bytes": 151150,
+      "sha256": "9c2f115608b324e5c85c70d6d3258f73194a5638f98ae7591ab1076042966ffa"
+    },
+    "stills/12-rendition.png": {
+      "bytes": 117556,
+      "sha256": "0fa705fd2ecf61f464b7dec90d983516ff169a525097c81084219f3348e45afd"
+    },
+    "stills/13-batch-options.png": {
+      "bytes": 19309,
+      "sha256": "9a6c2c3ce59e2a00c404eaf1b413caecff215fa0b2fd429e006b9a2865952c6a"
+    },
+    "storyboard.json": {
+      "bytes": 5917,
+      "sha256": "afe5aad9dafd2482eeda0b093478f7c985402c2a7ddfc24ce84e754fc3d7bd46"
+    }
+  },
+  "portable_storyboard_sha256": "afe5aad9dafd2482eeda0b093478f7c985402c2a7ddfc24ce84e754fc3d7bd46"
+}

@@ -38,11 +38,47 @@ public sealed class DeltaEQualityTextConverter : IValueConverter
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         AvaloniaProperty.UnsetValue;
+
 }
 
-public sealed class DeltaEQualityBrushConverter : IValueConverter
+/// <summary>Value-dependent brushes must also re-evaluate when the owning window changes theme.</summary>
+public abstract class ThemeAwareBrushConverter : IValueConverter, IMultiValueConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public abstract object Convert(object? value, Type targetType, object? parameter, CultureInfo culture);
+
+    // The second binding observes ActualThemeVariant. It deliberately triggers
+    // resource resolution even when an immutable log level/metric is unchanged.
+    public object Convert(System.Collections.Generic.IList<object?> values, Type targetType,
+        object? parameter, CultureInfo culture) =>
+        Convert(values.Count > 0 ? values[0] : null, targetType, parameter, culture);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        AvaloniaProperty.UnsetValue;
+
+    protected static IBrush ThemeBrush(string key, string fallback)
+    {
+        if (Application.Current?.TryGetResource(key, Application.Current.ActualThemeVariant, out var value) == true
+            && value is IBrush brush)
+        {
+            return brush;
+        }
+        return new SolidColorBrush(Color.Parse(fallback));
+    }
+}
+
+public sealed class ImprovementBrushConverter : ThemeAwareBrushConverter
+{
+    public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is double percent && double.IsFinite(percent) && Math.Abs(percent) >= 0.05)
+            return percent > 0 ? ThemeBrush("SuccessBrush", "#3D9B7A") : ThemeBrush("WarningBrush", "#C9A05A");
+        return ThemeBrush("TextSecondaryBrush", "#9A9CA3");
+    }
+}
+
+public sealed class DeltaEQualityBrushConverter : ThemeAwareBrushConverter
+{
+    public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is double d && double.IsFinite(d))
         {
@@ -59,24 +95,11 @@ public sealed class DeltaEQualityBrushConverter : IValueConverter
         return ThemeBrush("TextSecondaryBrush", "#94A3B8");
     }
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        AvaloniaProperty.UnsetValue;
-
-    private static IBrush ThemeBrush(string key, string fallback)
-    {
-        if (Application.Current?.TryGetResource(key, Application.Current.ActualThemeVariant, out var value) == true
-            && value is IBrush brush)
-        {
-            return brush;
-        }
-
-        return new SolidColorBrush(Color.Parse(fallback));
-    }
 }
 
-public sealed class DeltaEQualityBgBrushConverter : IValueConverter
+public sealed class DeltaEQualityBgBrushConverter : ThemeAwareBrushConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is double d && double.IsFinite(d))
         {
@@ -93,24 +116,11 @@ public sealed class DeltaEQualityBgBrushConverter : IValueConverter
         return Brushes.Transparent;
     }
 
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        AvaloniaProperty.UnsetValue;
-
-    private static IBrush ThemeBrush(string key, string fallback)
-    {
-        if (Application.Current?.TryGetResource(key, Application.Current.ActualThemeVariant, out var value) == true
-            && value is IBrush brush)
-        {
-            return brush;
-        }
-
-        return new SolidColorBrush(Color.Parse(fallback));
-    }
 }
 
-public sealed class LogLevelToBrushConverter : IValueConverter
+public sealed class LogLevelToBrushConverter : ThemeAwareBrushConverter
 {
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value is LogLevel level
             ? level switch
@@ -124,19 +134,7 @@ public sealed class LogLevelToBrushConverter : IValueConverter
             : ThemeBrush("LogTextBrush", "#CBD5E1");
     }
 
-    private static IBrush ThemeBrush(string key, string fallback)
-    {
-        if (Application.Current?.TryGetResource(key, Application.Current.ActualThemeVariant, out var value) == true
-            && value is IBrush brush)
-        {
-            return brush;
-        }
 
-        return new SolidColorBrush(Color.Parse(fallback));
-    }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        AvaloniaProperty.UnsetValue;
 }
 
 public sealed class LogLevelToWeightConverter : IValueConverter

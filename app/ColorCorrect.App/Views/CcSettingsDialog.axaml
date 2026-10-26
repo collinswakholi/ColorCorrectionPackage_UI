@@ -45,7 +45,7 @@
                         AutomationProperties.Name="Done"/>
             </Border>
             <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
+                          HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
                 <StackPanel Margin="16,12">
                     <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                     <TextBlock Text="Method" Classes="settingsLabel"/>
@@ -81,10 +81,11 @@
                                    Text="Include combination terms"/>
                     </CheckBox>
 
-                    <TextBlock Text="Samples per patch" Classes="settingsLabel"/>
+                    <TextBlock Text="Samples per side" Classes="settingsLabel"/>
                     <TextBox x:Name="FitSamples" Classes="config" Margin="0,0,0,10"
                              Text="{Binding FitSamplesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             AutomationProperties.Name="Samples per patch"/>
+                             AutomationProperties.Name="Samples per patch side"
+                             ToolTip.Tip="Sampling grid inside each chart patch: 3 means a 3 × 3 grid (9 samples)."/>
 
                     <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
                         <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>

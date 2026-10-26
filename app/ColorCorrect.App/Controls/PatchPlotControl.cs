@@ -271,8 +271,8 @@ public sealed class PatchPlotControl : Control
         var gap = barW * 0.28;
         var before = Color.FromRgb(239, 68, 68);
         var after = Color.FromRgb(34, 197, 94);
-        var beforeLabel = Color.FromRgb(252, 165, 165);
-        var afterLabel = Color.FromRgb(134, 239, 172);
+        var beforeLabel = PlotTheme.BeforeValue;
+        var afterLabel = PlotTheme.AfterValue;
         var y0 = map.Sy(0);
 
         using (context.PushClip(new Rect(map.PadL, map.PadT - 16, map.PlotW, map.PlotH + 16)))

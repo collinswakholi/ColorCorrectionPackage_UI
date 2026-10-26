@@ -14,17 +14,16 @@ public sealed class StageDeltaERow
         RangeText = $"ΔE {BeforeText} → {AfterText}";
         QualityLabel = qualityLabel;
         var improve = stage.ImprovementPercent;
+        ImprovementPercent = improve;
         if (double.IsFinite(improve) && System.Math.Abs(improve) >= 0.05)
         {
             Improved = improve > 0;
             ImprovementText = Improved ? $"{improve:0.0}% ↓" : $"{System.Math.Abs(improve):0.0}% ↑";
-            ImprovementBrush = new SolidColorBrush(Improved ? Color.FromRgb(16, 185, 129) : Color.FromRgb(249, 115, 22));
         }
         else
         {
             Improved = false;
             ImprovementText = "—";
-            ImprovementBrush = new SolidColorBrush(Color.FromRgb(154, 156, 163));
         }
 
         HasElapsed = double.IsFinite(stage.ElapsedSecs);
@@ -38,7 +37,7 @@ public sealed class StageDeltaERow
     public string RangeText { get; }
     public string QualityLabel { get; }
     public string ImprovementText { get; }
-    public IBrush ImprovementBrush { get; }
+    public double ImprovementPercent { get; }
     public bool Improved { get; }
     public bool HasElapsed { get; }
     public string ElapsedText { get; }

@@ -1142,7 +1142,7 @@ dependencies = [
 
 [[package]]
 name = "ccp_bridge"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ccp_core",
  "ccp_detect",
@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "ccp_core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "image",
  "moxcms",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "ccp_detect"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytemuck",
  "ccp_core",
@@ -1187,7 +1187,7 @@ dependencies = [
 
 [[package]]
 name = "ccp_wgpu_infer"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "burn",
  "burn-onnx",

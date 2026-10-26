@@ -28,6 +28,8 @@ internal static class PlotTheme
     public static Color Label => BrushColor("PlotLabelBrush", Color.FromRgb(203, 213, 225));
     public static Color Legend => BrushColor("PlotLegendBrush", Color.FromRgb(238, 241, 246));
     public static Color Ink => BrushColor("PlotInkBrush", Color.FromRgb(11, 13, 17));
+    public static Color BeforeValue => BrushColor("PlotBeforeValueBrush", Color.FromRgb(252, 165, 165));
+    public static Color AfterValue => BrushColor("PlotAfterValueBrush", Color.FromRgb(134, 239, 172));
     public static Color RenditionBg => BrushColor("RenditionBgBrush", Color.FromRgb(21, 24, 28));
 
     public static IBrush Solid(Color color) => new SolidColorBrush(color);

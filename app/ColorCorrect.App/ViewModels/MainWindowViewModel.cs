@@ -1927,7 +1927,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         var method = CorrectionOptions.CanonicalMethod(SelectedMethod.Value);
         ShowDegree = method != "ccm";
-        ShowPolyCombinations = method is "linear" or "pls" or "nn";
+        ShowPolyCombinations = method == "linear";
         ShowPls = method == "pls";
         ShowNn = method == "nn";
         ShowCcIterParams = method is "pls" or "nn";

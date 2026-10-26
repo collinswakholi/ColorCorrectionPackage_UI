@@ -294,6 +294,7 @@ public sealed class MainWindowHeadlessTests
             vm.NnDropout = 0.25m;
 
             Assert.True(vm.ShowNn);
+            Assert.False(vm.ShowPolyCombinations);
             Assert.True(vm.NnSettingsValid);
             Assert.False(vm.HasHiddenLayersError);
             Assert.Equal("rmsprop", vm.SelectedNnOptimizer.Value);
@@ -302,6 +303,25 @@ public sealed class MainWindowHeadlessTests
             Assert.False(vm.NnSettingsValid);
             Assert.True(vm.HasHiddenLayersError);
             Assert.NotEmpty(vm.HiddenLayersError);
+
+            var dialog = new CcSettingsDialog { DataContext = vm };
+            dialog.Show(window);
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                Assert.False(dialog.PolyCombinationsToggle.IsVisible);
+                Assert.True(dialog.DegreeSelect.IsVisible);
+                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "pls");
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(dialog.PolyCombinationsToggle.IsVisible);
+                Assert.True(dialog.DegreeSelect.IsVisible);
+                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "linear");
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(dialog.PolyCombinationsToggle.IsVisible);
+                dialog.PolyCombinationsToggle.IsChecked = false;
+                Assert.False(vm.IncludeCombinations);
+            }
+            finally { dialog.Close(); Dispatcher.UIThread.RunJobs(); }
         }
         finally
         {

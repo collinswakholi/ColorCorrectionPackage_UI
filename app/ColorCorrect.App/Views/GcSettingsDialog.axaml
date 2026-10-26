@@ -34,7 +34,7 @@
                 <Button x:Name="DoneButton" Content="Done" Theme="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Click="Close_Click"
                         AutomationProperties.Name="Done"/>
             </Border>
-            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
             <StackPanel Margin="16,12">
                 <TextBlock Text="Monotonic lightness curve" Classes="settingsLabel"/>
                 <TextBlock Text="ColorCorrect fits the named neutral patches with a shape-preserving curve anchored at black and white. The curve cannot reverse highlights or overshoot the 0–100 L* range."

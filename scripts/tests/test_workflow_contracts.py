@@ -49,7 +49,7 @@ class WorkflowContracts(unittest.TestCase):
         self.assertNotEqual(merged_pr, group("pull_request", "refs/pull/5/merge", 5))
         self.assertEqual(concurrency["cancel-in-progress"], "true")
 
-    def test_native_targets_pins_and_source_filters(self):
+    def test_native_targets_pins_and_fail_closed_job_filters(self):
         workflow = load("native-builds.yml")
         matrix = workflow["jobs"]["packages"]["strategy"]["matrix"]["include"]
         actual = {(row["runner"], row["rid"], row["architecture"], row["rust"]) for row in matrix}
@@ -60,9 +60,14 @@ class WorkflowContracts(unittest.TestCase):
             ("ubuntu-24.04-arm", "linux-arm64", "arm64", "aarch64-unknown-linux-gnu"),
         })
         self.assertEqual(workflow["env"]["CARGO_INCREMENTAL"], "0")
-        filters = set(workflow["on"]["pull_request"]["paths"])
-        self.assertTrue({"*", "docs/**", "notebooks/**", "licenses/**", "test_images/**",
-                         "testdata/acceptance/**", ".github/**"} <= filters)
+        # All PRs create the aggregate check; do not leave a required workflow pending.
+        self.assertIn(workflow["on"]["pull_request"], (None, ""))
+        for name in ("packages", "macos_source"):
+            self.assertEqual(workflow["jobs"][name]["needs"], ["changes"])
+            self.assertEqual(workflow["jobs"][name]["if"], "needs.changes.outputs.native == 'true'")
+        changes = workflow["jobs"]["changes"]
+        self.assertEqual(changes["outputs"], {"native": "${{ steps.classify.outputs.native }}"})
+        self.assertEqual(changes["steps"][0]["with"], {"fetch-depth": "0", "persist-credentials": "false"})
         for job in workflow["jobs"].values():
             for step in job["steps"]:
                 if step.get("uses", "").startswith("actions/setup-python@"):
@@ -88,11 +93,12 @@ class WorkflowContracts(unittest.TestCase):
         workflow = load("native-builds.yml")
         self.assertEqual(workflow["on"]["push"], {"branches": ["main"], "tags": ["v*"]})
         publish = workflow["jobs"]["publish"]
-        self.assertEqual(set(publish["needs"]), {"packages", "macos_source"})
+        self.assertEqual(set(publish["needs"]), {"packages", "macos_source", "validation"})
         checkout = next(step for step in publish["steps"] if step.get("uses", "").startswith("actions/checkout@"))
         self.assertEqual(checkout["with"], {"persist-credentials": "false"})
         for condition in ("github.event_name == 'push'", "startsWith(github.ref, 'refs/tags/v')",
-                          "needs.packages.result == 'success'", "needs.macos_source.result == 'success'"):
+                          "needs.packages.result == 'success'", "needs.macos_source.result == 'success'",
+                          "needs.validation.result == 'success'"):
             self.assertIn(condition, publish["if"])
         for name, job in workflow["jobs"].items():
             for step in job["steps"]:
@@ -102,6 +108,23 @@ class WorkflowContracts(unittest.TestCase):
                     self.assertEqual(step["run"], 'python scripts/publish_release.py --publish --output "$RUNNER_TEMP/release-assets"')
                 if "publish_release.py" in step.get("run", ""):
                     self.assertEqual(name, "publish")
+
+    def test_always_running_aggregate_and_lightweight_docs_check(self):
+        jobs = load("native-builds.yml")["jobs"]
+        aggregate = jobs["validation"]
+        self.assertEqual(aggregate["if"], "always()")
+        self.assertEqual(set(aggregate["needs"]), {"changes", "documentation", "packages", "macos_source"})
+        step = aggregate["steps"][-1]
+        self.assertEqual(step["env"], {"NEEDS_JSON": "${{ toJSON(needs) }}"})
+        self.assertEqual(step["run"], "python scripts/check_ci_results.py")
+        docs = jobs["documentation"]
+        self.assertNotIn("if", docs)
+        commands = "\n".join(step.get("run", "") for step in docs["steps"])
+        self.assertIn("python scripts/check_documentation.py", commands)
+        self.assertIn("test_ci_changes.py", commands)
+        self.assertIn("test_documentation.py", commands)
+        self.assertIn("test_documented_examples.py", commands)
+        self.assertNotRegex(commands, r"\b(cargo|dotnet|native_ci_acceptance)\b")
 
     def test_ci_uses_the_installed_pinned_native_rust_toolchain(self):
         workflow = load("native-builds.yml")

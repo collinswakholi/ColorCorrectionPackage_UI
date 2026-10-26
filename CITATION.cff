@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "Please cite this software and the related research when using it in scientific work."
 type: software
 title: ColorCorrect Studio
-version: 0.1.0
+version: 0.2.1
 license: MIT
 repository-code: "https://github.com/collinswakholi/ColorCorrectionPackage_UI"
 authors:
@@ -26,4 +26,13 @@ references:
       - {family-names: Feldman, given-names: "Max J."}
       - {family-names: Altendorf, given-names: "Kayla R."}
       - {family-names: Neyhart, given-names: "Jeffrey L."}
+      - {family-names: Rippner, given-names: "Devin A."}
+  - type: software
+    title: "ColorCorrectionPipeline: A stepwise color-correction pipeline"
+    version: 1.4.5
+    year: 2026
+    url: "https://github.com/collinswakholi/ColorCorrectionPackage"
+    repository-code: "https://github.com/collinswakholi/ColorCorrectionPackage"
+    authors:
+      - {family-names: Wakholi, given-names: Collins}
       - {family-names: Rippner, given-names: "Devin A."}

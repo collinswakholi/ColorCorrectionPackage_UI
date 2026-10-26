@@ -76,6 +76,8 @@
                     <SolidColorBrush x:Key="PlotAxisBrush" Color="#6E7178" />
                     <SolidColorBrush x:Key="PlotGridBrush" Color="#332A2C30" />
                     <SolidColorBrush x:Key="PlotLabelBrush" Color="#9A9CA3" />
+                    <SolidColorBrush x:Key="PlotBeforeValueBrush" Color="#FCA5A5" />
+                    <SolidColorBrush x:Key="PlotAfterValueBrush" Color="#86EFAC" />
                     <SolidColorBrush x:Key="PlotLegendBrush" Color="#ECEDEE" />
                     <SolidColorBrush x:Key="PlotInkBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#08090B" />
@@ -163,6 +165,8 @@
                     <SolidColorBrush x:Key="PlotAxisBrush" Color="#5C6168" />
                     <SolidColorBrush x:Key="PlotGridBrush" Color="#24D4D7DC" />
                     <SolidColorBrush x:Key="PlotLabelBrush" Color="#5C6168" />
+                    <SolidColorBrush x:Key="PlotBeforeValueBrush" Color="#991B1B" />
+                    <SolidColorBrush x:Key="PlotAfterValueBrush" Color="#14532D" />
                     <SolidColorBrush x:Key="PlotLegendBrush" Color="#16181C" />
                     <SolidColorBrush x:Key="PlotInkBrush" Color="#16181C" />
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#2A2C30" />

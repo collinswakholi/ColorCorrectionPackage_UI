@@ -64,7 +64,7 @@ public partial class MainWindowViewModel
         if (!fit) return null;
         if ((DoFfc || DoGc || DoWb) && (SelectedInputSpace.Value != "srgb" || SelectedInputWhite.Value != "d65"))
             return "FFC, tone response and white balance require sRGB / D65 input. Convert the image first or turn these stages off.";
-        if (NumberError(nameof(FitSamples), FitSamples, "Samples per patch", 1, 200, true) is { } samples) return samples;
+        if (NumberError(nameof(FitSamples), FitSamples, "Samples per side", 1, 200, true) is { } samples) return samples;
         if (!DoCc) return null;
         if (ShowPls && NumberError(nameof(PlsComponents), PlsComponents, "PLS components", 0, 64, true) is { } components) return components;
         if (ShowCcIterParams && NumberError(nameof(NnTol), NnTol, "Convergence tolerance", 0.000000000001m, 0.01m) is { } tol) return tol;

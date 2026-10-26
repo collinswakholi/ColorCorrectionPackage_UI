@@ -1,0 +1,185 @@
+{
+  "source_color_space": "srgb",
+  "canvas": [
+    1440,
+    900
+  ],
+  "capture": {
+    "application_version": "0.2.1 UI-repair candidates v2 and v3; see per-frame package manifests",
+    "platform": "Ubuntu 24.04 x64 / WSL2 WSLg; separately inventoried experimental Mesa Dozen 25.2.8; RTX 4070 Ti SUPER",
+    "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+    "fixture": "ColorCard_Big.JPG with Blank.JPG FFC; batch uses four public sample photographs"
+  },
+  "frames": [
+    {
+      "id": "01-photo",
+      "source": "stills/01-photo.png",
+      "caption": "A public chart photograph loaded",
+      "duration_ms": 3500,
+      "comparison": false,
+      "presentation": "window",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640"
+    },
+    {
+      "id": "02-detected",
+      "source": "stills/02-detected.png",
+      "caption": "Detected chart and patch overlay",
+      "duration_ms": 3500,
+      "comparison": false,
+      "presentation": "window",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "transition_ms": 160
+    },
+    {
+      "id": "03-processing-menu",
+      "source": "stills/03-processing-menu.png",
+      "caption": "Simple correction device and detection-engine settings",
+      "duration_ms": 3000,
+      "transition_ms": 160,
+      "comparison": false,
+      "presentation": "popup-closeup",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640"
+    },
+    {
+      "id": "03-cc-options",
+      "source": "stills/03-cc-options.png",
+      "caption": "Color-correction settings",
+      "duration_ms": 5000,
+      "comparison": false,
+      "presentation": "dialog-closeup",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655",
+      "transition_ms": 160
+    },
+    {
+      "id": "04-processing",
+      "source": "stills/04-processing.png",
+      "caption": "Actual correction in progress",
+      "duration_ms": 2500,
+      "comparison": false,
+      "presentation": "window",
+      "package_manifest_sha256": "ae5cd2fb09834cfe7a006f622c0237952f5bf57b8568e89ae60f77151f12d640",
+      "transition_ms": 160
+    },
+    {
+      "id": "05-original",
+      "source": "stills/05-original.png",
+      "caption": "Original photograph",
+      "duration_ms": 3000,
+      "comparison": true,
+      "presentation": "window",
+      "quality_regions": {
+        "chart": [
+          670,
+          170,
+          1100,
+          470
+        ]
+      },
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "06-ffc",
+      "source": "stills/06-ffc.png",
+      "caption": "After flat-field correction",
+      "duration_ms": 3000,
+      "comparison": true,
+      "presentation": "window",
+      "quality_regions": {
+        "chart": [
+          670,
+          170,
+          1100,
+          470
+        ]
+      },
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "07-gc",
+      "source": "stills/07-gc.png",
+      "caption": "After tone-response correction",
+      "duration_ms": 3000,
+      "comparison": true,
+      "presentation": "window",
+      "quality_regions": {
+        "chart": [
+          670,
+          170,
+          1100,
+          470
+        ]
+      },
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "08-wb",
+      "source": "stills/08-wb.png",
+      "caption": "After white balance",
+      "duration_ms": 3000,
+      "comparison": true,
+      "presentation": "window",
+      "quality_regions": {
+        "chart": [
+          670,
+          170,
+          1100,
+          470
+        ]
+      },
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "09-corrected",
+      "source": "stills/09-corrected.png",
+      "caption": "Corrected result",
+      "duration_ms": 3500,
+      "comparison": true,
+      "presentation": "window",
+      "quality_regions": {
+        "chart": [
+          670,
+          170,
+          1100,
+          470
+        ]
+      },
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "10-deltae",
+      "source": "stills/10-deltae.png",
+      "caption": "Expanded color-difference analysis",
+      "duration_ms": 4500,
+      "comparison": true,
+      "presentation": "window",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "11-color-analysis",
+      "source": "stills/11-color-analysis.png",
+      "caption": "Expanded color analysis",
+      "duration_ms": 4500,
+      "comparison": true,
+      "presentation": "window",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "12-rendition",
+      "source": "stills/12-rendition.png",
+      "caption": "Expanded chart rendition",
+      "duration_ms": 4500,
+      "comparison": true,
+      "presentation": "window",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    },
+    {
+      "id": "13-batch-options",
+      "source": "stills/13-batch-options.png",
+      "caption": "Four-image batch with previews disabled",
+      "duration_ms": 3500,
+      "comparison": false,
+      "presentation": "popup-closeup",
+      "package_manifest_sha256": "1cd8f8ba0fa17b52d10570fa0b1ed3a2614607d9ea72ad44b1445be21dadb655"
+    }
+  ]
+}

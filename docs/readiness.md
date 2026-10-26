@@ -2,9 +2,28 @@
 
 This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). The subsequent version-tag workflow publishes unsigned Windows/Linux preview packages after native checks pass. Apple-silicon macOS remains source-only, with no application binary distribution.
 
-## Current 0.2.0 source
+## Current 0.2.1 source and local UI repair candidates
 
-The native app and internal Rust packages are now version 0.2.0; the independently versioned Python SDK remains 2.2.1. Current source adds cancellation before input preparation, background preparation with captured chart-face/rendering inputs, verified atomic repair of interrupted session assets, and responsive session disk operations guarded against stale asynchronous completion. Previous successful results and sessions remain available when an operation fails or is canceled.
+The 0.2.1 source fixes theme changes for existing log entries and ΔE cards, and
+removes the settings viewport cap that remained stale after resizing. It also
+improves light-theme plot labels, removes an ignored conditional checkbox and
+gives Processing settings a clearer layout with bounded device details. Its
+136 headless UI tests pass. The Python SDK remains 2.2.1; both rewritten notebooks
+and the editable configuration example passed against the installed published SDK
+in Windows Sandbox and the separately identified WSL Dozen environment.
+
+Local UI repair candidates combine the rebuilt 0.2.1 application with the
+unchanged published 0.2.0 worker/runtime/models and SDK 2.2.1. Their manifests list
+those component identities explicitly. They are development candidates, not a
+published 0.2.1 release or new ARM64 hardware certification. The
+[UI control checklist](ui-validation.md) separates observed native interactions,
+component assertions, and remaining acceptance gaps. See the
+recorded control-level results before interpreting a package as accepted.
+Public 0.2.0 downloads and their version tag remain unchanged.
+
+## Published 0.2.0 and previous source validation
+
+The published native app and internal Rust packages are version 0.2.0; the independently versioned Python SDK is 2.2.1. That source added cancellation before input preparation, background preparation with captured chart-face/rendering inputs, verified atomic repair of interrupted session assets, and responsive session disk operations guarded against stale asynchronous completion. Previous successful results and sessions remain available when an operation fails or is canceled.
 
 Before CI, host checks passed: 130 headless UI tests, 63 engine component tests with one explicit real-worker skip, and 51 source/packaging tests. Related focused runs overlap those suites and are not additional totals. The SDK had 48 host contract tests. Additional CI regressions and native results are recorded with the relevant Actions run. These component results do not establish installed application acceptance.
 

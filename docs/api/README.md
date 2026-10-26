@@ -55,6 +55,192 @@ The first detected chart is selected by default, preserving the original fit
 behavior. Use `detect()` and explicit `chart_ids` to select another chart or
 combine charts. Do not reuse geometry after modifying or replacing the image.
 
+## Detection and client settings
+
+`Client(root=..., backend="auto", timeout=600, progress=None)` owns one serialized
+worker. `timeout` is a positive finite number of seconds per command (startup is
+bounded separately); `progress` receives text on the calling thread and must not
+issue recursive requests. `executable=` explicitly selects a worker; keep its
+compatible models/references/runtime together. `backend` accepts `auto`, `cpu`,
+`directml`, `webgpu`, or `vulkan`. CPU selects correction only; detection remains
+GPU-only. DirectML is a Windows route; actual availability is checked at execution.
+
+`DetectionOptions(confidence=None, crop=0.75, prefer=None, allow_recall=True)`
+configures automatic detection. `confidence=None` retains the native detector
+threshold; an explicit confidence is a finite value 0–1. `crop` is the patch
+interior fraction (0.01–1), `prefer` is `classic`, `passport`, `spyder`, or
+`digital-sg`, and `allow_recall` is a boolean. A preference does not add a newly
+trained detector or guarantee that chart type is present. `Client.calibrate`
+accepts `detection_options=` when it must detect, or `detection=` to reuse an
+unchanged image's snapshot.
+
+## Configuration reference
+
+Use `Config` for the familiar run/predict workflow or pass `CalibrationOptions`
+directly to `Client.calibrate`. The objects are frozen dataclasses: use
+`dataclasses.replace` to create a changed configuration. **`Config.do_ffc`,
+`do_gc`, `do_wb`, `do_cc`, and `check_saturation` override the corresponding
+nested `CalibrationOptions` switches.** A new `Config` does not change an already
+loaded model's transforms; apply-time overrides belong in `ApplyOptions`.
+
+```python
+from dataclasses import replace
+from colorcorrect import (
+    ApplyOptions, CalibrationOptions, ColorCorrection, Config, FFCOptions,
+    NeuralNetworkOptions,
+)
+
+config = Config(
+    save_path="results", do_ffc=True, do_gc=True, do_wb=True, do_cc=True,
+    options=CalibrationOptions(
+        model="rpcc2", cross_validate=True,
+        ffc=FFCOptions(method="poly", bins=32, smooth=5, degree=3),
+        crop_rect=None,
+    ),
+)
+no_gamma = replace(config, do_gc=False)  # Use this in a new run to refit without GC.
+polynomial = replace(config, options=replace(config.options, model="linear", degree=3))
+pls = replace(config, options=replace(config.options, model="pls", pls_components=3))
+neural = replace(config, options=replace(
+    config.options, model="nn",
+    nn=NeuralNetworkOptions(hidden_layers=(64, 32), optimizer="adam", epochs=200, patience=50),
+))
+
+with ColorCorrection(config, root="/path/to/ColorCorrectStudio") as cc:
+    calibration = cc.run(Image="chart.jpg", White_Image="blank.jpg")
+    result = cc.predict_image("scene.jpg", options=ApplyOptions(output_format="png"))
+    # Controlled comparison: omit a fitted stage while applying the same model.
+    without_wb = cc.predict_image(
+        "scene.jpg", options=ApplyOptions(do_wb=False), output_dir="without-wb",
+    )
+    print(calibration.warnings, result.warnings)
+    print(result.backends.actual, result.backends.diagnostics)
+```
+
+GC fits a monotonic tone-response transform and WB fits chart-neutral channel
+scales from the selected reference context. Their exposed controls are `do_gc`
+and `do_wb`; manual gamma exponents/degrees, temperature, and channel gains are
+not API options. Toggling a stage for application is an ablation, not a refit.
+Use a new calibration when changing the intended fitting pipeline.
+
+### Stage and rendering switches
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `Config.save_path` | Required | Parent for unique durable run directories |
+| `do_ffc` | `None` | At calibration, enable FFC when a white image is supplied; `True` requires one; `False` disables it |
+| `do_gc`, `do_wb`, `do_cc` | `True` at calibration | Fit/apply the respective stage |
+| `Config.check_saturation` / `CalibrationOptions.do_sat` | `True` | Enable chart saturation handling |
+| `skip_saturated` | `False` | Exclude saturated chart observations when fitting |
+| `fast_mode` | `True` | Render combined GC/WB/CC through a 65³ LUT; spatial FFC remains separate |
+| `write_output` | `True` | Write a full-resolution corrected image; `False` retains model/report, without an output-image path |
+| `cross_validate` | `True` | Request **CC-only** held-out chart validation; earlier stages remain fitted from the full chart |
+| `phase2_teacher` | `False` | Request advanced teacher diagnostics; not needed for ordinary correction |
+
+`ApplyOptions.do_ffc/do_gc/do_wb/do_cc` default to `None`, which preserves the
+recorded model behavior. Explicit `False` omits a stage. Explicit `True` for
+GC/WB/CC requires a corresponding fitted transform. FFC additionally requires a
+matching accessible white image. An absent transform cannot be recovered by
+turning a switch on.
+
+### FFC: white-image surface fitting
+
+FFC requires a separate blank-field image captured with matching illumination,
+framing, and geometry. It is spatial, so a global cube LUT cannot represent it.
+`crop_rect=None` uses automatic plane detection. A manual rectangle is a string
+`"x1,y1,x2,y2"` in **white-image pixel coordinates**, with nonnegative origins and
+positive extent; keep it within the image. It is distinct from patch `crop`.
+
+```python
+from colorcorrect import CalibrationOptions, FFCOptions
+
+ffc_options = CalibrationOptions(
+    do_ffc=True, ffc=FFCOptions(method="pls", bins=32, smooth=5, degree=3),
+    crop_rect="100,100,1900,1300",  # Example only: choose coordinates for your white image.
+)
+```
+
+The table lists SDK validation bounds, not performance recommendations. Large
+sample grids or degrees can consume substantial time/memory. Start with defaults.
+
+| `FFCOptions` field | Default | Accepted values / applicability |
+| --- | --- | --- |
+| `method` | `"poly"` | `"linear"`, `"poly"`, `"pls"`, `"nn"` |
+| `bins` | `50` | Integer 2–100000; samples per side of the spatial grid (`bins²` samples) |
+| `smooth` | `5` | Odd integer 1–100001; local averaging window in pixels |
+| `degree` | `5` | Integer 1–32; spatial feature degree for poly/PLS/NN; linear always uses degree 1 |
+| `nn_max_iter` | `10000` | Integer 1–10000000; FFC neural optimizer iteration budget, only for `method="nn"` |
+| `tol` | `1e-8` | Finite, at least `1e-15`; convergence tolerance for FFC PLS/NN |
+| `cut_off` | `1.3` | Positive gain threshold for soft limiting; native effective range 0.5–4 |
+| `max_val` | `1.8` | Gain ceiling, greater than `cut_off`; native effective range `cut_off + 0.01` through 16 |
+
+The SDK accepts finite positive gain-limit values (at least `1e-15`) with
+`max_val > cut_off`; the native worker sanitizes them to the effective ranges
+above. Use values inside those ranges to avoid an unintended adjustment.
+FFC's NN is a separate surface fit; `NeuralNetworkOptions` configures **CC**, not FFC.
+
+### CC: five families, six method choices
+
+| `CalibrationOptions.model` | Family | Additional controls |
+| --- | --- | --- |
+| `"ccm"` | Color-correction matrix | Fixed matrix feature set |
+| `"linear"` | Polynomial | `degree=2`; native effective degree 1–7; `include_combinations=True` includes interaction terms |
+| `"rpcc2"`, `"rpcc3"` | Root-polynomial | Fixed second/third-order feature sets; `degree` does not change them |
+| `"pls"` | Partial least squares | Polynomial input-feature `degree=2` (effective 1–7), interactions always included; `pls_components=0` selects automatically, with effective rank limited by available observations/features |
+| `"nn"` | Neural network | Polynomial input-feature `degree=2` (effective 1–7), interactions always included; `nn=NeuralNetworkOptions(...)` |
+
+For `linear`, `pls`, and `nn`, choose an integer `degree` from **1 through 7**.
+The native worker clamps their polynomial-feature degree to that range. The
+legacy SDK 2.2.1 validator accepts 1–12 for `linear` and forwards `degree` for
+PLS/NN without that same strict degree validation; out-of-range values can
+therefore be normalized by the worker rather than rejected. Do not rely on that
+normalization. These documented examples use degrees inside the effective range.
+The `include_combinations` switch affects only `model="linear"`; PLS/NN always
+include interaction terms, so changing that flag does not remove their terms.
+For PLS, `pls_components` accepts integers 0–10000 in the SDK; effective component
+count is limited by data/features. None of these parameters configures GC.
+
+`NeuralNetworkOptions` defaults are `(100,)` hidden layers, `optimizer="adam"`,
+`batch_norm=False`, `dropout=0`, `epochs=10000`, `patience=1500`, `lr=0.001`, and
+`tol=1e-6`. Use 1–4 layer widths, each 4–512; optimizers are `adam`, `sgd`, or
+`rmsprop`; dropout is 0–0.8. Epoch/patience counts are integers 1–10000000;
+learning rate and tolerance are finite and at least `1e-15`. Short tutorial
+budgets demonstrate configuration rather than recommend a model or optimizer.
+
+### Sampling and color interpretation
+
+| `CalibrationOptions` field | Default | Accepted values / meaning |
+| --- | --- | --- |
+| `crop` | `0.75` | Patch-interior fraction, 0.01–1; unrelated to white-image `crop_rect` |
+| `fit_samples` | `9` | Integer 1–100000; samples per patch axis (`9` gives a 9×9 grid) |
+| `input_space`, `target_space` | `"srgb"` | RGB encoding names listed under custom references below |
+| `input_white`, `target_white` | `"d65"` | White-point names listed below |
+| `clip_lo`, `clip_hi` | `-0.2`, `1.3` | Finite normalized channel limits, with `clip_lo < clip_hi` |
+
+Reference-value encoding is independent of input/output image encoding. For the
+complete FFC/GC/WB workflow use encoded sRGB/D65 input. Explicit other input
+encodings require `do_ffc=False`, `do_gc=False`, and `do_wb=False`; never relabel
+pixels to bypass this requirement. See the [color guide](../user-guide.md#color-interpretation-matters).
+
+### Apply-time overrides and model reuse
+
+`ApplyOptions(output_format="png")` inherits saved stages and FFC settings.
+`output_format` accepts `"png"` or `"jpg"`; `fast_mode=True` and
+`write_output=True` are defaults. A new backend or rendering option does not
+change the fitted coefficients or the saved model.
+
+Supply `ApplyOptions(white=..., ffc=FFCOptions(...), crop_rect=...)` to deliberately
+change the FFC asset/settings for application, or `ApplyOptions(do_ffc=False)` to
+omit it. An omitted FFC crop inherits the saved crop. White content is checked
+against the recorded hash on ordinary reuse; explicitly replacing the white
+image is a new rendering choice and must be reviewed for compatibility.
+
+Only parameters for active methods are interpreted. For example, CC neural
+options do not affect applying a saved model, and FFC options are inactive when
+FFC is explicitly disabled. Configuration changes do not rewrite earlier results.
+Inspect per-image warnings, `backends.actual`, and `backends.diagnostics` for what
+actually executed; requesting GPU or a stage does not prove its execution.
+
 ## Custom references
 
 ```python
@@ -153,7 +339,7 @@ Closing a client is permanent. A retained model handle raises `ClosedClientError
 after close; load its saved JSON through a new client to continue. Raw Engine
 clients retain their legacy restart behavior.
 
-## Typed options and outcomes
+## Typed results and errors
 
 ```python
 from colorcorrect import ApplyOptions, CalibrationOptions, DetectionOptions
@@ -215,6 +401,11 @@ Existing destinations require `overwrite=True`. A LUT excludes spatial FFC;
 the result warns when the model used FFC. This SDK processes still images only.
 
 ## Validation and compatibility
+
+[Tutorials](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md) use the installed SDK and explicit paths.
+They are executed in fresh kernels against final installed packages in Sandbox
+and WSL; notebook tools are QA-only dependencies.
+
 
 ```console
 python -m unittest discover -s api/tests -v

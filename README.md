@@ -1,25 +1,31 @@
 # ColorCorrect Studio
 
 Turn a photographed color chart into a reusable correction for your still images.
-Check the detected patches, fit the correction, inspect the results, and apply the
+Check the detected patches, fit the correction, inspect each stage, and apply the
 saved model to photographs captured under the same conditions.
 
 [Download 0.2.0 preview](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.2.0)
 · [User guide](docs/user-guide.md) · [Python API](api/README.md)
 · [Build from source](docs/building.md)
 
-![A blank field supplies FFC; chart neutrals supply GC and WB; chart colors supply CC. Validate, save a model, then apply it to matching images.](docs/images/workflow.svg)
+![ColorCorrect Studio in dark mode: load a photograph, detect its chart, choose correction options, compare stage previews, and inspect enlarged analysis figures.](docs/images/demo/studio-dark.png)
+
+[Still screenshots and demo details](docs/images/demo/README.md)
+· [GIF alternative](docs/images/demo/studio-dark.gif)
+
+The animated PNG preserves the captured colors. The still screenshot gallery
+shows the same workflow without animation.
 
 The desktop app runs locally and includes its .NET runtime, Rust engine, models,
-and inference libraries. Python is optional. No Torch, LibTorch, CUDA add-on, or
-browser server is needed.
+and inference libraries. Python is optional. Chart and plane detection require a
+compatible GPU and driver; CPU correction can apply a previously fitted model.
 
 ## Download and install
 
 **0.2.0 is a preview release.** Native builds, installation checks, component tests,
-and installed Python API smoke tests pass on Windows/Linux x64 and ARM64. The
-packages are unsigned; hardware GPU and complete interactive UI acceptance remain
-separate checks. See the [validation record](docs/native-validation.md).
+and installed Python API smoke tests pass on Windows/Linux x64 and ARM64. Packages
+are unsigned. GPU and interactive UI validation depend on the platform; see the
+[validation record](docs/native-validation.md) for completed checks and open gates.
 
 | Platform | Installer | Portable application |
 | --- | --- | --- |
@@ -52,9 +58,9 @@ For a Linux portable install, extract the archive, run `./check-system`, and lau
 `./ColorCorrect-Studio` from its extracted folder. The included
 `./install-dependencies --install` offers explicit prerequisite setup on Ubuntu.
 
-Chart detection requires a compatible GPU and driver. CPU correction can apply a
-saved model, but it does not provide CPU chart detection. Keep the app folder
-intact; its libraries and models are private to that installation.
+Keep the app folder intact; its libraries and models are private to that
+installation. Prerequisite setup offers system libraries when needed. Install
+graphics drivers through your OS or GPU vendor.
 
 Release assets include SHA-256 checksums and a manifest for each architecture.
 See [installation details](installer/README.md) for prerequisites, verification,
@@ -69,14 +75,15 @@ source build; there is no separately published add-on installer.
 
 ## Your first correction
 
-1. **Add a chart photograph.** Check the detected chart face and patch overlay.
+1. **Add a chart photograph and detect its chart.** Check the chart face and patch overlay.
    Select another face if the photograph contains multiple charts.
 2. **Choose the reference.** Use built-in values, or enter/import your own measured
    values in the chart-reference editor. Review their cell mapping before fitting.
 3. **Set the stages.** For uneven lighting, provide a matching blank-field photograph
    and enable **FFC**. Leave correction on **Auto** to start.
 4. **Fit and inspect.** Choose **Fit + apply**, compare stage previews, and inspect
-   patch errors and held-out validation. A good training score alone is insufficient.
+   patch errors and held-out validation. Cross-validation measures the CC fit;
+   validate the complete pipeline on independent photographs as well.
 5. **Save and reuse.** Export corrected images and the model JSON. Choose
    **Model → Use loaded** to apply that model to other images from the same setup.
 
@@ -94,7 +101,8 @@ export a full-resolution image; use **Save** to choose its destination.
 - **Correct illumination and color:** spatial flat-field correction (**FFC**),
   tone response (**GC**), white balance (**WB**), and color correction (**CC**).
 - **Process batches:** fit each chart image or apply one saved model. The existing
-  FFC/GC/WB/CC indicators track each image. Turn **Preview results** on or off.
+  FFC/GC/WB/CC/Save result indicators track each image. Turn **Preview results** on
+  or off; full-resolution exports remain available with previews disabled.
 - **Inspect and export:** stage previews, patch errors, reports, corrected images,
   model JSON, and `.cube` LUTs. A cube LUT excludes spatial FFC.
 - **Resume work:** save sessions and relink moved images while preserving valid
@@ -141,21 +149,48 @@ with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStu
     calibration.export_lut("correction.cube")
 ```
 
-The native app is **0.2.0**; the independently versioned SDK is **2.2.1**. Its wheel
-does not include the native worker or models. For custom references, typed
+Published desktop packages are **0.2.0**; this source tree targets **0.2.1**.
+The independently versioned SDK is **2.2.1**. Its wheel does not include the native
+worker or models. For custom references, typed
 options, model reload, and partial batch failures, see the [API guide](api/README.md)
 and [typed API reference](docs/api/README.md).
 
+The [configuration examples](docs/api/README.md) show FFC settings, GC/WB stage
+switches, CC methods, and application overrides. The [workflow notebook](notebooks/01_headless_workflow.ipynb)
+and [method comparison notebook](notebooks/02_compare_fit_methods.ipynb) provide
+step-by-step, editable examples.
+
+## Research and citation
+
+ColorCorrect Studio follows the stepwise FFC → GC → WB → CC workflow described
+by Wakholi and colleagues in [*A systematic color correction pipeline for
+controlled-environment imaging*](https://doi.org/10.1002/ppj2.70067), *The Plant
+Phenome Journal*, **9**(1), e70067 (2026).
+
+The original [ColorCorrectionPipeline package on PyPI](https://pypi.org/project/ColorCorrectionPipeline/)
+and its [source repository](https://github.com/collinswakholi/ColorCorrectionPackage)
+provide the earlier Python implementation. Studio uses a native Rust engine and
+offers a familiar `ColorCorrection`/`Config` workflow with its own documented
+algorithms, file-based inputs, typed results, and model format. See the
+[API compatibility notes](api/README.md) before migrating existing scripts.
+
+For research use, cite the study, the original package where applicable, and the
+Studio version used. [CITATION.cff](CITATION.cff) contains machine-readable
+software and research references.
+
 ## Builds, releases, and development
 
-Updates to `main` automatically build and test Windows/Linux x64 and ARM64
-applications and validate Apple-silicon macOS source. Pull requests run the same
-native checks. Download development candidates from the
+Application, API, packaging, and bundled-documentation changes on `main` and pull
+requests build and test Windows/Linux x64 and ARM64 applications and validate
+Apple-silicon macOS source. Root README and dedicated demo-only edits run a small
+documentation check without rebuilding applications. Mixed or unrecognized
+changes retain native validation. Download development candidates from the
 [Actions page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/workflows/native-builds.yml).
 
-A version tag such as `v0.2.0` runs all five checks, then publishes the matching
+A version tag such as `v0.2.0` always runs all five native checks, then publishes the matching
 Windows/Linux assets and checksums to GitHub Releases. Preview releases remain
-marked as prereleases. macOS uploads contain text validation evidence only.
+marked as prereleases. Manual native-workflow runs also retain all native checks.
+macOS uploads contain text validation evidence only.
 
 Build with the pinned **.NET SDK 10.0.402** and **Rust 1.95.0** toolchains.
 [Build instructions](docs/building.md) · [Contributing](CONTRIBUTING.md)
@@ -164,6 +199,8 @@ Build with the pinned **.NET SDK 10.0.402** and **Rust 1.95.0** toolchains.
 The application processes still images. Settings and sessions retain the legacy
 `CCP-New` data location for compatibility. Keep your models, sessions, and exports
 outside the application installation folder.
+
+The app and SDK do not require Torch, LibTorch, or a CUDA add-on.
 
 Application code is [MIT licensed](LICENSE). Bundled models and dependencies have
 separate terms; read [third-party notices](THIRD_PARTY_NOTICES.md),

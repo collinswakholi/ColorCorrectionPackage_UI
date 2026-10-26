@@ -57,6 +57,7 @@
     "Title": "Apply & save",
     "Paragraphs": [
       "To apply an existing fit, expand Model and select Use loaded; load model JSON first if needed. Select the sample image and run Apply model. Fit from image is a different mode. No chart is needed on an apply-only image, but capture conditions must match. In Batch, choose Apply current model to reuse the model; Fit from chart calibrates each chart image separately.",
+      "Batch shows the active filename and its applicable FFC, GC, WB, CC and Save result indicators. Turn Preview results off to avoid generating previews for the batch; full-resolution output is still written. Existing completed results keep their captured model and settings when you change controls for the next operation. Drag the divider above the analysis section upward to enlarge the figures before inspecting or capturing them.",
       "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S and choose Corrected (full size) for a full-resolution corrected image. FFC, GC, WB, and CC stage exports are preview-resolution images for inspection. Reports contain the chart measurements. Choose an output folder and Save selected; existing files require replacement confirmation. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
       "Keep the source files unchanged and store outputs separately. Compare corrected results in a color-managed viewer before downstream measurement or publication."
     ]
@@ -65,7 +66,8 @@
     "Title": "API & notebooks",
     "Paragraphs": [
       "The same Rust worker used by the GUI accepts sequential newline-delimited JSON commands without opening a window. The bundled Python SDK and command-line interface provide a friendlier route for scripts, automation, and Jupyter notebooks; Python is optional for the desktop app.",
-      "Find api/, docs/api/, and notebooks/ beside the packaged application. Use ColorCorrection(Config(save_path=\"results\")), then run(Image=\"chart.jpg\") and predict_images(images=[\"sample.jpg\"]). The typed Client interface and legacy Engine protocol are also available. See the API README for complete examples and differences from the original Python package.",
+      "Install the bundled wheel from python/ into your Python environment. Read api/README.md or docs/api/README.md beside the application. Pass root=the installed application folder to ColorCorrection or Client. Run the notebooks from https://github.com/collinswakholi/ColorCorrectionPackage_UI/tree/main/notebooks; the notebook files and photograph fixtures are supplied with the source, not the installer.",
+      "Start with ColorCorrection(Config(save_path=\"results\"), root=app_folder), then run(Image=\"chart.jpg\", White_Image=\"Blank.JPG\") and predict_images(images=[\"sample.jpg\"]). Config controls do_ffc, do_gc, do_wb and do_cc; options=CalibrationOptions(ffc=FFCOptions(...)) configures fitting. Config stage switches override the matching nested switches. GC and WB are fitted automatically; their public controls enable or disable those stages. The API guide shows editable FFC, CC and application options, typed results and model reload.",
       "Use a separate worker per independent session and send one request at a time. Treat model state as belonging to that worker. A timeout must terminate the worker before another request, so a late reply cannot be mistaken for the next operation.",
       "The API is a local process interface, not an internet server. The app does not open a network listener by default. Use explicit output directories and retain your model, configuration, chart reference, and reports for reproducibility."
     ]
@@ -76,15 +78,16 @@
       "No chart found: check focus, exposure, framing, and patch visibility, then press Detect again. Verify the detected chart type and overlay. Do not use Blank.JPG as the chart. Try a clear chart-bearing image from the same setup.",
       "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
       "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
-      "Worker or native-library error: open Accelerators, inspect the error, and restart the worker. Chart and plane inference require DirectML or WebGPU; there is no CPU inference fallback. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
+      "Worker or native-library error: open Processing settings, inspect the error, and restart the worker. Chart and plane inference require DirectML or WebGPU; there is no CPU inference fallback. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
     ]
   },
   {
     "Title": "Research & citation",
     "Paragraphs": [
       "This application builds on the stepwise workflow presented by Wakholi and colleagues: A systematic color correction pipeline for controlled-environment imaging. The Plant Phenome Journal 9, e70067 (2026). DOI: 10.1002/ppj2.70067. Published 11 March 2026.",
+      "The original ColorCorrectionPipeline Python package is available at https://pypi.org/project/ColorCorrectionPipeline/ with source at https://github.com/collinswakholi/ColorCorrectionPackage. Studio retains a familiar stepwise workflow and run/predict naming; its native implementation and typed results are not a drop-in replacement for the original package.",
       "The research motivates evaluating the imaging setup together with correction, rather than treating a regression model as a substitute for controlled capture. The current application is an evolving implementation; its automatic GC and NN safeguards should not be assumed to reproduce every historical experimental setting.",
-      "Use Original research to open the publisher article. Study PDF opens docs/research/ppj2.70067.pdf when available locally. The build's direct download was blocked by the publisher, so place a legitimately downloaded copy there for offline access; this package does not claim to bundle the paper. The illustrated guide itself is embedded and always available offline. Numerical validation sources and test limitations are in docs/color-science-validation.md."
+      "Original research opens the publisher article. Study PDF opens docs/research/ppj2.70067.pdf when you have placed a legitimately obtained copy there; the paper is not bundled. The illustrated guide is embedded for offline use. Numerical validation sources and test limitations are documented in docs/color-science-validation.md."
     ]
   }
 ]

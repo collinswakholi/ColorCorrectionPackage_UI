@@ -1,82 +1,149 @@
 # ColorCorrect Studio Python API
 
-Install locally with `python -m pip install ./api`. The SDK has no Python runtime
-dependencies. An extracted ColorCorrect Studio native package or built source
-checkout is required separately; the wheel does not contain native runtimes/models.
+Fit a correction from a chart photograph, then apply it to still images captured
+under the same conditions. The SDK requires Python 3.10+ and has no Python ML or
+GUI runtime dependencies. Install the wheel from your application's `python/`
+folder, or install from this checkout:
 
-For a workflow resembling `ColorCorrectionPipeline`:
+```sh
+python -m pip install ./api
+```
+
+The wheel does **not** contain the native worker, models, or inference libraries.
+Keep the installed/extracted application intact and set `root` to that folder.
+The native application and SDK are versioned independently; this SDK is 2.2.1.
+
+## Fit, then predict
 
 ```python
 from colorcorrect import ColorCorrection, Config
 
 with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStudio") as cc:
-    calibration = cc.run(Image="chart.jpg")  # Optional White_Image="blank.jpg"
-    result = cc.predict_images(images=["image1.jpg", "image2.jpg"])
+    calibration = cc.run(Image="chart.jpg")
+    result = cc.predict_images(images=["scene1.jpg", "scene2.jpg"])
     print(calibration.metrics)
     print(result.outputs)
     calibration.export_lut("correction.cube")
 ```
 
-This preserves the familiar fit/predict workflow, with explicit differences:
-inputs are file paths (including `pathlib.Path`), outputs are typed results with
-artifact paths, and failures raise actionable exceptions. It does not accept
-NumPy arrays, return the old `(metrics, images, errors)` tuple, load pickle models,
-or silently translate the original package's algorithm dictionaries. Use
-`Config(options=CalibrationOptions(...))` for documented advanced settings.
-FFC is inferred from `White_Image` by default; `do_ffc=True` requires that image.
-Each operation creates a unique directory under `save_path`.
+Strings and `pathlib.Path` are accepted. Each calibration/application creates a
+unique durable directory under `save_path`; returned paths identify the actual
+artifacts. Explicit export destinations require `overwrite=True` to replace an
+existing file. A `.cube` LUT contains the global transform and excludes spatial FFC.
 
-Reload a Studio model in a new process:
+## Edit FFC, GC, WB, and CC settings
 
 ```python
-with ColorCorrection(Config(save_path="corrected"), root="/path/to/ColorCorrectStudio") as cc:
-    cc.load_model("results/calibration-123/model.json")
-    result = cc.predict_image("scene.jpg")
-```
-
-The lower-level typed API remains available:
-
-```python
-from colorcorrect import Client
-
-with Client(root="/path/to/ColorCorrectStudio") as client:
-    calibration = client.calibrate("chart.jpg", output_dir="results")
-    result = calibration.apply("scene.jpg", output_dir="corrected")
-    print(result.outputs)
-    print(calibration.path)  # Load this saved JSON from a later Client.
-```
-
-See `docs/api/README.md` in the repository for custom references, batch
-results, model reuse, typed options, and the advanced NDJSON protocol.
-
-Legacy `Engine` imports, raw replies, scripts, `python -m colorcorrect`, and
-`python api/colorcorrect.py` remain supported for still images. Video methods and
-processing have been removed. Automatic GPU inference and wgpu LUT processing are the default.
-
-Inference accepts `auto`, `directml`, `webgpu`, and `vulkan` (native WebGPU over Vulkan).
-It never falls back to a CPU execution provider. Missing adapters, libraries, or
-unsupported operators produce a processing error. `backend="cpu"` selects CPU
-LUT application while retaining automatic GPU inference. Calibration/regression
-fitting and image I/O remain on CPU. Inspect `result.backends.actual` and
-`result.backends.diagnostics` for actual execution and LUT recovery details.
-
-Calibration and application use the combined 65³ GC/WB/CC LUT by default:
-
-```python
-from colorcorrect import ApplyOptions
-
-result = calibration.apply(
-    ["scene1.jpg", "scene2.jpg"], output_dir="fast-results",
-    options=ApplyOptions(),  # fast_mode=True by default
+from dataclasses import replace
+from colorcorrect import (
+    ApplyOptions, CalibrationOptions, ColorCorrection, Config, FFCOptions,
 )
+
+config = Config(
+    save_path="results",
+    do_ffc=True, do_gc=True, do_wb=True, do_cc=True,
+    options=CalibrationOptions(
+        model="linear", degree=2,        # Polynomial CC, not gamma degree
+        ffc=FFCOptions(method="pls", bins=32, smooth=5, degree=3),
+        crop_rect=None,                 # Automatic white-plane detection
+        cross_validate=True,
+    ),
+)
+# These dataclasses are frozen. Make a changed configuration for another fit:
+without_wb = replace(config, do_wb=False)
+
+with ColorCorrection(config, root="/path/to/ColorCorrectStudio") as cc:
+    calibration = cc.run(Image="chart.jpg", White_Image="blank.jpg")
+    result = cc.predict_images(
+        images=["scene1.jpg", "scene2.jpg"],
+        options=ApplyOptions(output_format="jpg"),  # Inherit fitted stages/FFC
+    )
+    print(calibration.warnings)
+    print(result.backends.actual, result.backends.diagnostics)
 ```
 
-Fast mode is enabled by default for calibration and application.
-`fast_mode=False` selects the standard separate stages and 33³ CC LUT.
-Fast mode approximates the fitted model; it does not change its coefficients.
-Flat-field correction remains separate. CPU LUT processing and GPU recovery use
-the same 65³ table. Inspect `result.backends.diagnostics` for the actual method.
-`CalibrationOptions(fast_mode=True)` also renders calibration output this way;
-fitting and intermediate previews retain their stage calculations.
-Both options require the worker's `combined_lut65_v1` capability.
-The experimental `cc_method="direct"` option has been removed.
+`Config.do_ffc` defaults to `None`: supplying `White_Image` enables FFC.
+`do_ffc=True` requires an existing white image; `False` disables FFC even if one
+is supplied. GC/WB/CC default to enabled. **The stage switches on `Config`
+override their counterparts inside `Config.options`**, including
+`check_saturation` overriding `CalibrationOptions.do_sat`. Set switches on
+`Config` when using this workflow; use `options` for fitting details.
+
+GC and WB are fitted automatically from the selected chart and reference values.
+Their public configuration is enable/disable; there are no manual gamma-degree,
+gamma-exponent, white-temperature, or channel-gain controls. Changing CC fitting
+parameters requires another fit. `ApplyOptions` can disable fitted stages or
+override FFC rendering settings, but cannot create a transform absent from a model.
+CC degree also controls the polynomial input features of PLS/NN; use integers
+1–7. The combination-term switch affects polynomial CC (`model="linear"`) only;
+PLS/NN always include those terms. The detailed reference explains SDK 2.2.1
+validation versus native normalization.
+
+See the [configuration reference](../docs/api/README.md#configuration-reference)
+for defaults, bounds, units, method-specific settings, and manual white-image crops.
+
+## Reload a saved Studio model
+
+```python
+from colorcorrect import ColorCorrection, Config
+
+with ColorCorrection(Config(save_path="corrected"), root="/path/to/ColorCorrectStudio") as cc:
+    calibration = cc.load_model("results/calibration-123/model.json")
+    result = cc.predict_image("scene.jpg")
+    print(result.outputs)
+```
+
+Application inherits the model's GC/WB/CC transforms and recorded FFC settings,
+not the fit switches on a new `Config`. Keep the original white image accessible
+for FFC reuse. If it moves, explicitly supply `ApplyOptions(white="new/path.jpg")`;
+this is an intentional replacement and must still match the capture setup.
+A closed client/model handle cannot restart itself: reopen and load the saved JSON.
+
+## Custom references and explicit detection
+
+```python
+from colorcorrect import Client, ReferenceProfile
+
+reference = ReferenceProfile.from_csv(
+    "reference.csv", chart="classic", color_space="lab",
+    white_point="d50", order="row-major",
+)
+with Client(root="/path/to/ColorCorrectStudio") as client:
+    detection = client.detect("chart.jpg")
+    calibration = client.calibrate(
+        detection.image, detection=detection,
+        reference=reference, chart_ids=[detection.charts[0].id],
+        output_dir="results",
+    )
+    result = calibration.apply(["scene1.jpg", "scene2.jpg"], output_dir="corrected")
+```
+
+Built-in references need no `reference`. Multiple selected charts require explicit
+assignments by detected ID. See the [typed API guide](../docs/api/README.md) for
+mapping/import formats, partial batch failures, results, and errors.
+
+## Processing and compatibility
+
+Automatic GPU inference and Fast correction are the defaults. The combined 65³
+GC/WB/CC LUT approximates the fitted transform; FFC remains separate.
+`fast_mode=False` uses separate stages and a 33³ CC LUT. This does not change the
+fitted coefficients. Both CPU application and GPU recovery use the selected LUT.
+
+`backend="cpu"` selects CPU **image correction**, while chart/plane detection
+still requires GPU inference. Inference routes are Auto, DirectML (Windows),
+WebGPU, and Vulkan; unavailable adapters produce actionable errors without CPU
+inference fallback. Fitting, image decoding/encoding, and spatial FFC may use CPU.
+Inspect reported execution diagnostics rather than inferring GPU use from a setting.
+
+The run/predict naming resembles
+[ColorCorrectionPipeline](https://pypi.org/project/ColorCorrectionPipeline/).
+Studio accepts image paths and returns typed artifact results; it does not accept
+the original NumPy-array workflow, tuple results, pickle models, or algorithm
+dictionaries as interchangeable inputs. The related
+[study](https://doi.org/10.1002/ppj2.70067) describes the original pipeline;
+Studio's implementation and validation scope are documented separately.
+
+[Tutorial notebooks](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md) demonstrate editable stage options
+and method comparisons. Legacy `Engine`, scripts, CLI entry points, and raw
+replies remain available through the [advanced protocol guide](../docs/api/protocol.md).
+This SDK processes still images only.

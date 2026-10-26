@@ -29,6 +29,72 @@
         <conv:DeltaEQualityBgBrushConverter x:Key="DEQualityBgBrush"/>
         <conv:LogLevelToBrushConverter x:Key="LogLevelToBrush"/>
         <conv:LogLevelToWeightConverter x:Key="LogLevelToWeight"/>
+        <conv:ImprovementBrushConverter x:Key="ImprovementBrush"/>
+        <ControlTheme x:Key="ProcessingDisclosureToggle" TargetType="ToggleButton">
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="DisclosureBorder" Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" Padding="8,6">
+                        <Grid ColumnDefinitions="*,12">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              VerticalAlignment="Center"/>
+                            <Path Grid.Column="1" Data="M 1,3 L 5,7 L 9,3" Width="10" Height="8"
+                                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5"
+                                  StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center"
+                                  IsVisible="{Binding !IsChecked, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <Path Grid.Column="1" Data="M 1,7 L 5,3 L 9,7" Width="10" Height="8"
+                                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5"
+                                  StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center"
+                                  IsVisible="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"/>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#DisclosureBorder">
+                <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}"/>
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#DisclosureBorder">
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="ProcessingDisclosure" TargetType="Expander">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="HeaderTemplate">
+                <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" FontSize="13" FontWeight="Medium"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                </DataTemplate>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <StackPanel>
+                        <ToggleButton x:Name="ExpandCollapseButton" Theme="{StaticResource ProcessingDisclosureToggle}"
+                                      IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                                      Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                                          IsVisible="{TemplateBinding IsExpanded}"/>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
     </Window.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto">
@@ -46,7 +112,7 @@
                             ToolTip.Tip="Processing speed and graphics settings"
                             AutomationProperties.AutomationId="OpenAccelerators"
                             AutomationProperties.AcceleratorKey="Ctrl+Alt+A"
-                            AutomationProperties.Name="Open accelerators">
+                            AutomationProperties.Name="Open processing settings">
                         <StackPanel>
                             <TextBlock Text="ColorCorrect Studio" Classes="heading"/>
                             <Border Classes="accelChip" ToolTip.Tip="{Binding WorkerLine}">
@@ -57,31 +123,33 @@
                     </Button>
                     <Popup x:Name="AccelMenu" Placement="BottomEdgeAlignedLeft" IsLightDismissEnabled="True"
                            PlacementConstraintAdjustment="SlideX,SlideY">
-                        <Border Background="{DynamicResource PopupBrush}"
+                        <Border x:Name="ProcessingSettingsPanel" Background="{DynamicResource PopupBrush}"
                                 BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                BorderThickness="1" CornerRadius="8" Padding="16" MinWidth="340" MaxWidth="420"
-                                AutomationProperties.Name="Accelerators panel">
-                            <StackPanel>
-                                <TextBlock Text="PROCESSING" Classes="subheading" Margin="0,0,0,12"/>
-                                <TextBlock Text="Image correction" Classes="caption" Margin="0,0,0,6"/>
+                                BorderThickness="1" CornerRadius="8" Padding="20" Width="392"
+                                AutomationProperties.Name="Processing settings panel">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Processing settings" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,16"/>
+                                <ScrollViewer x:Name="ProcessingSettingsScroll" MaxHeight="440"
+                                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                <TextBlock Text="Image correction" Classes="settingsLabel" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="ProcessingDevice" Classes="config" ItemsSource="{Binding ProcessingDevices}"
-                                          SelectedItem="{Binding SelectedProcessingDevice}" AutomationProperties.Name="Image correction device">
+                                          MinHeight="36" SelectedItem="{Binding SelectedProcessingDevice}"
+                                          AutomationProperties.Name="Image correction device">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:NamedValue"><TextBlock Text="{Binding Label}"/></DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,0,0,12"
-                                           Text="Auto uses the CPU for small images and the GPU for larger images. GPU falls back to CPU if needed. Chart detection uses the GPU."/>
+                                <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,8,0,0" LineHeight="17"
+                                           Text="Auto chooses CPU or GPU. CPU takes over if needed."/>
+                                <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,16,0,8"/>
                                 <Expander x:Name="AdvancedAcceleration" Header="Advanced" IsExpanded="False"
+                                          Theme="{StaticResource ProcessingDisclosure}"
                                           AutomationProperties.Name="Advanced graphics settings">
-                                    <StackPanel Margin="0,8,0,0" Spacing="8">
-                                        <CheckBox x:Name="CompatibilityProcessing" IsChecked="{Binding FastMode, Converter={StaticResource InverseBool}}"
-                                                  AutomationProperties.Name="Use previous processing method"
-                                                  ToolTip.Tip="For comparing or reproducing older results. Slower; evaluates gamma and white balance separately. Fast processing is the default for every device.">
-                                            <TextBlock Text="Use previous processing method" FontSize="12"/>
-                                        </CheckBox>
-                                        <TextBlock Text="Chart detection engine" Classes="caption"/>
-                                        <ComboBox Classes="config" ItemsSource="{Binding AccelPolicies}"
+                                    <StackPanel>
+                                        <TextBlock Text="Detection engine" Classes="settingsLabel" Margin="0,0,0,6"/>
+                                        <ComboBox x:Name="DetectionEngine" Classes="config" MinHeight="36" ItemsSource="{Binding AccelPolicies}"
                                                   SelectedItem="{Binding SelectedAccelPolicy}"
                                                   AutomationProperties.Name="Inference mode">
                                             <ComboBox.ItemTemplate>
@@ -90,19 +158,34 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
+                                        <TextBlock Text="Chart and white-plane detection use the GPU." Classes="caption"
+                                                   TextWrapping="Wrap" LineHeight="17" Margin="0,8,0,12"/>
                                         <Button Content="Apply engine change" Theme="{StaticResource SecondaryButton}"
                                                 Command="{Binding ForceCpuRestartCommand}" HorizontalAlignment="Stretch"
                                                 AutomationProperties.Name="Apply engine change"/>
-                                        <Expander Header="Device details" IsExpanded="False">
-                                            <StackPanel Margin="0,8,0,0">
+                                        <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,16,0,12"/>
+                                        <CheckBox x:Name="CompatibilityProcessing" IsChecked="{Binding FastMode, Converter={StaticResource InverseBool}}"
+                                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                  AutomationProperties.Name="Use previous processing method"
+                                                  ToolTip.Tip="For comparing or reproducing older results. Slower; evaluates gamma and white balance separately. Fast processing is the default for every device.">
+                                            <TextBlock Text="Compatibility mode" FontSize="13"/>
+                                        </CheckBox>
+                                        <TextBlock Text="Reproduce older results. Slower processing." Classes="caption"
+                                                   TextWrapping="Wrap" LineHeight="17" Margin="28,2,0,12"/>
+                                        <Expander x:Name="ProcessingDeviceDetails" Header="Device details" IsExpanded="False"
+                                                  Theme="{StaticResource ProcessingDisclosure}">
+                                            <StackPanel Margin="0,4,0,0">
                                                 <TextBlock Text="{Binding AccelHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                                 <ItemsControl ItemsSource="{Binding AccelRows}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="vm:AccelRow">
-                                                            <StackPanel Margin="0,0,0,8">
-                                                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"/>
-                                                                <TextBlock Text="{Binding Status}" Classes="caption"/>
-                                                                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap"/>
+                                                            <StackPanel Margin="0,0,0,12">
+                                                                <Grid ColumnDefinitions="*,Auto">
+                                                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                                               TextWrapping="Wrap" Margin="0,0,8,0"/>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Status}" Classes="caption"/>
+                                                                </Grid>
+                                                                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                                             </StackPanel>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -111,7 +194,9 @@
                                         </Expander>
                                     </StackPanel>
                                 </Expander>
-                            </StackPanel>
+                                </StackPanel>
+                                </ScrollViewer>
+                            </DockPanel>
                         </Border>
                     </Popup>
                 </StackPanel>
@@ -1110,12 +1195,25 @@
                                                                 IsVisible="{Binding !IsDetail}">
                                                         <TextBlock Text="{Binding TimeLabel}" Classes="logStamp"/>
                                                         <TextBlock Classes="logLine" Text="{Binding Message}"
-                                                                   Foreground="{Binding Level, Converter={StaticResource LogLevelToBrush}}"
-                                                                   FontWeight="{Binding Level, Converter={StaticResource LogLevelToWeight}}"/>
+
+                                                                   FontWeight="{Binding Level, Converter={StaticResource LogLevelToWeight}}">
+                                                            <TextBlock.Foreground>
+                                                                <MultiBinding Converter="{StaticResource LogLevelToBrush}">
+                                                                    <Binding Path="Level"/>
+                                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Foreground>
+                                                        </TextBlock>
                                                     </StackPanel>
                                                     <TextBlock Classes="logLine detail" Text="{Binding Message}"
-                                                               IsVisible="{Binding IsDetail}"
-                                                               Foreground="{Binding Level, Converter={StaticResource LogLevelToBrush}}"/>
+                                                               IsVisible="{Binding IsDetail}">
+                                                        <TextBlock.Foreground>
+                                                            <MultiBinding Converter="{StaticResource LogLevelToBrush}">
+                                                                <Binding Path="Level"/>
+                                                                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                            </MultiBinding>
+                                                        </TextBlock.Foreground>
+                                                    </TextBlock>
                                                 </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -1134,39 +1232,72 @@
                                        Text="Fit a chart still to see per-stage ΔE."
                                        TextWrapping="Wrap"/>
                             <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding HasMetrics}">
-                                <Border Classes="metricTile" Margin="0,0,8,8"
-                                        Background="{Binding MeanAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                <Border Classes="metricTile" Margin="0,0,8,8">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
+                                            <Binding Path="MeanAfterValue"/>
+                                            <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Fit mean ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MeanAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{Binding MeanAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                                   FontSize="11" FontWeight="SemiBold">
+                                            <TextBlock.Foreground>
+                                                <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                                    <Binding Path="MeanAfterValue"/>
+                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Foreground>
+                                        </TextBlock>
                                         <TextBlock x:Name="MeanMetric" Grid.Row="1" Text="{Binding MeanAfter}"
                                                    Classes="metricValue"/>
                                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MeanBefore}" Classes="caption"
                                                    VerticalAlignment="Bottom"/>
                                     </Grid>
                                 </Border>
-                                <Border Classes="metricTile" Margin="0,0,8,8"
-                                        Background="{Binding MedianAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                <Border Classes="metricTile" Margin="0,0,8,8">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
+                                            <Binding Path="MedianAfterValue"/>
+                                            <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Median ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MedianAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{Binding MedianAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                                   FontSize="11" FontWeight="SemiBold">
+                                            <TextBlock.Foreground>
+                                                <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                                    <Binding Path="MedianAfterValue"/>
+                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Foreground>
+                                        </TextBlock>
                                         <TextBlock x:Name="MedianMetric" Grid.Row="1" Text="{Binding MedianAfter}"
                                                    Classes="metricValue"/>
                                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MedianBefore}" Classes="caption"
                                                    VerticalAlignment="Bottom"/>
                                     </Grid>
                                 </Border>
-                                <Border Classes="metricTile" Margin="0,0,8,8"
-                                        Background="{Binding MaxAfterValue, Converter={StaticResource DEQualityBgBrush}}">
+                                <Border Classes="metricTile" Margin="0,0,8,8">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
+                                            <Binding Path="MaxAfterValue"/>
+                                            <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </MultiBinding>
+                                    </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Max ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MaxAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{Binding MaxAfterValue, Converter={StaticResource DEQualityBrush}}"/>
+                                                   FontSize="11" FontWeight="SemiBold">
+                                            <TextBlock.Foreground>
+                                                <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                                    <Binding Path="MaxAfterValue"/>
+                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Foreground>
+                                        </TextBlock>
                                         <TextBlock x:Name="MaxMetric" Grid.Row="1" Text="{Binding MaxAfter}"
                                                    Classes="metricValue"/>
                                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MaxBefore}" Classes="caption"
@@ -1196,8 +1327,13 @@
                                             <ItemsControl ItemsSource="{Binding StageDeltaERows}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:StageDeltaERow">
-                                                        <Border Classes="stageDeltaCard"
-                                                                Background="{Binding MeanAfter, Converter={StaticResource DEQualityBgBrush}}">
+                                                        <Border Classes="stageDeltaCard">
+                                                            <Border.Background>
+                                                                <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
+                                                                    <Binding Path="MeanAfter"/>
+                                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                </MultiBinding>
+                                                            </Border.Background>
                                                             <Grid ColumnDefinitions="48,*,Auto">
                                                                 <TextBlock Text="{Binding Name}"
                                                                            FontWeight="Bold" FontSize="14"
@@ -1207,18 +1343,36 @@
                                                                     <TextBlock Classes="body" Text="{Binding RangeText}"/>
                                                                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                                                                         <Ellipse Width="7" Height="7" Margin="0,0,5,0"
-                                                                                 VerticalAlignment="Center"
-                                                                                 Fill="{Binding MeanAfter, Converter={StaticResource DEQualityBrush}}"/>
+                                                                                 VerticalAlignment="Center">
+                                                                            <Ellipse.Fill>
+                                                                                <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                                                                    <Binding Path="MeanAfter"/>
+                                                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                </MultiBinding>
+                                                                            </Ellipse.Fill>
+                                                                        </Ellipse>
                                                                         <TextBlock Text="{Binding MeanAfter, Converter={StaticResource DEQualityText}}"
-                                                                                   FontSize="10" FontWeight="SemiBold"
-                                                                                   Foreground="{Binding MeanAfter, Converter={StaticResource DEQualityBrush}}"/>
+                                                                                   FontSize="10" FontWeight="SemiBold">
+                                                                            <TextBlock.Foreground>
+                                                                                <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                                                                    <Binding Path="MeanAfter"/>
+                                                                                    <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                </MultiBinding>
+                                                                            </TextBlock.Foreground>
+                                                                        </TextBlock>
                                                                     </StackPanel>
                                                                 </StackPanel>
                                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center"
                                                                             HorizontalAlignment="Right">
                                                                     <TextBlock Text="{Binding ImprovementText}"
-                                                                               FontWeight="SemiBold"
-                                                                               Foreground="{Binding ImprovementBrush}"/>
+                                                                               FontWeight="SemiBold">
+                                                                        <TextBlock.Foreground>
+                                                                            <MultiBinding Converter="{StaticResource ImprovementBrush}">
+                                                                                <Binding Path="ImprovementPercent"/>
+                                                                                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                            </MultiBinding>
+                                                                        </TextBlock.Foreground>
+                                                                    </TextBlock>
                                                                     <TextBlock Text="{Binding ElapsedText}" Classes="caption"
                                                                                IsVisible="{Binding HasElapsed}"/>
                                                                 </StackPanel>

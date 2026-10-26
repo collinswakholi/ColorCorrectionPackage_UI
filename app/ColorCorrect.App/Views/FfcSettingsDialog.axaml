@@ -39,7 +39,7 @@
                 <Button Content="Done" Theme="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Click="Close_Click"
                         AutomationProperties.Name="Done"/>
             </Border>
-            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
             <StackPanel Margin="16,12">
                     <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                 <TextBlock Text="Fit method" Classes="settingsLabel"/>
