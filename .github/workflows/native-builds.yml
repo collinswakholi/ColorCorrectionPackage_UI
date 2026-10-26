@@ -8,8 +8,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Main commits keep separate groups: a README-only successor must not cancel
+  # or replace queued native validation. PR diffs remain cumulative and supersedable.
+  group: native-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   CARGO_BUILD_JOBS: 2
   CARGO_INCREMENTAL: '0'

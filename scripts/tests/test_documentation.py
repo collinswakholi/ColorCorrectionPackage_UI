@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -55,6 +56,30 @@ class DocumentationChecks(unittest.TestCase):
 
 
 class StoryboardChecks(unittest.TestCase):
+    def test_portable_storyboard_keeps_lf_when_git_uses_windows_checkout(self):
+        # Artifact hashes must survive a Windows Git checkout with autocrlf.
+        # Exercise Git's real index/filter behavior, not str.replace alone.
+        with tempfile.TemporaryDirectory(prefix="ccp-demo-git-eol-") as directory:
+            root = Path(directory)
+            attributes = Path(__file__).resolve().parents[2] / ".gitattributes"
+            (root / ".gitattributes").write_bytes(attributes.read_bytes())
+            path = root / "docs/images/demo/storyboard.json"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b'{"frames":[]}\r\n')
+
+            def git(*arguments):
+                return subprocess.run(["git", "-c", "core.autocrlf=true", *arguments], cwd=root,
+                                      check=True, capture_output=True).stdout
+
+            git("init", "-q")
+            git("add", ".gitattributes", "docs/images/demo/storyboard.json")
+            index = git("show", ":docs/images/demo/storyboard.json")
+            path.unlink()
+            git("checkout-index", "--", "docs/images/demo/storyboard.json")
+            self.assertEqual(index, b'{"frames":[]}\n')
+            self.assertEqual(path.read_bytes(), index)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).digest(), hashlib.sha256(index).digest())
+
     def test_portable_storyboard_sources_timing_and_scientific_cuts(self):
         with tempfile.TemporaryDirectory(prefix="ccp-demo-story-") as directory:
             root = Path(directory)

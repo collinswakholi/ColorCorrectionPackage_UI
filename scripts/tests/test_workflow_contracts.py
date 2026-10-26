@@ -32,10 +32,11 @@ class WorkflowContracts(unittest.TestCase):
     def test_concurrency_separates_main_pull_request_dispatch_and_version_tag(self):
         concurrency = load("native-builds.yml")["concurrency"]
 
-        def group(event, reference, pull_request=None):
+        def group(event, reference, pull_request=None, commit="a" * 40):
             values = {"github.workflow": "Native release candidates and source checks",
                       "github.event_name": event, "github.ref": reference,
-                      "github.event.pull_request.number || github.ref": str(pull_request or reference)}
+                      "github.event.pull_request.number || github.ref": str(pull_request or reference),
+                      "github.event_name == 'pull_request' && 'pr' || github.sha": "pr" if event == "pull_request" else commit}
             return re.sub(r"\$\{\{\s*(.*?)\s*\}\}", lambda match: values[match[1]], concurrency["group"]).lower()
 
         main = group("push", "refs/heads/main")
@@ -47,7 +48,13 @@ class WorkflowContracts(unittest.TestCase):
         # resolves to main after merging. New commits in that PR still supersede it.
         self.assertEqual(merged_pr, group("pull_request", "refs/pull/4/merge", 4))
         self.assertNotEqual(merged_pr, group("pull_request", "refs/pull/5/merge", 5))
-        self.assertEqual(concurrency["cancel-in-progress"], "true")
+        self.assertEqual(concurrency["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}")
+        # GitHub can replace pending runs even when cancel-in-progress is false.
+        # Distinct main groups preserve code A running, code B queued and docs C.
+        main_successors = {group("push", "refs/heads/main", commit=f"{index:040x}") for index in range(1, 4)}
+        self.assertEqual(len(main_successors), 3)
+        self.assertEqual(group("pull_request", "refs/pull/4/merge", 4, "a" * 40),
+                         group("pull_request", "refs/pull/4/merge", 4, "b" * 40))
 
     def test_native_targets_pins_and_fail_closed_job_filters(self):
         workflow = load("native-builds.yml")

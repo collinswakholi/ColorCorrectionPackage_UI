@@ -578,9 +578,9 @@
       "sha256": "9a6c2c3ce59e2a00c404eaf1b413caecff215fa0b2fd429e006b9a2865952c6a"
     },
     "storyboard.json": {
-      "bytes": 5917,
-      "sha256": "afe5aad9dafd2482eeda0b093478f7c985402c2a7ddfc24ce84e754fc3d7bd46"
+      "bytes": 5732,
+      "sha256": "b076c4ac6c7641b15b3bdb3d1b2a5f59f0d3b216518a85888b262bb4fe0e3127"
     }
   },
-  "portable_storyboard_sha256": "afe5aad9dafd2482eeda0b093478f7c985402c2a7ddfc24ce84e754fc3d7bd46"
+  "portable_storyboard_sha256": "b076c4ac6c7641b15b3bdb3d1b2a5f59f0d3b216518a85888b262bb4fe0e3127"
 }
