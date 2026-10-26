@@ -9,7 +9,7 @@ as an interactive test of the corresponding control.
 
 - **Public baseline:** downloaded GitHub v0.2.0 Windows/Linux x64 distributions;
   original payloads were independently checked against their published manifests.
-- **UI repair candidate:** application 0.2.1 built from the working source, combined
+- **Initial UI repair candidates (v1-v3):** application 0.2.1 built from the working source, combined
   explicitly with the unchanged public 0.2.0 worker, models, GPU runtimes, and
   SDK 2.2.1 wheel. This local development candidate is not a published release or
   a full-source rebuild of the engine. Its own manifest records that distinction.
@@ -43,8 +43,8 @@ in their relevant state; opening a settings dialog alone is insufficient.
 | Auto/CPU/GPU correction, Advanced, compatibility processing, inference choice, Apply engine change, device details | `ProcessingSettings_DefaultsAreSimpleAndDevicesKeepFastProcessing`, `RepeatedInferenceAndLutChangesRemainIndependentAndPersist`, observed-provider tests | Candidate v3 reviewed the redesigned Processing menu in both themes; public SDK separately exercised DirectML/WebGPU/Vulkan | Candidate v2 used device/backend choices; v3 checked all Processing disclosures at minimum size in both themes | Verify every available provider on appropriate adapters; missing adapters remain explicit failures |
 | Image/folder import, drag/drop, catalog add/remove/search/filter, white-reference identification | still-only import tests; sidebar/layout and batch-default tests | Ten source photographs imported for the observed fit queue | Public chart and blank-field photographs loaded for FFC fitting | Each import route, catalog action, filter, drag/drop and exclusion rule |
 | Thumbnails, selection/range selection, remove, previous/next, missing-image entry/context menu | session navigation/Enter tests; `EightyFirstImportCannotEvictCompletedResultsAndRestoredSessionsKeepAllEntries` | Ten-image queue; missing source retained and selected for relinking | Prior public-package acceptance exercised ten-image queues and retained sessions | Candidate navigation, selection modifiers, remove and 80→81 boundary; forwarding of desktop modifier keys remains a harness limitation |
-| Detect/re-detect, chart face, sampling inset, overlay dim/lattice/sample/plane and manual geometry | auto-detection eligibility and reference snapshot tests | Public ten-image fit queue produced ten distinct captured models | Public Classic photograph detected and corrected with FFC | Candidate buttons, multi-face selection, geometry/crop editing and all overlay toggles |
-| FFC enable, choose/clear/drop white image, automatic plane/manual crop, method and numeric fields | operation-specific validation; FFC model-reload cases for all families; dialog layout | Observed ten-image fit with FFC; original white identity retained through relinking | Public FFC fit; invalid numeric input displayed in the current campaign | Candidate FFC dialog, each method/active numeric branch, clear/reselect white, manual crop and actual completed-stage evidence |
+| Detect/re-detect, chart face, patch-sampling inset and read-only dim/lattice/sample/plane overlay | auto-detection eligibility and reference snapshot tests | Public ten-image fit queue produced ten distinct captured models | Public Classic photograph detected and corrected with FFC | Candidate buttons, multi-face selection, sampling inset and remaining overlay toggles; no manual geometry editor exists |
+| FFC enable, choose/clear/drop white image, automatic plane, method and numeric fields | operation-specific validation; FFC model-reload cases for all families; dialog layout | Observed ten-image fit with FFC; original white identity retained through relinking | Public FFC fit; invalid numeric input displayed in the current campaign | Remaining FFC methods/numeric branches, clear/reselect white and completed-stage evidence; manual white crop is SDK-only |
 | GC enable/details and WB enable; active/inactive stage combinations | `NumericDraftsAreValidatedOnlyForTheRequestedOperation`, stage availability/progress tests | Uncached GC regenerated after relinking; Original/Corrected remained viewable | Public FFC→GC→WB→CC fit completed | Candidate toggles/details and saved-model stage inheritance; unavailable fitted stages must not be silently invented |
 | CC model, degree/combinations, samples, PLS components, NN layers/optimizer/normalization/dropout/training fields, encodings/output format, teacher export and Reset | CC/NN dialog baselines, architecture validation, operation-specific validation | Candidate v2 opened the NN conditional panel, scrolled controls and used Done | Candidate v2 opened all five families, rejected bad NN layers and restored a valid value | All six method choices from five families; remaining numeric branches, Reset scope and fit/apply behavior |
 | References: face/template/profile name, Lab/XYZ/RGB, white/scale/order, copy built-in, paste/import/preview/export/assign/reuse/reset | `ReferenceWorkflowTests` covers all grid sizes, precision, import order, revisions, per-chart drafts and stale assignments | Public SDK custom references passed | Public SDK custom references passed | Candidate editor entry/paste/clipboard and file dialogs; malformed import must preserve the draft; verify multi-chart assignments and linked highlighting |
@@ -78,6 +78,16 @@ regressions check process exit before the window's `Closed` event, repeated clos
 tokenless deferred-request cancellation and UI-finally cleanup. Renewed fixed-build
 guest observations are recorded in the local handoff separately from the earlier
 candidate campaign; this is delayed cleanup, not evidence of a permanent orphan.
+
+A private Linux shutdown-repair overlay was tested separately: normal
+WM_DELETE_WINDOW left the worker absent by 0.132 seconds and application absent
+by 0.236 seconds; early splash closure removed both by 3.18 seconds with no late
+workspace or respawn during the ten-second observation. Both app exits returned
+zero, and owned session/export integrity survived normal close. This overlay used
+managed production content from the intermediate 85358c9 repair, embedded
+pre-commit 48669d5 metadata and the unchanged actual-CI 48669d5 worker/runtime.
+It is not an official repaired Actions package; final downloaded-package cleanup
+qualification remains a separate gate.
 
 In the public 0.2.0 app, log foregrounds resolved a theme brush once from an
 immutable log level. Switching the theme updated the background and new entries
@@ -252,6 +262,12 @@ at the remote-desktop layer in this run, so it does not establish popup keyboard
 dismissal behavior.
 
 ## Conditional and programmatic controls
+
+The overlay is read-only; it has no manual corner/plane geometry controls. The
+chart Crop slider changes patch-interior sampling, not the white-image rectangle.
+The SDK supports explicit white-image `crop_rect` values and saved-model
+inheritance; the desktop has no manual FFC crop editor. This is an unavailable UI
+feature, not a failed interaction test.
 
 The reference editor creates controls at runtime, outside AXAML. Its checklist is:
 

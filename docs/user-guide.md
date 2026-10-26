@@ -78,9 +78,9 @@ not establish generalization to another camera or lighting setup.
 
 ## Navigation and outputs
 
-![Updated light-theme workbench showing a populated session and preview navigation](images/session-workbench.png)
+![Dark-mode workbench with a corrected photograph and expanded color-difference analysis](images/session-workbench.png)
 
-In this layout example, the left panel holds your working images and settings.
+In this completed public-sample result, the left panel holds your working images and settings.
 The large arrows browse session images; the tabs above the preview select
 processing stages. The bottom-left action area stays reachable while settings scroll.
 
@@ -88,8 +88,13 @@ processing stages. The bottom-left action area stays reachable while settings sc
 
 Expand **Process** to choose stages, use its settings buttons for details, and
 scroll down to **Model** for loading, saving, and cube export. Disabled controls
-need an active image or fitted/loaded result; the screenshot illustrates layout,
-not a completed calibration.
+need an active image or fitted/loaded result. These captures show a completed
+RPCC2 calibration with FFC, GC and WB. Changing controls prepares the next
+operation; existing results and exports retain their captured settings.
+
+The chart **Crop** slider changes the sampling inset inside each patch. The
+chart/plane overlay is read-only. Manual white-image crop rectangles are available
+through the Python API's `crop_rect` option; the desktop has no draggable crop editor.
 
 - Alt+Left / Alt+Right or the preview arrows browse session **images**, not stages.
 - Ctrl+O adds files; Ctrl+Shift+O adds a folder.
