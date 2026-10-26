@@ -172,3 +172,21 @@ After encoding, inspect the actual GitHub README in Chromium and Firefox at
 desktop and narrow widths. Check movement, text readability, and color consistency
 against the lossless stills. Browser/render verification is separate from encoder
 verification; consult the current validation evidence for its tested status.
+
+## Browser verification — 26 October 2026
+
+The actual GitHub README at
+[`8ef4320eed36`](https://github.com/collinswakholi/ColorCorrectionPackage_UI/tree/8ef4320eed36734cceb72a03618c8cbb372511c2)
+was checked in isolated Chromium **151.0.7922.34** and Firefox **153.0** on
+Windows. In both browsers, the main animated PNG and linked GIF alternative
+loaded, advanced through different frames, and served exactly the reviewed file
+bytes recorded in [`demo-manifest.json`](demo-manifest.json). The README image
+fit both a desktop layout and a 390 px viewport; the full-size still gallery is
+preferable for small controls and figure labels.
+
+Separate local browser checks at the original 1440 × 900 size reproduced the
+lossless PNG control exactly. Every sampled APNG screenshot matched a decoded
+animation frame's RGB pixels, and sampled GIF screenshots matched the decoded
+GIF palette pixels. The encoder verified all scene holds and gallery captures
+against their source pixels. These checks establish file preservation,
+decoding and animation behavior; the GIF retains its documented palette loss.
