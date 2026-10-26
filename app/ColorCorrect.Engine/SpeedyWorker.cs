@@ -7,14 +7,18 @@ namespace ColorCorrect.Engine;
 
 /// <summary>
 /// Long-lived <c>ccp-engine</c> NDJSON client. Drains stderr so the pipe cannot fill.
-/// UI cancel waits for the in-flight reply and discards it — it does not kill the worker.
-/// Backend switch uses <see cref="RestartAsync"/> only.
+/// Cancellation recycles the worker so a stale reply cannot affect the next request.
+/// Disposal cancels all owned work and waits for bounded process cleanup.
 /// </summary>
 public sealed class SpeedyWorker : IAsyncDisposable
 {
     private readonly string _exePath;
     private readonly string _repoRoot;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly object _disposeLock = new();
+    private Task? _disposeTask;
+    private volatile bool _disposeStarted;
     private readonly ConcurrentQueue<string> _stderrLines = new();
     private Process? _process;
     private CancellationTokenSource? _stderrCts;
@@ -32,6 +36,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
 
     public async Task RequireCapabilityAsync(string capability, CancellationToken cancellationToken = default)
     {
+        using var request = LinkRequest(cancellationToken);
+        cancellationToken = request.Token;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -50,6 +56,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        using var request = LinkRequest(cancellationToken);
+        cancellationToken = request.Token;
         if (string.IsNullOrWhiteSpace(_exePath) || !File.Exists(_exePath))
         {
             throw new FileNotFoundException(
@@ -70,6 +78,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
     /// <summary>Recycle the worker after a runtime or backend change. Do not call on a single timeout.</summary>
     public async Task RestartAsync(CancellationToken cancellationToken = default)
     {
+        using var request = LinkRequest(cancellationToken);
+        cancellationToken = request.Token;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -86,6 +96,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        using var request = LinkRequest(cancellationToken);
+        cancellationToken = request.Token;
         timeout ??= TimeSpan.FromMinutes(10);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -96,12 +108,11 @@ public sealed class SpeedyWorker : IAsyncDisposable
             }
 
             var line = JsonSerializer.Serialize(payload);
-            await _process!.StandardInput.WriteLineAsync(line.AsMemory(), CancellationToken.None).ConfigureAwait(false);
-            await _process.StandardInput.FlushAsync(CancellationToken.None).ConfigureAwait(false);
-
             JsonElement result;
             try
             {
+                await _process!.StandardInput.WriteLineAsync(line.AsMemory(), cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
+                await _process.StandardInput.FlushAsync(cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
                 result = await ReadResultAsync(_process.StandardOutput, timeout.Value, Progress, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -208,8 +219,26 @@ public sealed class SpeedyWorker : IAsyncDisposable
         return lines.Count == 0 ? "" : string.Join(Environment.NewLine, lines);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
+        lock (_disposeLock)
+        {
+            _disposeStarted = true;
+            return new ValueTask(_disposeTask ??= DisposeCoreAsync());
+        }
+    }
+
+    private CancellationTokenSource LinkRequest(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposeStarted, this);
+        return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        // Cancel reads, warmup and queued commands before acquiring the gate.
+        // Otherwise an uncancelled deferred preview can delay exit by minutes.
+        _lifetime.Cancel();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -219,6 +248,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         {
             _gate.Release();
             _gate.Dispose();
+            _lifetime.Dispose();
         }
     }
 
@@ -227,6 +257,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
     private async Task StartLockedAsync(CancellationToken cancellationToken)
     {
         await StopLockedAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         LastError = "";
         Warmed = false;
         Device = "";
@@ -338,8 +369,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
         });
         try
         {
-            await _process.StandardInput.WriteLineAsync(line.AsMemory(), CancellationToken.None).ConfigureAwait(false);
-            await _process.StandardInput.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            await _process.StandardInput.WriteLineAsync(line.AsMemory(), cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
+            await _process.StandardInput.FlushAsync(cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
             var result = await ReadResultAsync(_process.StandardOutput, TimeSpan.FromMinutes(8), Progress, cancellationToken).ConfigureAwait(false);
             var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
             Device = result.TryGetProperty("device", out var dev) ? dev.GetString() ?? Device : Device;
@@ -378,12 +409,13 @@ public sealed class SpeedyWorker : IAsyncDisposable
             return;
         }
 
+        using var grace = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         try
         {
             if (!proc.HasExited && proc.StandardInput is { BaseStream.CanWrite: true })
             {
-                await proc.StandardInput.WriteLineAsync("{\"cmd\":\"shutdown\"}").ConfigureAwait(false);
-                await proc.StandardInput.FlushAsync().ConfigureAwait(false);
+                await proc.StandardInput.WriteLineAsync("{\"cmd\":\"shutdown\"}".AsMemory(), grace.Token).WaitAsync(grace.Token).ConfigureAwait(false);
+                await proc.StandardInput.FlushAsync(grace.Token).WaitAsync(grace.Token).ConfigureAwait(false);
             }
         }
         catch
@@ -393,9 +425,19 @@ public sealed class SpeedyWorker : IAsyncDisposable
 
         try
         {
-            if (!proc.WaitForExit(3000))
+            await proc.WaitForExitAsync(grace.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try
             {
                 proc.Kill(entireProcessTree: true);
+                await proc.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (!proc.HasExited)
+                    _stderrLines.Enqueue($"Worker shutdown could not complete: {ex.Message}");
             }
         }
         catch
@@ -408,7 +450,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         {
             try
             {
-                await _stderrTask.ConfigureAwait(false);
+                await _stderrTask.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             }
             catch
             {
@@ -493,7 +535,10 @@ public sealed class SpeedyWorker : IAsyncDisposable
         linked.CancelAfter(timeout);
         try
         {
-            return await reader.ReadLineAsync(linked.Token).ConfigureAwait(false);
+            // Some redirected process pipes cannot abort their underlying OS
+            // read immediately. Bound our wait independently; the caller then
+            // terminates that worker rather than reusing its pending read.
+            return await reader.ReadLineAsync(linked.Token).AsTask().WaitAsync(linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

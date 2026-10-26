@@ -13,7 +13,7 @@ as an interactive test of the corresponding control.
   explicitly with the unchanged public 0.2.0 worker, models, GPU runtimes, and
   SDK 2.2.1 wheel. This local development candidate is not a published release or
   a full-source rebuild of the engine. Its own manifest records that distinction.
-- **Component coverage:** 136 Windows-host headless test cases passed with zero
+- **Component coverage:** 138 Windows-host headless test cases passed with zero
   skips on 26 October 2026. These cases include realized layout/brush assertions,
   workflow state tests, and parameterized cases; they do not establish native
   desktop, driver, clipboard, or display-scaling coverage.
@@ -66,6 +66,18 @@ listed beside an area establishes only its explicit assertions; it does not
 certify all controls in that area.
 
 ## Confirmed defects and repairs
+
+The first full-source 0.2.1 Windows package exposed delayed worker cleanup after
+the GUI had exited successfully: its owned worker/launcher remained alive after
+30 seconds, then exited later. Cleanup awaited from `Closed` could lose the
+desktop dispatcher before it finished. The repair holds the initial close until
+one owned cleanup task completes, cancels outstanding worker requests and drains
+running UI operations before disposing their state. Early splash closure also
+cancels startup rather than creating a later workspace. Real child-process
+regressions check process exit before the window's `Closed` event, repeated close,
+tokenless deferred-request cancellation and UI-finally cleanup. Renewed fixed-build
+guest observations are recorded in the local handoff separately from the earlier
+candidate campaign; this is delayed cleanup, not evidence of a permanent orphan.
 
 In the public 0.2.0 app, log foregrounds resolved a theme brush once from an
 immutable log level. Switching the theme updated the background and new entries

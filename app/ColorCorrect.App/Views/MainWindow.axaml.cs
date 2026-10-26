@@ -17,10 +17,17 @@ namespace ColorCorrect.App.Views;
 public partial class MainWindow : Window
 {
     private Window? _activeSettingsDialog;
+    private readonly WindowShutdownGuard _shutdownGuard;
+    internal System.Threading.Tasks.Task ShutdownCompletion => _shutdownGuard.Completion;
 
     public MainWindow()
     {
         InitializeComponent();
+        _shutdownGuard = new WindowShutdownGuard(this, async () =>
+        {
+            try { _activeSettingsDialog?.Close(); }
+            finally { if (DataContext is MainWindowViewModel vm) await vm.DisposeAsync(); }
+        });
         AddHandler(DragDrop.DragEnterEvent, OnDragEnter);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
@@ -28,13 +35,12 @@ public partial class MainWindow : Window
         DragDrop.SetAllowDrop(this, true);
 
         ToastService.ToastRequested += OnToastRequested;
-        Closed += async (_, _) =>
+        Closed += (_, _) =>
         {
             ToastService.ToastRequested -= OnToastRequested;
             if (DataContext is MainWindowViewModel vm)
             {
                 vm.LogEntries.CollectionChanged -= OnLogChanged;
-                await vm.DisposeAsync();
             }
         };
 
@@ -276,11 +282,6 @@ public partial class MainWindow : Window
 
     private void Exit_Click(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            vm.FlushPersist();
-        }
-
         Close();
     }
 

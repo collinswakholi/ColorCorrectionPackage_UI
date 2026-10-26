@@ -24,9 +24,15 @@ public partial class App : Application
         {
             var vm = new MainWindowViewModel();
             var splash = new SplashWindow();
+            var startup = new CancellationTokenSource();
+            var shutdown = new WindowShutdownGuard(splash, async () =>
+            {
+                try { startup.Cancel(); }
+                finally { await vm.DisposeAsync(); }
+            });
             desktop.MainWindow = splash;
             splash.Show();
-            _ = RunSplashThenMainAsync(desktop, vm, splash);
+            _ = RunSplashThenMainAsync(desktop, vm, splash, shutdown, startup);
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -35,29 +41,39 @@ public partial class App : Application
     private static async Task RunSplashThenMainAsync(
         IClassicDesktopStyleApplicationLifetime desktop,
         MainWindowViewModel vm,
-        SplashWindow splash)
+        SplashWindow splash,
+        WindowShutdownGuard shutdown,
+        CancellationTokenSource startup)
     {
-        vm.Start();
-
-        var minDelay = Task.Delay(MinSplashMs);
-        var workerWait = WaitForWorkerAsync(vm, splash, TimeSpan.FromMilliseconds(MaxSplashMs));
-        await Task.WhenAll(minDelay, workerWait).ConfigureAwait(false);
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        try
         {
-            var window = new MainWindow { DataContext = vm };
-            vm.Dialogs = new WindowDialogs(window);
-            desktop.MainWindow = window;
-            window.Show();
-            splash.Close();
-        });
+            vm.Start();
+
+            var minDelay = Task.Delay(MinSplashMs, startup.Token);
+            var workerWait = WaitForWorkerAsync(vm, splash, TimeSpan.FromMilliseconds(MaxSplashMs), startup.Token);
+            await Task.WhenAll(minDelay, workerWait).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (startup.IsCancellationRequested || shutdown.IsClosing) return;
+                var window = new MainWindow { DataContext = vm };
+                vm.Dialogs = new WindowDialogs(window);
+                desktop.MainWindow = window;
+                window.Show();
+                shutdown.Detach();
+                splash.Close();
+            });
+        }
+        catch (OperationCanceledException) when (startup.IsCancellationRequested) { }
+        finally { startup.Dispose(); }
     }
 
-    private static async Task WaitForWorkerAsync(MainWindowViewModel vm, SplashWindow splash, TimeSpan timeout)
+    private static async Task WaitForWorkerAsync(MainWindowViewModel vm, SplashWindow splash, TimeSpan timeout, CancellationToken cancellation)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
+            cancellation.ThrowIfCancellationRequested();
             var finished = false;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -73,7 +89,7 @@ public partial class App : Application
                 return;
             }
 
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(50, cancellation).ConfigureAwait(false);
         }
 
         await Dispatcher.UIThread.InvokeAsync(() => splash.SetStatus("Engine is still warming — opening workspace"));

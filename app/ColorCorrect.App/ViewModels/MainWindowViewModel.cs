@@ -54,6 +54,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly Dictionary<Bitmap, int> _originalLeases = new();
     private readonly object _originalCacheLock = new();
     private bool _disposed;
+    private readonly object _disposeLock = new();
+    private Task? _disposeTask;
     private const int OriginalCacheLimit = 8;
 
     private sealed class CachedOriginal
@@ -1423,16 +1425,41 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ScheduleSave();
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        lock (_disposeLock) return new ValueTask(_disposeTask ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
+    {
         _disposed = true;
-        UnhookWorkerProgress();
-        FlushPersist();
-        _saveCts?.Cancel();
-        _jobCts?.Cancel();
-        _cropCts?.Cancel();
         _previewGeneration++;
+        Exception? failure = null;
+        try
+        {
+            UnhookWorkerProgress();
+            _saveCts?.Cancel();
+            _jobCts?.Cancel();
+            _cropCts?.Cancel();
+            FlushPersist();
+        }
+        catch (Exception exception) { failure = exception; }
+
+        // Stop/cancel every worker request, including deferred previews without
+        // the current job token, before disposing data an operation may still use.
+        try { await _worker.DisposeAsync().ConfigureAwait(false); }
+        catch (Exception exception) { failure ??= exception; }
+        await _run.WaitAsync().ConfigureAwait(false);
+        try { await OnUi(DisposeUiResources).ConfigureAwait(false); }
+        catch (Exception exception) { failure ??= exception; }
+        finally { _run.Dispose(); }
+        try { ClearTransientCache(); }
+        catch (Exception exception) { failure ??= exception; }
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    private void DisposeUiResources()
+    {
         var original = OriginalPreview;
         var corrected = CorrectedPreview;
         var displayed = Preview;
@@ -1457,9 +1484,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             _originalCache.Clear();
         }
         foreach (var bitmap in cachedOriginals.Concat(new[] { original, corrected, displayed }).Distinct()) DisposeIfUnused(bitmap);
-        await _worker.DisposeAsync().ConfigureAwait(false);
-        _run.Dispose();
-        ClearTransientCache();
     }
 
     private void Activate(SessionItemViewModel item)
@@ -2169,7 +2193,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void ScheduleSave()
     {
-        if (!_persistenceEnabled || _restoring)
+        if (_disposed || !_persistenceEnabled || _restoring)
         {
             return;
         }
