@@ -26,6 +26,11 @@ class DocumentationChecks(unittest.TestCase):
                             '[Remote](https://example.invalid/not-contacted)\n'
                             '```python\nfrom pathlib import Path\nprint(Path("image.jpg"))\n```\n', encoding="utf-8")
             self.assertEqual(check_markdown(page, root), [])
+            # Reproduce mismatched resolved/unresolved temp roots without needing
+            # privileged symlink creation on Windows. Both names address one root.
+            (root / "alias").mkdir()
+            alias = root / "alias" / ".."
+            self.assertEqual(check_markdown(alias / "README.md", alias), [])
             page.write_text('[Missing](missing.png)\n[Wrong heading](guide%20with%20spaces.md#absent)\n'
                             '```python\nif True print("broken")\n```\n', encoding="utf-8")
             errors = check_markdown(page, root)

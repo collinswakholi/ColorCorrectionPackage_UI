@@ -41,6 +41,11 @@ def anchors(text: str) -> set[str]:
 
 
 def check_markdown(path: Path, root: Path) -> list[str]:
+    # Compare canonical paths on both sides: macOS /var and Windows temporary
+    # directory aliases otherwise make an internal link appear to escape.
+    root, path = root.resolve(), path.resolve()
+    if not path.is_relative_to(root):
+        return [f"{path.name}: guide escapes repository"]
     errors = []
     text = path.read_text(encoding="utf-8")
     # Catch the observed Windows stdin encoding regression before garbled study
