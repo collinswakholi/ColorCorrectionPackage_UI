@@ -1,65 +1,53 @@
-# Custom references and portable compute implementation
+# Engine architecture
 
-## Source baseline
+ColorCorrect Studio uses an Avalonia desktop interface, a native Rust engine and
+an optional Python SDK. The application processes still images and preserves
+legacy models, sessions and the `CCP-New` data location. See [building](building.md),
+[compatibility](compatibility.md) and the [developer guide](development/README.md).
 
-GitHub baseline: `collinswakholi/ColorCorrectionPackage_UI` commit
-`58eedc98a8a333c62658b69f2da4faff5e764d40`.
+## Reference profiles
 
-The original local directory had no Git metadata. `_implementation/baseline-source.zip`
-preserves its text sources before implementation; `baseline-manifest.json` records
-SHA-256 for source, models and included assets. The normalized comparison inventory
-is `_implementation/source-differences-normalized.json`. No commit or push was made.
+Reference profiles belong to individual detected chart instances. They retain
+chart layout, canonical cell identities, encoding, white point, scale and order.
+Display swatches use clipped sRGB previews; correction uses unclipped canonical
+Lab D50 values derived from the original profile.
 
-Reconciliation preserves the current still-image application, correction defaults, built-in references and legacy model/session behavior. Torch dependencies and video processing were removed by explicit request. Toolchain pins and dependency locks remain reproducible. See [building](building.md) and [compatibility](migration.md).
+Desktop and Python CSV imports accept triplets, a cell label such as `A1` followed
+by three values, or 1-based row/column coordinates followed by three values.
+Coordinate-labelled rows may arrive in any order. JSON imports reject duplicate
+fields. Reusing an unchanged profile keeps its revision; changing values or
+metadata creates a new revision. The [user guide](user-guide.md#custom-chart-references)
+explains the editor workflow.
 
-## Development
+## Captured state and persistence
 
-On this workspace, use `_implementation/dotnet/dotnet.exe` in place of `dotnet`
-when building/testing, or install the SDK pinned in `global.json` normally.
+Profiles are snapshots, not references to mutable external files. Batch operations
+capture chart selections and reference values before processing. Session files
+retain the exact detection snapshot, profile revisions and assignments. Detecting
+charts again invalidates existing custom assignments.
 
-```powershell
-& ./_implementation/dotnet/dotnet.exe build app/ColorCorrect.sln -c Release
-& ./_implementation/dotnet/dotnet.exe test app/ColorCorrect.sln -c Release
-```
+Saved models retain calibration provenance and apply without the external profile
+file. Spatial FFC still needs its blank-field asset. Editing references requires a
+new fit; already saved files remain available. Batch output names stay unique for
+repeated inputs and Unicode case variants.
 
-The GUI's **Correction settings → Chart references…** opens the editor after a
-chart is detected. Choose the detected chart, interpretation and scale, then enter
-the three channels per cell. Paste/CSV import has a mapping review. JSON profiles
-retain their encoding, white, scale and order. **Copy built-in values** is explicit;
-a new custom profile starts empty. Assigning changes requires a new fit.
-The editor stays open after assignment so other charts' drafts remain available.
-Assign each edited chart individually, then choose **Done** to close it.
+Completed results retain the model, source identity, blank-field identity and
+rendering settings that produced them. Preview regeneration and full-resolution
+export use that captured state. Missing or changed inputs require recovery instead
+of silently substituting the next operation's controls.
 
-Cell coordinates use column letters and numbered rows (A1, B1, …, A2, …), while
-patch names are the chart's canonical labels. The photographed overlay highlights
-the focused cell. Display swatches are clipped sRGB previews; the engine derives
-unclipped canonical Lab D50 values from the original source profile.
+## Compute and color evaluation
 
-Desktop and Python CSV import accept the same three formats: triplets, a cell
-label such as `A1` followed by three values, or 1-based row/column followed by
-three values. Coordinate rows may arrive in any order. Editing a profile detaches
-stale result/save associations while retaining already saved files. Batch jobs
-capture chart selections and reference snapshots before processing the queue.
-JSON imports reject duplicate fields, including duplicate white points. Reusing
-an unchanged profile keeps its revision; editing its values or metadata creates
-a new revision. Batch output names reserve literal filename suffixes and remain
-unique for repeated inputs and Unicode case variants.
+Inference uses DirectML or WebGPU/Vulkan. Image correction uses Rust CPU or wgpu
+with CPU recovery; spatial FFC is separate from the combined GC/WB/CC LUT.
+[Processing options](compute/README.md) describes the user-facing choices.
 
-Profiles are snapshots per chart instance, never references to mutable external
-files. Redetection invalidates custom assignments. Sessions keep the exact detection
-snapshot, profiles and revisions. Saved models keep calibration provenance and
-apply without the source profile; spatial FFC still needs its blank-field asset.
+Existing fold validation measures CC conditional on prior preprocessing and is
+labelled **CC-only**. Assessing full-pipeline quality requires independent
+photographs and reference values. Accelerator parity measures numerical
+equivalence, not physical-chart accuracy. See the
+[color-science record](color-science-validation.md) for formulas and reference sources.
 
-The Python SDK and runnable examples are documented in [the Python guide](api/README.md).
-
-## Validation boundaries
-
-Current local results and outstanding acceptance gates are recorded in
-[Windows implementation validation](validation-windows.md).
-
-Existing fold validation measures CC conditional on prior preprocessing; it is
-labelled **CC-only**. A full-pipeline quality claim requires independent photographs
-and independently specified reference truth. Accelerator parity is a numerical
-equivalence check, not physical-chart certification.
-
-Production inference uses DirectML or WebGPU/Vulkan; correction uses CPU or wgpu with CPU recovery. [Current compute behavior](compute/README.md) distinguishes final routes from discarded experiments. Windows/Linux x64 and ARM64 are package targets. Apple-silicon macOS is source-only; Intel macOS is excluded. Native support requires recorded acceptance evidence.
+The [Python guide](api/README.md) documents the public SDK. The
+[developer records](development/README.md#validation-records) cover numerical,
+platform and UI coverage separately.

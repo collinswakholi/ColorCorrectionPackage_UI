@@ -9,4 +9,5 @@ The current app keeps the Avalonia interface, Rust correction engine, built-in r
 - The familiar Python `ColorCorrection` workflow and typed `Client` API coexist with legacy `Engine` imports and raw replies. File paths replace array inputs; typed results expose actual artifact paths and per-image failures. [API differences](../api/README.md)
 - Embedded ICC profiles are honored for sRGB/D65 input. Refit models trained on previously misinterpreted tagged images. Explicit non-sRGB input encoding remains the caller's responsibility.
 
-No learned detector weights or built-in chart values are changed by metadata sanitization. The original model bytes remain privately recoverable; [provenance](model-provenance.md) records the comparison.
+Detector weights and built-in chart values are unchanged. See
+[model provenance and licensing](model-provenance.md) for model identities and terms.

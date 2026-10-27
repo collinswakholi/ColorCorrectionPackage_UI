@@ -1,6 +1,10 @@
 # Advanced Engine API and NDJSON protocol
 
-All native correction operations are already callable through the bundled `ccp-engine` worker. The public Python API and command-line wrapper now make that interface usable by default: **no GUI, HTTP server, API key, network connection, or Python ML dependencies**. Python 3.10+ is optional; any language that can launch a process and exchange JSON lines can use the worker directly. Desktop-only interactions such as catalog selection and window layout are not processing API operations.
+Use the bundled `ccp-engine` worker from Python, the command line, or any language
+that can launch a local process and exchange JSON lines. Python clients require
+Python 3.10+; direct protocol clients do not require Python. Keep the worker,
+models, references, and native libraries together. A desktop window does not
+need to be open for processing.
 
 ## Legacy Engine workflow
 
@@ -57,8 +61,8 @@ workers reject it explicitly.
 
 In this legacy interface, the flow is `detect` → `fit` → inspect the report → `apply`.
 The current typed SDK uses `Client.calibrate()` or `ColorCorrection.run()`.
-The notebooks display the source, corrected result, and FFC preview so the numeric
-results can be checked visually as well as through assertions.
+The notebooks show source, corrected, and cumulative stage images alongside the
+reported chart errors.
 
 Use an extracted portable package (keep `models/`, `refs/`, and native runtimes together) or this built source checkout. From its root:
 
@@ -102,23 +106,19 @@ with Engine(root=root, policy="cpu", progress=print) as engine:
 
 `Blank.JPG` is **only** the flat-field white reference, never a chart or validation sample. Reuse calibration only with appropriate exposure, lighting, camera setup and white-reference geometry. Outputs may overwrite existing paths; use separate output directories, as the notebooks do. Models are local JSON files, not Python pickle files.
 
-## Runnable notebooks and tests
+## Tutorials
 
 - [01: full chart-to-image workflow](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/01_headless_workflow.ipynb): detection, FFC, fitting, held-out metrics, batch apply, preview and LUT.
 - [02: all fit families and NN options](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/02_compare_fit_methods.ipynb): six methods, then Adam/SGD/RMSprop with editable layers, normalization and dropout.
 
 The notebooks use the installed SDK from any working directory, with explicit app,
 sample, and durable output directories. Follow the [notebook setup guide](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md)
-for environment variables, QA-only dependencies, and the fresh-kernel acceptance
-runner. Both tutorials display real before/after images; the first isolates FFC.
+to install Jupyter and configure the input paths. Both tutorials display
+before/after images; the first includes the FFC stage.
 Never reuse a detection on another image.
 
-```powershell
-python -m unittest discover -s api/tests -v
-python api/tests/integration_workflow.py
-```
-
-The first command runs fast isolated transport tests, not color-science tests. The integration workflow uses real source images, covers two chart detections, fitting, all stage previews, model reload, LUT export and partial-batch failure. Integration artifacts are stored under a fresh temporary directory.
+For contributor checks and execution records, see
+[developer validation](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md).
 
 ## Python API contract
 
@@ -138,7 +138,7 @@ The first command runs fast isolated transport tests, not color-science tests. T
 
 Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply; `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
 
-A timeout, corrupt protocol, interrupted call or failing progress callback terminates that worker before reuse. The next call starts a fresh worker; last-fit state and caches are lost. Save model paths explicitly. The timeout covers each command; initial worker startup has a separate timeout. `close()` waits for an in-flight request, then asks the worker to flush deferred preview PNGs and shut down (up to 10 seconds, bounded by the client timeout); it forces termination if shutdown fails. Configure request timeouts to bound in-flight work. Termination cannot undo already written output files. This is a trusted local file-processing API, not a sandbox or authenticated service; do not expose it directly to untrusted network requests.
+A timeout, corrupt protocol, interrupted call or failing progress callback terminates that worker before reuse. The next call starts a fresh worker; last-fit state and caches are lost. Save model paths explicitly. The timeout covers each command; initial worker startup has a separate timeout. `close()` waits for an in-flight request, then asks the worker to flush deferred preview PNGs and acknowledge shutdown (up to 10 seconds, bounded by the client timeout). It then terminates a child that is still running, including after an acknowledgement. A resulting nonzero child cleanup code does not by itself indicate an incomplete operation; inspect the operation reply and saved artifacts. Configure request timeouts to bound in-flight work. Termination cannot undo already written output files. This is a trusted local file-processing API, not a sandbox or authenticated service; do not expose it directly to untrusted network requests.
 
 ## NDJSON protocol (all native operations)
 
@@ -202,7 +202,7 @@ Required `path`; provide explicit `model` (otherwise native worker uses its last
 
 Supported encodings: `srgb`, `linear-srgb`, `display-p3`, `adobe-rgb-1998`, `rec2020`, `linear-rec2020`, `prophoto-rgb`, `acescg`. With **sRGB/D65 input**, tagged images are ICC-converted to working sRGB before correction; untagged images are assumed sRGB. EXIF orientation is applied before detection and fitting. Explicit non-sRGB/custom-white input selections bypass ICC conversion and describe the actual stored pixels. Select whites explicitly: standard sRGB/P3/Adobe/Rec.2020 use D65; ProPhoto normally D50; ACEScg normally D60. Output images are quantized/clipped ordinary RGB images, not automatically ICC-tagged archival wide-gamut deliverables. For standard screen viewing keep target sRGB/D65. Refit older models trained on incorrectly interpreted tagged inputs.
 
-`input_normalization` describes input handling in reports. `validation_scope` explains that five-fold validation tests the CC mapping after GC/WB fitting; it is not an independent full-pipeline or physical-chart validation. Invalid embedded ICC profiles fail with a conversion error instead of being silently treated as sRGB.
+`input_normalization` describes input handling in reports. `validation_scope` explains that five-fold validation evaluates the CC mapping after GC/WB fitting; it is not an independent full-pipeline or physical-chart validation. Invalid embedded ICC profiles fail with a conversion error instead of being silently treated as sRGB.
 
 Non-sRGB/D65 input requires FFC, GC and WB disabled; those existing pre-correction stages operate in encoded sRGB. CC-only calibration supports the selected spaces. Reference Lab/XYZ comparisons must be adapted to the same white before computing CIEDE2000. See the independent color-science review in the app documentation. Never change only a metadata label to claim a pixel conversion occurred.
 

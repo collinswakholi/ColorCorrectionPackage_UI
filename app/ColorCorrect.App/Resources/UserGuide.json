@@ -11,7 +11,7 @@
   {
     "Title": "FFC · illumination",
     "Paragraphs": [
-      "Flat-field correction compensates for spatial brightness variation. Use a clean, matte blank white field captured in the same setup. In the supplied test corpus, Blank.JPG is the FFC input—not a chart for fitting color correction.",
+      "Flat-field correction compensates for spatial brightness variation. Use a clean, matte blank white field captured in the same setup. For the sample photographs, use Blank.JPG as the FFC reference.",
       "Inspect the chosen white-field region: it should exclude objects, edges, dirt, glare, and saturated areas. Surface degree and smoothing describe the illumination field; increasing complexity is not automatically more accurate.",
       "FFC is spatial and cannot be represented by a 3D cube LUT. Reuse it only when camera geometry, framing, lighting, and image dimensions match.",
       "FFC, GC, and WB currently require encoded sRGB input with D65 white. For other input RGB spaces, convert the image first or use CC alone; unsupported combinations are rejected rather than interpreted silently."
@@ -87,7 +87,7 @@
       "This application builds on the stepwise workflow presented by Wakholi and colleagues: A systematic color correction pipeline for controlled-environment imaging. The Plant Phenome Journal 9, e70067 (2026). DOI: 10.1002/ppj2.70067. Published 11 March 2026.",
       "The original ColorCorrectionPipeline Python package is available at https://pypi.org/project/ColorCorrectionPipeline/ with source at https://github.com/collinswakholi/ColorCorrectionPackage. Studio retains a familiar stepwise workflow and run/predict naming; its native implementation and typed results are not a drop-in replacement for the original package.",
       "The research motivates evaluating the imaging setup together with correction, rather than treating a regression model as a substitute for controlled capture. The current application is an evolving implementation; its automatic GC and NN safeguards should not be assumed to reproduce every historical experimental setting.",
-      "Original research opens the publisher article. Study PDF opens docs/research/ppj2.70067.pdf when you have placed a legitimately obtained copy there; the paper is not bundled. The illustrated guide is embedded for offline use. Numerical validation sources and test limitations are documented in docs/color-science-validation.md."
+      "Original research opens the publisher article. Study PDF opens your copy at docs/research/ppj2.70067.pdf; download the paper separately. The illustrated guide is available offline. Reference sources and interpretation limits are described in docs/color-science-validation.md."
     ]
   }
 ]

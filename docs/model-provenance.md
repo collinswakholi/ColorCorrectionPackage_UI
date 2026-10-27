@@ -31,6 +31,7 @@ The maintenance script compares the complete serialized ONNX model after clearin
 
 Public photographs are demonstration and regression inputs, not independent physical color truth. A blank-field photo is an FFC asset and a no-chart negative, not a color reference. Private photos, sessions, downloaded research images and derived personal reports remain ignored locally.
 
-The current source includes the reviewed acceptance fixtures and their hash manifest. A separate locally reviewed corpus may include non-distributable photographs; its missing optional entries must be reported rather than silently counted as tested.
-
-Canonical chart values retain their original edition, cell ordering and colorimetry. [Reference validation](color-science-validation.md) records their sources and boundaries. Historical TorchScript exports, the old LUT ONNX graph and discarded research runtimes are not current production dependencies.
+Canonical chart values retain their original edition, cell ordering and colorimetry.
+[Reference sources and colorimetry](color-science-validation.md) records their
+origins and limits. Production detector files are listed in the model manifest;
+archived exports and research runtimes are not application dependencies.

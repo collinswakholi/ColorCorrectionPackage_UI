@@ -30,7 +30,8 @@ from the source checkout or current directory. An installed SDK can use
 selects a worker; environment alternatives are `CCP_NEW_UI_ROOT` and
 `CCP_ENGINE_EXE` (or the legacy `COLORCORRECT_EXE`). No server is needed.
 An explicit macOS `.app` bundle root also resolves its `Contents/MacOS` resources;
-this path contract does not replace native macOS validation.
+on Apple silicon, build the app from source using the
+[macOS instructions](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/building.md). Studio does not provide macOS application binaries.
 
 ## Calibrate and apply
 
@@ -400,33 +401,12 @@ with Client() as client:
 Existing destinations require `overwrite=True`. A LUT excludes spatial FFC;
 the result warns when the model used FFC. This SDK processes still images only.
 
-## Validation and compatibility
+## Tutorials and compatibility
 
-[Tutorials](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md) use the installed SDK and explicit paths.
-They are executed in fresh kernels against final installed packages in Sandbox
-and WSL; notebook tools are QA-only dependencies.
-
-
-```console
-python -m unittest discover -s api/tests -v
-python api/tests/integration_sdk.py --root .
-python api/tests/integration_reference_layouts.py --samples path/to/private-fixtures
-python api/tests/integration_workflow.py --root .
-```
-
-The first command uses isolated native-process fixtures to test API behavior. The
-photograph integration scripts use the five public files in `test_images/` by
-default; `--samples` overrides that directory. They require the real worker and
-create fresh artifacts; missing required fixtures/capabilities fail. The SDK
-integration imports the same runnable examples used by this documentation and
-checks built-in/custom references, batch results, reload, LUT export, and FFC reuse.
-The optional layout integration requires three privately retained generated
-rasters: `synth_cast.png`, `synth_spyder.png`, and `synth_sg.png`. Pass their directory
-explicitly. These fixtures are not distributed. Missing files write a `skipped`
-verification result and exit 2; they do not count as passed coverage. A complete
-run tests four reference layouts, including Passport compatibility, in three
-import orders using known geometry. It makes no photographed-detector accuracy
-claim. Installed app/API acceptance runs belong in Sandbox and WSL.
+The [tutorial notebooks](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md)
+walk through stage settings, custom references, model reuse, and method comparisons.
+Use the wheel included with your app and set explicit application, photograph,
+and output directories before starting the notebook kernel.
 
 Fitted chart errors and CC-only cross-validation are not independent proof of
 physical correction accuracy. The saved report describes the validation scope.
@@ -438,3 +418,6 @@ Legacy imports (`Engine`, `Calibration`, `EngineError`), scripts, direct
 console command remain available. The existing low-level API's output defaults
 are unchanged. [Advanced Engine API and NDJSON protocol](protocol.md) document the
 full transport and legacy behavior.
+
+Contributors can find repeatable checks and version-specific execution records
+in the [developer validation reference](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md).

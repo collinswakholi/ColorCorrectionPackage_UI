@@ -13,19 +13,18 @@ saved model to photographs captured under the same conditions.
 [Still screenshots and demo details](docs/images/demo/README.md)
 · [GIF alternative](docs/images/demo/studio-dark.gif)
 
-The animated PNG preserves the captured colors. The still screenshot gallery
-shows the same workflow without animation.
+Prefer a still image? Open the screenshot gallery above.
 
-The desktop app runs locally and includes its .NET runtime, Rust engine, models,
-and inference libraries. Python is optional. Chart and plane detection require a
+The desktop app runs locally and includes its runtime, models and graphics
+libraries. Python is optional. Chart and plane detection require a
 compatible GPU and driver; CPU correction can apply a previously fitted model.
 
 ## Download and install
 
-**0.2.0 is a preview release.** Native builds, installation checks, component tests,
-and installed Python API smoke tests pass on Windows/Linux x64 and ARM64. Packages
-are unsigned. GPU and interactive UI validation depend on the platform; see the
-[validation record](docs/native-validation.md) for completed checks and open gates.
+**0.2.0 is an unsigned preview release.** Windows and Ubuntu packages are available
+for x64 and ARM64. ARM64 graphics and desktop workflows remain experimental.
+Apple-silicon macOS is available from source only. See the
+[platform notes](docs/compatibility.md) for requirements and limitations.
 
 | Platform | Installer | Portable application |
 | --- | --- | --- |
@@ -38,9 +37,8 @@ are unsigned. GPU and interactive UI validation depend on the platform; see the
 **x64** means 64-bit Intel/AMD; **ARM64** means 64-bit Arm. Choose your operating
 system's native architecture. These packages do not target 32-bit x86.
 
-ARM64 packages have passed native build, installation, component, and CPU API
-checks. Chart/plane inference on ARM64 GPUs and interactive UI workflows remain unvalidated;
-these downloads remain experimental.
+ARM64 chart detection and desktop workflows are not yet confirmed on representative
+hardware. These downloads remain experimental.
 
 On **Windows**, run Setup and open **ColorCorrect Studio**. For a portable install,
 extract the entire ZIP and run `ColorCorrect-Studio.cmd`. Setup offers the included
@@ -67,9 +65,9 @@ See [installation details](installer/README.md) for prerequisites, verification,
 portable use, and the optional experimental WSL GPU setup.
 
 **WSL GPU use is experimental.** Official 0.2.0 Linux downloads do not include the
-optional Mesa Dozen add-on. On the tested WSL system, chart detection required a
-separately built, verified add-on; the standard download alone could only apply
-saved models on CPU. Native Ubuntu uses its OS/vendor GPU driver. The current
+optional Mesa Dozen add-on needed for chart detection in the current WSL setup.
+Without it, use CPU correction with a saved model. Native Ubuntu uses its OS/vendor
+GPU driver. The current
 [WSL setup instructions](installer/README.md#experimental-wsl-gpu-setup) require a
 source build; there is no separately published add-on installer.
 
@@ -178,29 +176,18 @@ For research use, cite the study, the original package where applicable, and the
 Studio version used. [CITATION.cff](CITATION.cff) contains machine-readable
 software and research references.
 
-## Builds, releases, and development
+## Source and contributions
 
-Application, API, packaging, and bundled-documentation changes on `main` and pull
-requests build and test Windows/Linux x64 and ARM64 applications and validate
-Apple-silicon macOS source. Root README and dedicated demo-only edits run a small
-documentation check without rebuilding applications. Mixed or unrecognized
-changes retain native validation. Download development candidates from the
-[Actions page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/workflows/native-builds.yml).
+Build with **.NET SDK 10.0.402** and **Rust 1.95.0**, or browse unreleased builds on
+the [Actions page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/workflows/native-builds.yml).
+These unsigned builds are separate from the published preview downloads above.
 
-A version tag such as `v0.2.0` always runs all five native checks, then publishes the matching
-Windows/Linux assets and checksums to GitHub Releases. Preview releases remain
-marked as prereleases. Manual native-workflow runs also retain all native checks.
-macOS uploads contain text validation evidence only.
-
-Build with the pinned **.NET SDK 10.0.402** and **Rust 1.95.0** toolchains.
-[Build instructions](docs/building.md) · [Contributing](CONTRIBUTING.md)
-· [Validation status](docs/native-validation.md) · [Migration notes](docs/migration.md)
+[Build instructions](docs/building.md) · [Developer guide](docs/development/README.md)
+· [Contributing](CONTRIBUTING.md) · [Migration notes](docs/migration.md)
 
 The application processes still images. Settings and sessions retain the legacy
 `CCP-New` data location for compatibility. Keep your models, sessions, and exports
 outside the application installation folder.
-
-The app and SDK do not require Torch, LibTorch, or a CUDA add-on.
 
 Application code is [MIT licensed](LICENSE). Bundled models and dependencies have
 separate terms; read [third-party notices](THIRD_PARTY_NOTICES.md),

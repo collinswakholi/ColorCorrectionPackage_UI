@@ -141,9 +141,14 @@ Studio accepts image paths and returns typed artifact results; it does not accep
 the original NumPy-array workflow, tuple results, pickle models, or algorithm
 dictionaries as interchangeable inputs. The related
 [study](https://doi.org/10.1002/ppj2.70067) describes the original pipeline;
-Studio's implementation and validation scope are documented separately.
+its [source package](https://github.com/collinswakholi/ColorCorrectionPackage)
+provides the original Python workflow. Use Studio's saved JSON models and
+configuration objects when working with this API.
 
 [Tutorial notebooks](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md) demonstrate editable stage options
 and method comparisons. Legacy `Engine`, scripts, CLI entry points, and raw
 replies remain available through the [advanced protocol guide](../docs/api/protocol.md).
 This SDK processes still images only.
+
+For contributors, [developer validation](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md) describes
+the checks and recorded compatibility evidence behind these guides.

@@ -1,8 +1,13 @@
 # Readiness ledger
 
+Developer history: the snapshots below retain their original versions and scope.
+They are not an installation guide or a current support guarantee. See
+[Compatibility](compatibility.md) for user-facing platform notes and the
+[developer guide](development/README.md#validation-records) for technical records.
+
 This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). The subsequent version-tag workflow publishes unsigned Windows/Linux preview packages after native checks pass. Apple-silicon macOS remains source-only, with no application binary distribution.
 
-## Current 0.2.1 source and local UI repair candidates
+## 0.2.1 local UI repair snapshot
 
 The 0.2.1 source fixes theme changes for existing log entries and ΔE cards, and
 removes the settings viewport cap that remained stale after resizing. It also

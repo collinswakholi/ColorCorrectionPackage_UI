@@ -74,11 +74,13 @@ class DemoEncoderTests(unittest.TestCase):
             self.module.load_storyboard(self.path)
 
     def test_short_ordinary_transition_retains_exact_holds_and_requested_timing(self):
+        for frame in self.story["frames"]:
+            frame["duration_ms"] //= 2
         self.story["frames"][1].update(comparison=False, transition_ms=160,
                                      quality_regions={"center": [2, 2, 8, 6]})
         self.write()
         report = self.module.create_demo(self.path, self.root/"output")
-        self.assertEqual(report["total_duration_ms"], 50160)
+        self.assertEqual(report["total_duration_ms"], 25160)
         self.assertGreater(report["apng_frames"], 2)
         self.assertTrue(report["apng_hold_pixels_exact"])
         self.assertEqual(report["frames"][1]["gif_region_differences"]["center"]["max_absolute_channel_error_8bit"], 0)

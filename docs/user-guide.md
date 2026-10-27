@@ -2,10 +2,10 @@
 
 Open **?** in the toolbar or press **F1** for the searchable, offline in-app guide.
 Escape closes it and returns focus to its trigger. The guide is bundled into the
-application, so it does not depend on a browser or internet connection. Only the
-explicit **Original research** link opens your browser.
+application, so it does not depend on a browser or internet connection. Choose
+**Original research** to open the article in your browser.
 
-## A reproducible first correction
+## Your first correction
 
 ![Illustrated calibration and application workflow](images/workflow.svg)
 
@@ -37,6 +37,25 @@ application reuses GC rather than fitting a new curve without a chart.
    Preview completion alone does not export these files. Save model JSON,
    reports, and the configuration too. Keep originals and outputs separate.
 
+## Custom chart references
+
+After detecting a chart, open **Correction settings → Chart references…** and
+select the chart face you want to edit. Classic/Passport and SpyderCHECKR 24 use
+4×6 layouts; Digital SG uses 10×14. Passport profiles can be assigned to a compatible
+Classic face; the detector does not identify Passport as a separate chart type.
+
+Choose Lab, XYZ or a supported RGB encoding, along with its white point and numeric
+scale. Enter values, paste spreadsheet cells, import CSV or load a JSON profile.
+For triplets, choose row-major or column-major order and review the cell mapping.
+Coordinate-labelled rows identify their own cells. The canonical patch names and
+coordinates help you match the photographed chart.
+
+A new profile is empty. **Copy built-in values** fills a complete starting template.
+Assign each edited chart individually, then choose **Done**. Refit after changing
+the assigned reference. Sessions and saved models include the reference values;
+applying a saved model does not require its original CSV or JSON file. Spatial FFC
+still requires the blank-field image.
+
 ## Color interpretation matters
 
 Input/output spaces describe **pixel encodings**. With sRGB/D65 input, embedded
@@ -48,14 +67,13 @@ variant. FFC/GC/WB require encoded sRGB/D65 input. Other inputs require conversi
 before those stages, or CC-only processing.
 
 Non-sRGB output must be interpreted using its declared encoding downstream. The
-application converts corrected/stage worker previews to display sRGB separately
+application converts corrected and intermediate previews to display sRGB separately
 from the exported pixels; original previews and thumbnails honor ICC profiles
-and EXIF orientation. It is not a calibrated proofing viewer. Numerical tests
-cannot guarantee that a physical
-chart matches nominal reference values. See [color-science validation](color-science-validation.md)
-for the numerical checks, source provenance, and remaining boundaries.
+and EXIF orientation. It is not a calibrated proofing viewer. Your physical chart may differ from its
+published reference values. See [color interpretation and reference sources](color-science-validation.md)
+for details.
 
-Held-out chart scores test the CC mapping after GC/WB fitting. Use a separately
+Held-out chart scores describe the CC mapping after GC/WB fitting. Use a separately
 photographed validation chart to assess the complete pipeline. Refit older models
 trained on tagged images whose profile was previously ignored.
 
@@ -131,18 +149,22 @@ operations. Fitting can also show separate GC/WB/CC work while learning the mode
 **Save result** covers the output or preview actually being created. Cancellation keeps
 completed results, and a failed image does not erase earlier successes.
 
-On WSL, file and folder selection uses a managed picker to avoid a native GTK
-failure observed during testing. It opens over the app at a bounded size; press
-Escape to cancel. Other desktop platforms retain their native
-dialog selection.
+On WSL, use the app's built-in file picker to select files or folders. Press
+Escape to cancel. Other desktop platforms use their usual file dialogs.
 
-## Automation and notebooks
+See [processing options](compute/README.md) for Auto, CPU and GPU, or
+[compatibility](compatibility.md) for platform and driver requirements.
 
-All worker operations are available without the GUI. Start with the
-[headless API documentation](api/README.md) and the two tutorials in `../notebooks/`.
-Python is optional for the GUI. The public interface is a local worker process,
-not an HTTP service; no network listener is enabled by default. Copy notebooks
-to a writable working directory before running them from an installed app.
+## Python automation
+
+Use the [Python API](api/README.md) to run the same correction pipeline without
+the GUI. Python is optional for the desktop application. The SDK runs locally
+and does not require a server or an open desktop window.
+
+Download the [workflow notebook](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/01_headless_workflow.ipynb)
+or [method-comparison notebook](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/02_compare_fit_methods.ipynb)
+from the repository and save it in a writable working folder. The notebooks are
+separate from the installed app and use its bundled SDK and native engine.
 
 ## Research and attribution
 
@@ -160,8 +182,3 @@ Publication metadata is also available from [USDA ARS](https://www.ars.usda.gov/
 The study motivates a staged pipeline and careful control of the imaging setup.
 The current application's automatic GC and NN safeguards are implementation
 developments, not a claim to reproduce every historical experimental setting.
-
-The guide uses native Avalonia controls rather than an embedded browser. Link
-handling follows [Avalonia's Launcher API](https://docs.avaloniaui.net/docs/services/launcher).
-Its UI tests check the native control tree, keyboard interaction, search, scrolling,
-and rendered frames in both themes; HTML DOM tests do not apply to this app.

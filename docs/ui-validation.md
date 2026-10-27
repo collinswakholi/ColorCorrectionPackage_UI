@@ -253,9 +253,11 @@ WSL v3 targeted observations:
 - The saved Unicode identical-content relink session reopened after a WSL restart
   with its GC preview, owned model, white image and metrics retained.
 
-The screenshots are retained under `wsl/candidate-v3-captures/`. The completed
-14-scene demonstration lasts 50.64 seconds; its APNG holds and lossless gallery
-match their source pixels, and local Chromium/Firefox playback checks passed.
+The screenshots are retained under `wsl/candidate-v3-captures/`. The original
+14-scene demonstration lasted 50.64 seconds; its APNG holds and lossless gallery
+matched their source pixels, and local Chromium/Firefox playback checks passed.
+The current animation uses the same scenes at half that duration; see the
+[demo production notes](development/demo.md) for timing and capture provenance.
 The additional preview-on partial batch remains pending. Earlier v1/v2 observations
 are not relabelled as v3 acceptance. Windows guest automation intercepted Escape
 at the remote-desktop layer in this run, so it does not establish popup keyboard

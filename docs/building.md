@@ -1,6 +1,6 @@
 # Building and installing from source
 
-Use .NET SDK **10.0.402**, Rust **1.95.0**, and Python **3.10+** for SDK/tests. The SDK and Rust pins are in `global.json` and `rust-toolchain.toml`. Windows builds also need the Visual Studio C++ tools and Windows SDK. The application needs a compatible graphics driver for detection; CPU correction does not provide CPU detection.
+Use .NET SDK **10.0.402**, Rust **1.95.0**, and Python **3.10+** for the build helpers and optional SDK. The version pins are in `global.json` and `rust-toolchain.toml`. Windows also needs the Visual Studio C++ tools and Windows SDK. Chart detection requires a compatible GPU driver; CPU correction can apply an existing model.
 
 ## Windows
 
@@ -26,15 +26,15 @@ cargo build --manifest-path engine/Cargo.toml --locked --release -p ccp_bridge
 dotnet build app/ColorCorrect.sln -c Release
 ```
 
-Use `linux-arm64` on native ARM64. See the installer guide for portable archives, Debian packages and dependency checks. A build alone does not establish native GPU acceptance.
+Use `linux-arm64` on native ARM64. See the [installer guide](../installer/README.md) for portable archives, Debian packages and system dependencies. ARM64 graphics and desktop workflows remain experimental; see the [platform notes](compatibility.md).
 
 ## Apple-silicon macOS: source only
 
-Use macOS 14 or later on Apple silicon. The native source build, component tests,
-installed SDK smoke and application launch passed on an Apple-silicon macOS 15.7.9
-GitHub runner in [run 40042855625](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/runs/40042855625).
-Interactive UI and hardware GPU acceptance remain separate, outstanding gates.
-No macOS installer, application binary or runtime archive is distributed.
+Use macOS 14 or later on Apple silicon. Build and run the application locally;
+no macOS installer, application binary or runtime archive is distributed.
+Graphics and desktop compatibility are not yet confirmed on representative Mac
+hardware. See the [platform notes](compatibility.md) before relying on a Mac
+build for production work.
 
 Install [Apple's command-line tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/), the **Arm64 .NET SDK 10.0.402** using [Microsoft's macOS instructions](https://learn.microsoft.com/en-us/dotnet/core/install/macos), [Rust through rustup](https://rust-lang.github.io/rustup/installation/), and a native Python 3.10+ interpreter from [Python's macOS downloads](https://www.python.org/downloads/macos/). The Python universal2 distribution can run natively on Apple silicon. Open a native Terminal rather than a Rosetta shell. From the source checkout, verify:
 
@@ -59,7 +59,7 @@ bash scripts/build_macos.sh "$PWD/dist/local-macos"
 "$PWD/dist/local-macos/launch"
 ```
 
-The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. CI checks source compilation, tests and a ten-second launch; complete interactive UI and hardware GPU workflows remain unvalidated. Intel macOS is outside scope. No signing or notarization is performed.
+The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. Mac graphics and desktop workflows remain experimental. Intel macOS is outside scope. No signing or notarization is performed.
 
 Install the Python API in a local virtual environment and point it at that local build:
 
@@ -88,61 +88,23 @@ PY
 
 Use an absolute `Client(root=...)` path when starting Python from another directory. The private runtime stays beside its selected worker; an incomplete build rejects borrowing an unrelated runtime. Calibration requires available GPU inference; selecting CPU correction still requires GPU chart detection.
 
-If a build fails, check native toolchain architecture and the versions above first. A missing `.dylib` indicates an incomplete runtime download or wrong build root; use a fresh output directory and inspect `dist/local-macos/gpu-runtime-manifest.json`. A runtime checksum failure must be investigated rather than bypassed. If no hardware adapter initializes, retain the diagnostics and treat GPU acceptance as failed; CPU correction cannot replace neural inference. After moving the local build directory, rebuild into a new output directory so the generated launch script captures the correct paths. Do not disable Gatekeeper globally to work around a launch error.
+If a build fails, check native toolchain architecture and the versions above first. A missing `.dylib` indicates an incomplete runtime download or wrong build root; use a fresh output directory and inspect `dist/local-macos/gpu-runtime-manifest.json`. A runtime checksum failure must be investigated rather than bypassed. If no hardware adapter initializes, chart and plane detection are unavailable. Review the graphics diagnostics; CPU correction can still apply a saved model. After moving the local build directory, rebuild into a new output directory so the generated launch script captures the correct paths. Do not disable Gatekeeper globally to work around a launch error.
 
 To remove the local SDK, run `python -m pip uninstall colorcorrect-studio` while its virtual environment is active, then `deactivate`. After closing the app, remove only your chosen `dist/local-macos` and `.venv-macos` folders in Finder; preserve exported models, image outputs and sessions that you want to keep. Shared Xcode, .NET, Rust and Python installations are managed separately and are not removed by this procedure.
 
-## Component tests and SDK
+## Python SDK
 
-Use CPython **3.12.10** for the CI/workflow contract suite. Its pinned, hashed
-PyYAML wheel is a build/test tool; the desktop app and SDK gain no runtime
-dependency. The listed wheels cover the five native CI targets.
+Install the optional SDK from the source checkout with `python -m pip install ./api`.
+Use `Client(root=...)` or `ColorCorrection(..., root=...)` to select an intact
+native application folder. The SDK never downloads graphics drivers and needs no
+server or Python ML packages. See the [API guide](../api/README.md) for examples.
 
-```text
-python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-ci.txt
-dotnet test app/ColorCorrect.sln -c Release -p:RestoreLockedMode=true
-cargo test --release --manifest-path engine/Cargo.toml --locked -p ccp_core -p ccp_detect -p ccp_bridge --no-default-features --features ccp_bridge/ort-plane,ccp_bridge/wgpu-lut,ccp_bridge/rust-inference
-python -m unittest discover -s api/tests -p test_*.py
-python -m unittest discover -s scripts/tests -p test_*.py
-python scripts/export_source.py --check
-python -m pip install ./api
-```
+## Distribution and development
 
-On Linux, add `-p ccp_wgpu_infer` to the Cargo command to test the Linux inference
-implementation too. CI selects the crates that ship on each platform rather than
-building an inactive Linux inference crate as a separate Mac or Windows test.
+Windows and Linux have installers and portable packages. Release assets include
+checksums and package manifests. Packages remain unsigned; Apple-silicon macOS
+remains source only. See [installation details](../installer/README.md) for
+prerequisites and [release procedures](releasing.md) for maintainers.
 
-Local component/unit checks run on the Windows host; final application and
-installed-wheel workflows are exercised in Sandbox and WSL. GitHub Actions also
-builds and tests native Windows/Linux x64 and ARM64 packages and the Apple-silicon
-source build. Actual hardware GPU and complete interactive UI acceptance are
-recorded separately. [Validation split](native-validation.md)
-
-The SDK discovers an intact native package with `Client(root=...)` or `ColorCorrection(..., root=...)`. It never downloads GPU drivers. No server or Python ML package is needed.
-
-## Automated builds and releases
-
-Pushes to `main` run the four Windows/Linux native package jobs and the
-Apple-silicon source-validation job. Their build artifacts and evidence are
-available from the Actions run; a main-branch build does not create a release.
-
-A version tag matching the application version, such as `v0.2.0`, runs the same
-five checks. After all succeed, the release publisher verifies the tag, source
-identity and package inventories before creating a GitHub prerelease. It publishes
-Windows/Linux installers and portable packages, checksums and package manifests.
-The SDK wheel is included inside those native packages. Existing published releases
-and assets are not replaced. Apple-silicon CI uploads text evidence only; no Mac
-application, runtime, installer or binary archive is released.
-
-Published packages remain unsigned, and hosted build/install/smoke checks do not
-certify every graphics driver or desktop workflow. See
-[packaging and release assets](../installer/README.md) and
-[release procedures](releasing.md) for the artifact contract and validation limits.
-
-## Reproducible source export
-
-```text
-python scripts/export_source.py --output _implementation/release-readiness/source-export
-```
-
-The destination must not exist. The export includes current unstaged/untracked source, hashes every copied file, rejects links/private artifacts and excludes local experiments/caches. It records actual Git HEAD/dirty state when this is a checkout; Git metadata remains unavailable for a plain source archive instead of claiming an old revision. Build and test that export from another working directory before calling it ready for GitHub.
+The [developer guide](development/README.md) covers automated builds, component
+checks and manifest-based source exports.

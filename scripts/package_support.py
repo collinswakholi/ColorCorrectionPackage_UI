@@ -17,7 +17,8 @@ MODELS = (
 )
 REFERENCES = ("refs/neutrals.json", "refs/digital_sg_lab_d50.json")
 REQUIRED_NOTICES = ("LICENSE", "THIRD_PARTY_NOTICES.md", "models/NOTICE.md", "models/LICENSE-AGPL-3.0.txt")
-DOCS = ("docs/user-guide.md", "docs/model-provenance.md", "docs/color-science-validation.md", "docs/api/README.md", "docs/api/protocol.md",
+DOCS = ("docs/user-guide.md", "docs/compatibility.md", "docs/compute/README.md",
+        "docs/model-provenance.md", "docs/color-science-validation.md", "docs/api/README.md", "docs/api/protocol.md",
         "api/README.md", "docs/images/workflow.svg", "docs/images/session-workbench.png", "docs/images/process-controls.png", "docs/images/in-app-guide.png")
 RUNTIMES = {
     "Windows": ("onnxruntime.dll", "onnxruntime_providers_webgpu.dll", "DirectML.dll"),

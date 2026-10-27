@@ -1,8 +1,8 @@
 # Python tutorials
 
-These notebooks use the installed ColorCorrect Studio SDK and a separate native
-application package. They can run from any directory; they do not import the
-repository's `api/` files or search your checkout for a worker.
+Use these notebooks to fit a chart photograph, adjust correction settings, and
+apply a saved model. Install the ColorCorrect Studio SDK and keep the native
+application package available. The notebooks can run from any directory.
 
 - [Chart to calibrated images](01_headless_workflow.ipynb): editable FFC/GC/WB/CC
   options, detection, fitting, stage previews, batches, model reload, CSV
@@ -20,20 +20,19 @@ folder. The SDK is independently versioned 2.2.1; use the wheel from your applic
 python -m venv .venv
 # Activate this environment, then:
 python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.2.1-py3-none-any.whl
-python -m pip install -r notebooks/requirements-qa.txt
-python -m pip install jupyterlab
+python -m pip install jupyterlab ipykernel Pillow
 ```
 
-Jupyter, Pillow, and the execution tools are tutorial/QA dependencies. They are
-not SDK runtime dependencies. Do not run `pip install colorcorrect` as a substitute
-for the bundled wheel.
+Jupyter and Pillow are used to run the notebooks and display images; the SDK
+itself does not require them. Use the wheel from your application package
+rather than an unrelated package named `colorcorrect`.
 
 Create a durable output directory. Set these variables **before starting the
 kernel** (use the equivalent native paths on your machine):
 
 ```sh
 export COLORCORRECT_APP_ROOT=/opt/colorcorrect-studio
-export COLORCORRECT_SAMPLES=/path/to/public-test_images
+export COLORCORRECT_SAMPLES=/path/to/sample-photos
 export COLORCORRECT_OUTPUT_DIR=/path/to/tutorial-results
 export COLORCORRECT_REFERENCE_CSV=/path/to/classic-lab-d50.csv
 python -m jupyterlab
@@ -49,9 +48,8 @@ $env:COLORCORRECT_REFERENCE_CSV = 'C:\path\to\classic-lab-d50.csv'
 python -m jupyterlab
 ```
 
-Select the kernel belonging to this environment. Run cells from the top in a
-fresh kernel. The setup cells assert that the SDK came from the kernel's Python
-environment and that the native worker belongs to the selected app.
+Select the kernel belonging to this environment, then run cells from the top.
+The setup cells show the SDK version, application location, and output directory.
 
 Use the public repository's `test_images/` directory, containing
 `ColorCard_Big.JPG`, `Blank.JPG`, `Sample_3572.JPG`, and `Sample_3573.JPG`.
@@ -81,35 +79,23 @@ Inspect warnings and actual backend diagnostics. CC-only cross-validation leaves
 earlier stages fitted on the full chart; use independent captures to evaluate
 full-pipeline accuracy. The timing cells are illustrative observations.
 
-## Execute installed acceptance copies
+## Run the example as a script
 
-Copy the notebooks and `api/tests/execute_notebooks.py` into a neutral guest
-folder. With the installed wheel and QA tools in the active environment:
-
-```sh
-python execute_notebooks.py --notebooks-dir ./notebooks \
-  --root /path/to/installed-app --samples /path/to/public-test_images \
-  --output-dir /path/to/evidence --reference-csv /path/to/classic-lab-d50.csv
-```
-
-The runner requires the CSV so acceptance cannot silently omit that exercise.
-It binds fresh kernels to its interpreter, uses a neutral working directory, and
-writes executed copies, outputs, source hashes, module paths, and a verification
-report outside the source notebooks. Published notebook outputs remain cleared.
-
-Run the standalone editable example with the same arguments except
-`--notebooks-dir`:
+Download [configured_pipeline.py](../api/examples/configured_pipeline.py) and run
+it with your application, sample-photo, reference, and output paths:
 
 ```sh
 python configured_pipeline.py --root /path/to/installed-app \
-  --samples /path/to/public-test_images --output-dir /path/to/evidence \
+  --samples /path/to/sample-photos --output-dir /path/to/results \
   --reference-csv /path/to/classic-lab-d50.csv
 ```
 
-The file is [configured_pipeline.py](../api/examples/configured_pipeline.py).
-It also verifies partial-batch outcomes, saved-model FFC reuse, an application
-stage override, and LUT export. Final installed executions belong in Windows
-Sandbox and WSL. Host tests cover configuration/transport contracts.
+The example includes custom references, partial-batch outcomes, saved-model FFC
+reuse, an application-stage override, and LUT export. Edit its configuration
+function to use different FFC or CC settings.
+
+Contributor instructions for automated notebook execution and the versioned
+execution record are in [developer validation](../docs/api/VERIFICATION.md).
 
 [API guide](../api/README.md) · [Configuration reference](../docs/api/README.md#configuration-reference)
 · [Original study](https://doi.org/10.1002/ppj2.70067)

@@ -58,6 +58,11 @@ releases are verified and left unchanged on a successful retry.
 
 ## Validation and release status
 
+Signing and stable-release promotion are pending the maintainer's signing setup.
+Keep the current release as an unsigned preview until credentials are provided.
+After signing, verify the finished artifacts and promote the approved preview
+to a full release marked Latest. macOS delivery remains source only.
+
 A preview does not imply native GPU, driver, interactive UI, high-DPI, clipboard,
 or full workflow certification on every target. Hosted runners test installation
 and CPU application without claiming GPU inference. Preserve explicit skips,

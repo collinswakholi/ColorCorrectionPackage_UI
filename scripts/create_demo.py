@@ -95,9 +95,6 @@ def load_storyboard(path: Path) -> tuple[dict, list[dict]]:
         raise ValueError("At least two actual application captures are required")
     if len({digest(scene["image"].tobytes()) for scene in scenes}) < 2:
         raise ValueError("An animation requires at least two distinct actual captures")
-    total = sum(s["duration_ms"] + s["transition_ms"] for s in scenes)
-    if not 45000 <= total <= 55000:
-        raise ValueError("The complete demo must last 45–55 seconds")
     return story, scenes
 
 

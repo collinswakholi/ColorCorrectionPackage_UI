@@ -1,21 +1,48 @@
-# Portable compute: current behavior
+# Processing and graphics
 
-Production inference uses DirectML or WebGPU/Vulkan. LUT correction uses Rust CPU or wgpu with transactional CPU recovery. Torch, LibTorch, CUDA add-ons and video processing have been removed.
+Choose **Auto**, **CPU** or **GPU** for image correction. The default Fast mode
+combines the enabled GC, WB and CC transforms in one **65³ LUT**. Spatial flat-field
+correction (FFC) runs separately.
 
-**Auto, CPU and GPU** select the correction device; all default to the combined **65³ GC/WB/CC LUT**. Auto uses CPU below 1,048,576 pixels and attempts GPU above that threshold. This conservative policy is not an adaptive performance guarantee. Detection remains GPU-based even when correction is set to CPU.
+| Choice | Behavior |
+| --- | --- |
+| Auto | Uses CPU below 1,048,576 pixels and attempts GPU for larger images. |
+| CPU | Applies correction on the processor. Useful without a compatible correction GPU. |
+| GPU | Attempts graphics acceleration, with CPU recovery if application fails. |
 
-The previous method in Advanced evaluates GC/WB separately and uses a 33³ CC LUT. It is retained for old-result reproduction and comparison, not as an exact or universally more accurate mode. FFC remains a separate spatial operation. Extended-domain inputs use the established safe path automatically.
+These choices affect correction, not chart or plane detection. Detection requires
+GPU inference. Windows **Automatic** detection prefers DirectML; other available
+routes use WebGPU/Vulkan. Missing libraries or an unavailable adapter produce an
+actionable error rather than silently selecting CPU inference.
 
-## Backend validation
+## Choosing a mode
 
-Windows Auto uses DirectML, which was faster on the tested NVIDIA hardware than native WebGPU/D3D12 or Vulkan. Windows Vulkan loader initialization now searches the system loader correctly. WSL uses a Rust/wgpu eager model route because the tested Dawn/Dozen combination lacks a required drawing feature. Fusion/autotuning are disabled for that route after photographic correctness failures were found.
+Leave **Auto** selected for everyday use. GPU work has initialization and data
+transfer costs, so a small image can finish sooner on CPU. Loading, fitting, FFC
+and image encoding also contribute to the total processing time. A faster GPU
+pass may have only a small effect when those stages dominate the total time.
 
-The accepted WSL experiment matched canonical cells within 0.0001 model pixel over 36 reordered-photo detections and passed installed application/API workflows. The configured Dozen translation driver and hardware are part of that evidence. This is not a universal Linux performance claim. Missing libraries/adapters/operators produce actionable inference errors; they do not enable CPU inference.
+In **Advanced**, use the previous processing method to reproduce older results.
+It evaluates the stages separately and is not a higher-accuracy setting. Keep the default
+unless you need to match an older workflow. Inputs outside the combined LUT's
+domain use the established safe path automatically.
 
-## Measurements and limitations
+Reports include the device actually used and any CPU recovery. Diagnostic details
+are available when troubleshooting; the main controls use the simpler mode names.
 
-Earlier 24 MP combined-LUT measurements were about 0.737 s on GPU and 0.764 s on CPU, versus 1.628 s for the previous GPU processing method. These are recorded measurements on one machine, not promises for other drivers or all algorithms. Identical LUT arithmetic matched within 5.96e-8 normalized RGB; LUT approximation was assessed separately.
+## Drivers and platforms
 
-Cold initialization, data transfers, image encoding, FFC and fitting can dominate total time even when GPU kernels are faster. Reports preserve actual providers, completed stages and mixed execution. Ordinary UI logs use shorter labels.
+Keep graphics drivers current through your operating system or GPU vendor. The
+application includes its private inference runtime, not a replacement system
+graphics driver. CPU correction can apply a saved model when GPU inference is
+unavailable, but it cannot detect a chart to fit a new one.
 
-Raw benchmarks, rejected trials, exact commands and old Torch comparisons remain privately preserved in ignored local evidence/research folders. They are not active build instructions. The current readiness run must pin fresh source/package/model hashes and record its own outcome. [Acceptance gates](../native-validation.md)
+WSL GPU use is experimental and requires the separately built Mesa Dozen add-on
+in the current setup. Official Linux downloads do not include that add-on.
+See [WSL setup](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md#experimental-wsl-gpu-setup). Native Ubuntu
+uses its OS/vendor driver. ARM64 graphics and Apple-silicon desktop workflows
+remain experimental; macOS is source only.
+
+For numerical comparisons and hardware-specific results, see the
+[developer measurements](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/development/README.md#historical-compute-measurements).
+See [compatibility](../compatibility.md) for platform requirements and limitations.

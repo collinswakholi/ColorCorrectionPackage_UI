@@ -92,8 +92,8 @@ class StoryboardChecks(unittest.TestCase):
             (root / "two.png").write_bytes(b"second image")
             path = root / "storyboard.json"
             story = {"source_color_space": "srgb", "canvas": [1440, 900], "frames": [
-                {"id": "one", "source": "one.png", "duration_ms": 25000},
-                {"id": "two", "source": "two.png", "duration_ms": 25000}]}
+                {"id": "one", "source": "one.png", "duration_ms": 12500},
+                {"id": "two", "source": "two.png", "duration_ms": 12500}]}
 
             def check(value):
                 path.write_text(json.dumps(value), encoding="utf-8")

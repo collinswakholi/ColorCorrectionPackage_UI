@@ -1,16 +1,48 @@
-# Python API verification
+# Developer validation: Python API and tutorials
 
-The SDK has no Python ML or GUI runtime dependencies. Verification covers legacy Engine transport, the typed Client API and the familiar ColorCorrection workflow.
+This reference is for contributors maintaining the SDK and documentation.
+For ordinary use, start with the [Python quickstart](../../api/README.md),
+[configuration reference](README.md#configuration-reference), or
+[tutorials](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md).
+Checks cover the legacy Engine transport, typed Client API, and ColorCorrection
+workflow. Python ML and GUI packages are not SDK runtime dependencies.
 
-Run unit tests with `python -m unittest discover -s api/tests -p test_*.py`. Install the wheel into a clean environment and exercise documented calibration, custom references, FFC, batches, partial failure, model reload and LUT export against the extracted final native package.
+## Component and integration checks
+
+From the source checkout:
+
+```console
+python -m unittest discover -s api/tests -p test_*.py
+python api/tests/integration_sdk.py --root .
+python api/tests/integration_workflow.py --root .
+python api/tests/integration_reference_layouts.py --samples path/to/private-fixtures
+```
+
+Component checks use isolated native-process fixtures for transport and API
+contracts. Photograph integrations use the real worker and the five public
+images in `test_images/`; `--samples` selects another directory. They cover
+built-in/custom references, stage previews, batch outcomes, reload, LUT export,
+and FFC reuse. Missing required inputs or capabilities must fail clearly.
+
+For distribution checks, install the wheel into a clean environment and exercise
+the same workflows against the installed or extracted application package.
 
 Use a different working directory, Unicode paths and explicit native package discovery. Confirm actual execution providers, unique output directories, overwrite protection, timeouts, closed-client errors and retained per-image failure results.
 
-Source examples and photograph integration scripts use the five verified public images in `test_images/`. The optional `integration_reference_layouts.py` suite requires an explicit `--samples` directory containing private generated layout fixtures. Without all fixtures it saves a skipped result and exits 2; this is missing coverage, never a pass. It validates known-geometry reference handling, not photographed detector accuracy.
+The optional `integration_reference_layouts.py` suite requires an explicit
+directory containing `synth_cast.png`, `synth_spyder.png`, and `synth_sg.png`.
+These generated fixtures are not distributed. Missing files save a skipped
+result and exit 2. A complete run covers four reference layouts, including
+Passport compatibility, in three import orders using known geometry. It does
+not establish photographed-detector accuracy.
 
-For this work, installed application/API tests run in Windows Sandbox and WSL; host checks cover isolated transport/contracts. Current results and untested platforms belong in the [readiness ledger](../readiness.md). Historical video/Torch results are retained locally and do not certify the current still-image SDK.
+Installed application/API checks run in Windows Sandbox and WSL; host checks
+cover isolated components and contracts. Platform/package scope is recorded in
+the [native validation reference](../native-validation.md) and
+[platform notes](../readiness.md). Results apply only to the identified versions
+and environments.
 
-## Installed tutorial acceptance
+## Automated notebook execution
 
 The runnable [configured pipeline](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/api/examples/configured_pipeline.py)
 exercises editable FFC/GC/WB/CC options, custom reference provenance, FFC reuse,
@@ -18,7 +50,25 @@ partial batch outcomes, a WB application ablation, and LUT export. The
 [notebook runner](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/api/tests/execute_notebooks.py) executes both tutorial
 notebooks with fresh kernels pinned to its own interpreter. It validates SDK
 module locations, uses an explicit native app root, and writes executed copies
-outside the source notebooks. See [setup and commands](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md#execute-installed-acceptance-copies).
+outside the source notebooks.
+
+Install the application-owned SDK wheel and the pinned tools in
+`notebooks/requirements-qa.txt` into a clean Python environment. Copy the runner,
+notebooks, example, and public photographs into a separate working directory:
+
+```sh
+python -m pip install -r /path/to/notebooks/requirements-qa.txt
+python execute_notebooks.py --notebooks-dir ./notebooks \
+  --root /path/to/installed-app --samples /path/to/public-test_images \
+  --output-dir /path/to/execution-records --reference-csv /path/to/classic-lab-d50.csv
+python configured_pipeline.py --root /path/to/installed-app \
+  --samples /path/to/public-test_images --output-dir /path/to/example-results \
+  --reference-csv /path/to/classic-lab-d50.csv
+```
+
+The runner requires a complete reference CSV so that the custom-reference
+exercise is included. Public source notebooks retain cleared outputs; executed
+copies and their records belong outside the source notebooks.
 
 Do not substitute source import success for installed acceptance. Copy only the
 runner, notebooks/examples, reviewed fixtures, and QA dependencies into the guest;
@@ -38,8 +88,9 @@ color accuracy or GPU support.
 **Both notebooks and `configured_pipeline.py` passed in Windows Sandbox and WSL.**
 These runs used the published **0.2.0** native workers and their bundled **SDK
 2.2.1** wheels. No SDK implementation module changed in this documentation work.
-UI-repair 0.2.1 candidates have separate acceptance evidence; this record does
-not imply their installers, ARM GPUs, or macOS runtime were tested here.
+Later application builds have separate package records; this tutorial record
+does not establish their installation behavior, ARM GPU support, or macOS runtime
+behavior.
 
 The published worker source is commit
 `ee2522eaddb615dcbddc2ea4505e9e435bfc08ae` under
@@ -80,8 +131,9 @@ to the selected distribution. The two package builds have distinct wheel hashes.
   reached through its package-owned `ccp-engine-launch` wrapper.
 
 The source checkout was unavailable to the guest test processes. Both tutorials
-ran top-to-bottom in fresh kernels, and their source hashes matched the retained
-executed copies. Coverage included six CC choices across five families, three
+ran top-to-bottom in fresh kernels. Source hashes at execution matched the
+retained executed copies; later prose-only edits preserve their code cells.
+Coverage included six CC choices across five families, three
 CC neural optimizers, automatic white-plane detection, FFC/GC/WB/CC records and
 stage PNGs, custom CSV references, full-resolution batches, partial missing-input
 outcomes, saved-model FFC reuse, WB-disabled application, and LUT export. The
@@ -90,10 +142,7 @@ claim exhaustive parameter or all-FFC-method coverage. The broader method matrix
 is recorded separately in the [native validation record](../native-validation.md).
 
 Package/module hashes were checked before and after execution. No tutorial
-runner, notebook kernel, or owned SDK worker remained after cleanup; the separate
-Windows UI worker was preserved. Private harness incidents were retained and
-resolved without modifying the app/SDK: PowerShell variable/process-observer
-handling on Windows, and a shell-staging quoting error before WSL execution.
+runner, notebook kernel, or owned SDK worker remained after cleanup.
 
 Local raw evidence is retained under the following ignored repository paths;
 it is not bundled or uploaded with these guides:

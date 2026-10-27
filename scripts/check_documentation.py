@@ -20,7 +20,9 @@ import yaml  # Pinned QA dependency; never an SDK/application runtime dependency
 
 GUIDES = ("README.md", "api/README.md", "docs/api/README.md", "docs/api/protocol.md",
           "docs/api/VERIFICATION.md", "docs/user-guide.md", "docs/building.md", "notebooks/README.md",
-          "docs/ui-validation.md", "docs/readiness.md", "CHANGELOG.md")
+          "docs/ui-validation.md", "docs/readiness.md", "CHANGELOG.md",
+          "docs/compatibility.md", "docs/compute/README.md", "docs/implementation.md",
+          "docs/development/README.md", "docs/development/demo.md", "installer/README.md")
 LINK = re.compile(r"!?\[[^\]\n]*\]\((<[^>]+>|[^\s)]+)(?:\s+\"[^\"]*\")?\)")
 FENCE = re.compile(r"^```([^\n]*)\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 
@@ -247,7 +249,7 @@ def check_demo_storyboard(path: Path) -> list[str]:
     frames = story.get("frames")
     if not isinstance(frames, list) or len(frames) < 2:
         return [f"{path.name}: expected at least two frames"]
-    errors, seen, total, previous_comparison = [], set(), 0, False
+    errors, seen, previous_comparison = [], set(), False
     root = path.parent.resolve()
     for index, frame in enumerate(frames):
         prefix = f"{path.name}: frame {index}: "
@@ -276,17 +278,12 @@ def check_demo_storyboard(path: Path) -> list[str]:
         hold, transition = frame.get("duration_ms"), frame.get("transition_ms", 0)
         if type(hold) is not int or hold < 1000 or hold % 10:
             errors.append(prefix + "duration_ms must be >=1000 and a multiple of 10")
-        else:
-            total += hold
         if type(transition) is not int or not 0 <= transition <= 250 or transition % 10:
             errors.append(prefix + "transition_ms must be 0-250 and a multiple of 10")
         else:
-            total += transition
             if transition and (index == 0 or previous_comparison or frame.get("comparison", False)):
                 errors.append(prefix + "scientific comparisons and the first frame need clean cuts")
         previous_comparison = bool(frame.get("comparison", False))
-    if not 45000 <= total <= 55000:
-        errors.append(f"{path.name}: total duration must be 45-55 seconds")
     return errors
 
 

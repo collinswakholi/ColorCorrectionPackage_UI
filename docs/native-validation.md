@@ -1,5 +1,9 @@
 # Native validation status and acceptance
 
+Developer reference: this page records versioned builds, hardware coverage and
+historical results. For installation requirements and platform limitations, use
+[Compatibility](compatibility.md).
+
 Windows/Linux x64 and ARM64 are packaging targets. Apple-silicon macOS has source/build instructions only; Intel macOS is excluded. A target is supported only when its native acceptance evidence is recorded.
 
 ## Where checks run
