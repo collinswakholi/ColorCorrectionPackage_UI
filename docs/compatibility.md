@@ -1,6 +1,6 @@
 # Compatibility
 
-ColorCorrect Studio is available as an **unsigned preview** for Windows and
+ColorCorrect Studio is available as an **unsigned release** for Windows and
 Ubuntu. Keep the complete application folder together; its runtime, models and
 libraries are included. Python is optional.
 

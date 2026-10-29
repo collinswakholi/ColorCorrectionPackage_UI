@@ -4,7 +4,7 @@ Turn a photographed color chart into a reusable correction for your still images
 Check the detected patches, fit the correction, inspect each stage, and apply the
 saved model to photographs captured under the same conditions.
 
-[Download 0.2.0 preview](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.2.0)
+[Download 0.2.1](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.2.1)
 · [User guide](docs/user-guide.md) · [Python API](api/README.md)
 · [Build from source](docs/building.md)
 
@@ -21,17 +21,17 @@ compatible GPU and driver; CPU correction can apply a previously fitted model.
 
 ## Download and install
 
-**0.2.0 is an unsigned preview release.** Windows and Ubuntu packages are available
+**0.2.1 is the current release and is unsigned.** Windows and Ubuntu packages are available
 for x64 and ARM64. ARM64 graphics and desktop workflows remain experimental.
 Apple-silicon macOS is available from source only. See the
 [platform notes](docs/compatibility.md) for requirements and limitations.
 
 | Platform | Installer | Portable application |
 | --- | --- | --- |
-| Windows 11 · x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-win-x64.zip) |
-| Windows 11 · ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-win-arm64.zip) |
-| Ubuntu 24.04 · x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/colorcorrect-studio_0.2.0_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-linux-x64.tar.gz) |
-| Ubuntu 24.04 · ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/colorcorrect-studio_0.2.0_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.0/ColorCorrect-Studio-0.2.0-linux-arm64.tar.gz) |
+| Windows 11 · x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-win-x64.zip) |
+| Windows 11 · ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-win-arm64.zip) |
+| Ubuntu 24.04 · x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/colorcorrect-studio_0.2.1_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-linux-x64.tar.gz) |
+| Ubuntu 24.04 · ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/colorcorrect-studio_0.2.1_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.1/ColorCorrect-Studio-0.2.1-linux-arm64.tar.gz) |
 | Apple-silicon macOS 14+ | [Source build/install instructions](docs/building.md#apple-silicon-macos-source-only) | Source only; no downloadable app or installer |
 
 **x64** means 64-bit Intel/AMD; **ARM64** means 64-bit Arm. Choose your operating
@@ -48,7 +48,7 @@ On **Ubuntu**, install the matching Debian package, then launch the app from the
 application menu or with `colorcorrect-studio`:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.2.0_amd64.deb  # ARM64: use the _arm64.deb file
+sudo apt install ./colorcorrect-studio_0.2.1_amd64.deb  # ARM64: use the _arm64.deb file
 colorcorrect-studio
 ```
 
@@ -64,7 +64,7 @@ Release assets include SHA-256 checksums and a manifest for each architecture.
 See [installation details](installer/README.md) for prerequisites, verification,
 portable use, and the optional experimental WSL GPU setup.
 
-**WSL GPU use is experimental.** Official 0.2.0 Linux downloads do not include the
+**WSL GPU use is experimental.** Official 0.2.1 Linux downloads do not include the
 optional Mesa Dozen add-on needed for chart detection in the current WSL setup.
 Without it, use CPU correction with a saved model. Native Ubuntu uses its OS/vendor
 GPU driver. The current
@@ -147,7 +147,7 @@ with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStu
     calibration.export_lut("correction.cube")
 ```
 
-Published desktop packages are **0.2.0**; this source tree targets **0.2.1**.
+The desktop application is **0.2.1**.
 The independently versioned SDK is **2.2.1**. Its wheel does not include the native
 worker or models. For custom references, typed
 options, model reload, and partial batch failures, see the [API guide](api/README.md)
@@ -180,7 +180,7 @@ software and research references.
 
 Build with **.NET SDK 10.0.402** and **Rust 1.95.0**, or browse unreleased builds on
 the [Actions page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/workflows/native-builds.yml).
-These unsigned builds are separate from the published preview downloads above.
+These unsigned builds are separate from the published release downloads above.
 
 [Build instructions](docs/building.md) · [Developer guide](docs/development/README.md)
 · [Contributing](CONTRIBUTING.md) · [Migration notes](docs/migration.md)

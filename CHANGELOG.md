@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — Unreleased
+## 0.2.1 — 2026-10-29
 
 - Refresh existing log and ΔE colors when switching themes, preserving completed results.
 - Let CC/FFC settings use the available height when resized, while keeping the Done action reachable in small windows.
@@ -9,7 +9,9 @@
 - Run lightweight documentation checks for root README/demo-only edits while retaining native checks for code, packaged documentation, tags and manual runs.
 - Rewrite the Python guides and notebooks around the installed SDK, with editable FFC/GC/WB/CC options and clean-environment execution checks.
 - Restore research/software attribution and prepare an authentic dark-mode demonstration with expanded analysis figures.
-- Keep published 0.2.0 assets unchanged. Local UI repair candidates explicitly retain their published worker/runtime/model components; they are not full native release builds.
+- Wait for owned workers and pending operations before closing the desktop, including Exit, window close, and splash cancellation.
+- Publish unsigned Windows/Linux x64 and ARM64 packages from the tagged native builds; retain Apple-silicon macOS source-only delivery and unchanged historical 0.2.0 assets.
+- ARM64 graphics/desktop workflows and the separate WSL GPU add-on remain experimental. Signing is deferred to a later release.
 
 ## 0.2.0 — Preview release
 

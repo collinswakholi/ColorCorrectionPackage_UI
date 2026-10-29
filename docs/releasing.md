@@ -58,12 +58,18 @@ releases are verified and left unchanged on a successful retry.
 
 ## Validation and release status
 
-Signing and stable-release promotion are pending the maintainer's signing setup.
-Keep the current release as an unsigned preview until credentials are provided.
-After signing, verify the finished artifacts and promote the approved preview
-to a full release marked Latest. macOS delivery remains source only.
+The maintainer authorized **0.2.1 as the current unsigned release**. After the
+version-tag workflow has verified and uploaded all seventeen assets, review the
+release notes, confirm the asset digests and source identities, and mark that
+release as a full release and Latest. Keep the original 0.2.0 assets unchanged.
+This one-time promotion does not change the workflow's default prerelease policy.
 
-A preview does not imply native GPU, driver, interactive UI, high-DPI, clipboard,
+Signing is planned for **0.2.2**, subject to the maintainer supplying credentials
+and authorizing that release. Do not sign or replace 0.2.1 assets later; signed
+artifacts require the new version and their own verification. macOS remains
+source only.
+
+A release designation does not imply native GPU, driver, interactive UI, high-DPI, clipboard,
 or full workflow certification on every target. Hosted runners test installation
 and CPU application without claiming GPU inference. Preserve explicit skips,
 failures and hardware gaps in the evidence. Windows Sandbox and WSL GPU/UI checks

@@ -10,7 +10,7 @@ Chart and plane detection need a compatible GPU and driver. CPU correction can
 apply a saved model when GPU inference is unavailable. No installer replaces
 system graphics drivers.
 
-This is an unsigned preview build. ARM64 graphics and desktop workflows remain
+This build is unsigned. ARM64 graphics and desktop workflows remain
 experimental. WSL GPU use needs the optional, separately prepared x64 add-on,
 which is disabled until explicitly enabled. See INSTALL.txt for setup controls.
 The application processes still images. Read [compatibility](docs/compatibility.md)
