@@ -154,6 +154,27 @@ impl From<&str> for InferenceFailure {fn from(reason:&str)->Self {Self::provider
 impl std::fmt::Display for InferenceFailure {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {f.write_str(&self.reason)}
 }
+
+fn wsl_addon_failure_context(ep: GpuEp, mut failure: InferenceFailure,
+    addon_error: Option<&str>) -> InferenceFailure {
+    if ep==GpuEp::Cpu || failure.kind!=FailureKind::Provider {return failure;}
+    let bounded: String=addon_error.unwrap_or("").chars().take(512)
+        .map(|c|if c.is_control() || c.is_whitespace() {' '} else {c}).collect();
+    let detail=bounded.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !detail.is_empty() {
+        failure.reason.push_str(&format!("; WSL GPU add-on unavailable: {detail}. Run Check setup to repair or disable the optional WSL add-on."));
+    }
+    failure
+}
+
+/// A failed optional add-on is context for a failed GPU attempt, not proof
+/// that every native GPU route is unusable. Successful attempts are untouched.
+fn gpu_failure_context(ep: GpuEp, failure: InferenceFailure) -> InferenceFailure {
+    if ep==GpuEp::Cpu || failure.kind!=FailureKind::Provider {return failure;}
+    let addon_error=std::env::var("CCP_WSL_GPU_ADDON_ERROR").ok();
+    wsl_addon_failure_context(ep,failure,addon_error.as_deref())
+}
+
 fn preflight_model(path: &Path) -> Result<(),InferenceFailure> {
     let file=std::fs::File::open(path).map_err(|e|InferenceFailure::asset(format!("Cannot read inference model {}: {e}",path.display())))?;
     if !file.metadata().map_err(|e|InferenceFailure::asset(e.to_string()))?.is_file() {
@@ -237,8 +258,8 @@ pub fn execute<T>(cache: &mut Option<CachedInference>, path: &Path,
             Err(reason) => {
                 let failure=InferenceFailure::execution(reason);
                 if failure.kind!=FailureKind::Provider {return Err(failure.reason);}
-                let reason=failure.reason;
-                quarantine(&policy,active.ep,&reason);
+                quarantine(&policy,active.ep,&failure.reason);
+                let reason=gpu_failure_context(active.ep,failure).reason;
                 failures = active.record.attempts.clone();
                 failures.push(Attempt{backend:active.ep.key().into(),reason});
                 // Previous initialization failures are already accounted for.
@@ -253,7 +274,11 @@ pub fn execute<T>(cache: &mut Option<CachedInference>, path: &Path,
         if let Ok(quarantined)=lock.lock() {
             for (p,ep,reason) in quarantined.iter().filter(|(p,_,_)|p==&policy) {
                 let _=p;
-                if !attempted.contains(ep) {attempted.push(*ep);failures.push(Attempt{backend:ep.key().into(),reason:reason.clone()});}
+                if !attempted.contains(ep) {
+                    attempted.push(*ep);
+                    let reason=gpu_failure_context(*ep,InferenceFailure::provider(reason.clone())).reason;
+                    failures.push(Attempt{backend:ep.key().into(),reason});
+                }
             }
         }
     }
@@ -264,8 +289,10 @@ pub fn execute<T>(cache: &mut Option<CachedInference>, path: &Path,
             let result=run(&mut session,&backend).map_err(InferenceFailure::execution)?;
             Ok((session,result))
         });
-        if let Err(failure)=&result {if failure.kind==FailureKind::Provider {quarantine(&policy,ep,&failure.reason);}}
-        result
+        result.map_err(|failure| {
+            if failure.kind==FailureKind::Provider {quarantine(&policy,ep,&failure.reason);}
+            gpu_failure_context(ep,failure)
+        })
     })?;
     let record=make_record(ep,&session,failures);
     *cache=Some(CachedInference{model_identity:identity,policy,ep,session,record});
@@ -518,6 +545,51 @@ mod tests {
             called.push(ep);Err(InferenceFailure::asset("Model data: Permission denied"))
         }).is_err());
         assert_eq!(called,vec![GpuEp::WebGpu]);
+    }
+    #[test]
+    fn failed_wsl_addon_does_not_change_cpu_or_asset_errors() {
+        let addon=Some("Enabled marker exists but the optional payload is missing");
+        let cpu=wsl_addon_failure_context(GpuEp::Cpu,InferenceFailure::provider("CPU execution failed"),addon);
+        assert_eq!(cpu.reason,"CPU execution failed");
+        let asset=wsl_addon_failure_context(GpuEp::WebGpu,InferenceFailure::asset("Model file is missing"),addon);
+        assert_eq!(asset.kind,FailureKind::Asset);
+        assert_eq!(asset.reason,"Model file is missing");
+        let absent=wsl_addon_failure_context(GpuEp::WebGpu,InferenceFailure::provider("No hardware adapter"),None);
+        assert_eq!(absent.reason,"No hardware adapter");
+    }
+    #[test]
+    fn failed_wsl_addon_is_reported_in_auto_recovery_and_forced_gpu_failure() {
+        let addon=Some("Optional WSL GPU payload is missing");
+        let mut calls=Vec::new();
+        let (ep,_,attempts)=try_candidates(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+            calls.push(ep);
+            if ep==GpuEp::WebGpu {
+                Err(wsl_addon_failure_context(ep,InferenceFailure::provider("No compatible hardware Vulkan adapter"),addon))
+            } else {Ok(())}
+        }).unwrap();
+        assert_eq!(calls,vec![GpuEp::WebGpu,GpuEp::Cpu]);
+        assert_eq!(ep,GpuEp::Cpu);
+        assert!(attempts[0].reason.contains("Optional WSL GPU payload is missing"));
+        assert!(attempts[0].reason.contains("Run Check setup"));
+        let error=try_candidates::<()>(vec![GpuEp::WebGpu],Vec::new(),|ep| {
+            Err(wsl_addon_failure_context(ep,InferenceFailure::provider("No compatible hardware Vulkan adapter"),addon))
+        }).unwrap_err();
+        assert!(error.contains("WSL GPU add-on unavailable"));
+        assert!(error.contains("repair or disable"));
+        // The optional failure must not reject a working ordinary GPU route.
+        let (ep,_,attempts)=try_candidates(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+            Ok::<_,InferenceFailure>(()).map_err(|failure|wsl_addon_failure_context(ep,failure,addon))
+        }).unwrap();
+        assert_eq!(ep,GpuEp::WebGpu);
+        assert!(attempts.is_empty());
+    }
+    #[test]
+    fn optional_wsl_addon_diagnostics_are_bounded_and_single_line() {
+        let detail="é\n\t\u{1b}[31m missing payload ".repeat(1000);
+        let failure=wsl_addon_failure_context(GpuEp::WebGpu,InferenceFailure::provider("No hardware adapter"),Some(&detail));
+        assert!(failure.reason.chars().count()<700);
+        assert!(!failure.reason.chars().any(char::is_control));
+        assert!(failure.reason.contains("Check setup"));
     }
     #[test]
     fn missing_model_is_rejected_before_any_provider_is_initialized() {

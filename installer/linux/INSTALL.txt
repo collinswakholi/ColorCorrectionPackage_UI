@@ -25,6 +25,10 @@ with ./wsl-gpu-setup enable and restart the app/client. Disable it with
 ./wsl-gpu-setup disable. It only affects the ColorCorrect worker, never system
 Mesa or global Vulkan configuration. WSL 2, /dev/dxg, WSL graphics libraries and
 a compatible Windows GPU driver are required. ARM64 WSL add-on support is pending.
+If an enabled add-on is missing or fails validation, the worker continues with
+the standard runtime so CPU operation and Auto recovery remain available.
+Check setup shows the GPU failure; repair the matching add-on or run
+./wsl-gpu-setup disable before restarting the app/client.
 
 Python API (optional): python3 -m pip install --no-deps python/*.whl
 Pass this app folder as root= to Client; examples are in python/examples.

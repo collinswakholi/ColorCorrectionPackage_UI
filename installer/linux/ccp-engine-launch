@@ -6,19 +6,69 @@ export CCP_NEW_UI_ROOT="$APP_DIR"
 : "${ORT_DYLIB_PATH:=$APP_DIR/libonnxruntime.so}"
 export ORT_DYLIB_PATH
 export LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Remove only routes owned by a previous ColorCorrect worker. A user-specified
+# ICD or library directory remains authoritative unless it is our add-on route.
+addon="$APP_DIR/addons/wsl-gpu"
+previous_addon=''; owned_route=0
+if [ "${VK_DRIVER_FILES:-}" = "$addon/icd/dzn_icd.json" ]; then
+    previous_addon=$addon; owned_route=1; unset VK_DRIVER_FILES
+elif [ "${CCP_WSL_GPU_ADDON_ACTIVE:-0}" = 1 ]; then
+    case "${VK_DRIVER_FILES:-}" in
+        */addons/wsl-gpu/icd/dzn_icd.json)
+            previous_addon=${VK_DRIVER_FILES%/icd/dzn_icd.json}
+            owned_route=1; unset VK_DRIVER_FILES ;;
+    esac
+fi
+if [ "$owned_route" = 1 ] && [ "${WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER:-}" = 1 ]; then
+    unset WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER
+fi
+remaining=$LD_LIBRARY_PATH; cleaned=''; have_entry=0
+while :; do
+    case "$remaining" in
+        *:*) entry=${remaining%%:*}; remaining=${remaining#*:}; more=1 ;;
+        *) entry=$remaining; more=0 ;;
+    esac
+    drop=0
+    [ "$entry" != "$addon/lib" ] || drop=1
+    if [ "$owned_route" = 1 ]; then
+        [ "$entry" != "$previous_addon/lib" ] || drop=1
+        [ "$entry" != /usr/lib/wsl/lib ] || drop=1
+    fi
+    if [ "$drop" = 0 ]; then
+        if [ "$have_entry" = 1 ]; then cleaned="$cleaned:$entry"; else cleaned=$entry; have_entry=1; fi
+    fi
+    [ "$more" = 1 ] || break
+done
+export LD_LIBRARY_PATH="$cleaned"
+export CCP_WSL_GPU_ADDON_ACTIVE=0
+unset CCP_WSL_GPU_ADDON_ERROR
 setting=${CCP_WSL_GPU_ADDON:-}
 if [ -z "$setting" ]; then
     setting=0
     if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/colorcorrect/wsl-gpu.enabled" ]; then setting=1; fi
 fi
 case "$setting" in
-    0) export CCP_WSL_GPU_ADDON_ACTIVE=0 ;;
+    0) ;;
     1)
-        "$APP_DIR/wsl-gpu-setup" check >&2
-        export VK_DRIVER_FILES="$APP_DIR/addons/wsl-gpu/icd/dzn_icd.json"
-        export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
-        export LD_LIBRARY_PATH="$APP_DIR/addons/wsl-gpu/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
-        export CCP_WSL_GPU_ADDON_ACTIVE=1
+        if check_output=$(timeout --kill-after=1s 5s "$APP_DIR/wsl-gpu-setup" check 2>&1); then
+            printf '%s\n' "$check_output" >&2
+            export VK_DRIVER_FILES="$addon/icd/dzn_icd.json"
+            export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
+            export LD_LIBRARY_PATH="$addon/lib:/usr/lib/wsl/lib:$LD_LIBRARY_PATH"
+            export CCP_WSL_GPU_ADDON_ACTIVE=1
+        else
+            check_status=$?
+            # Optional acceleration must not prevent CPU startup. The worker
+            # carries this reason into a failed GPU attempt's diagnostics.
+            if [ -z "$check_output" ]; then
+                check_output="The optional WSL GPU add-on check failed (exit $check_status). Repair or disable it using Check setup."
+            fi
+            CCP_WSL_GPU_ADDON_ERROR=$(printf '%s' "$check_output" | tr '\r\n' '  ' | awk '{print substr($0,1,1024)}')
+            export CCP_WSL_GPU_ADDON_ERROR
+            printf '%s\n' 'Optional WSL GPU support is unavailable; continuing with the standard runtime. Auto can use CPU.' >&2
+            printf '%s\n' "$check_output" >&2
+        fi
         ;;
     *) echo 'CCP_WSL_GPU_ADDON must be 0 or 1.' >&2; exit 64 ;;
 esac

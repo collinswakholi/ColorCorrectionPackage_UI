@@ -4,6 +4,7 @@
 
 - Add explicit CPU chart and white-plane detection. Auto tries available GPU engines and falls back to CPU when GPU inference cannot complete.
 - Fix Apple-silicon WebGPU initialization by letting Dawn select its native Metal backend.
+- Keep CPU operation available when an enabled experimental WSL GPU add-on is missing or fails its checks, with repair details for failed GPU attempts.
 - Add Recommended, CPU-only and Custom setup choices, offline runtime repair and Check setup device diagnostics.
 - Report the backend and recovery used by each detection operation, including cached results and saved calibration provenance.
 - Improve detection retries, missing-dependency errors and disabled processing controls while preserving completed results after failure or cancellation.
