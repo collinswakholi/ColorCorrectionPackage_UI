@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import time
 
-caps = [] if os.environ.get("CCP_TEST_OLD_WORKER") else ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1"]
+caps = [] if os.environ.get("CCP_TEST_OLD_WORKER") else ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1", "cpu_inference_v1"]
 print(json.dumps({"ok": True, "event": "ready", "capabilities": caps}), flush=True)
 for line in sys.stdin:
     request = json.loads(line)
@@ -21,7 +21,8 @@ for line in sys.stdin:
         faces = [{"id": index, "chart_id": f"fixture-{index}", "cli_chart": "classic", "rows": 4, "cols": 6,
                   "patch_obbs": [[[0, 0], [1, 0], [1, 1], [0, 1]]] * 24}
                  for index in range(2 if "multi" in request["image"] else 1)]
-        reply.update(n_charts=len(faces), device="cpu", handshake={"charts": faces, "snapshot_id": "fixture-snapshot", "backend": "onnx"})
+        reply.update(n_charts=len(faces), device="cpu", inference={"detect": {"backend": "cpu", "provider": "CPUExecutionProvider", "requested_policy": request["policy"], "fallback": None}},
+                     handshake={"charts": faces, "snapshot_id": "fixture-snapshot", "backend": "onnx"})
     elif command == "run":
         model = {"version": 2, "kind": "rpcc2", "correction": {}, "do_ffc": request.get("do_ffc", False)}
         Path(request["model_out"]).write_text(json.dumps(model), encoding="utf-8")

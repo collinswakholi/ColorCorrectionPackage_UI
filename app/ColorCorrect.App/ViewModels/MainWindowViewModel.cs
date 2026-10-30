@@ -73,6 +73,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         _client = new CorrectionClient(_worker);
+        Session.CollectionChanged += (_, _) => RefreshBatchSubscriptions();
         Methods = Map(ColorSpaces.Methods);
         RgbSpaces = Map(ColorSpaces.RgbSpaces);
         WhitePoints = Map(ColorSpaces.WhitePoints);
@@ -96,7 +97,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         HookWorkerProgress();
         if (_persistenceEnabled)
         {
+            var hasSavedSettings = File.Exists(SessionStore.SettingsPath()) || File.Exists(SessionStore.FilePath());
             RestoreSession();
+            if (!hasSavedSettings)
+            {
+                ApplyInstallationDefaults();
+                ShowFirstRunSetup = File.Exists(SetupHelperPath) && !File.Exists(InstalledSetup.StatePath);
+                if (ShowFirstRunSetup) SetupSummary = "Choose Recommended, CPU only, or Custom. Check setup verifies installed support; installation shows the proposed changes before applying them.";
+            }
+            LoadSetupSelection();
         }
         else
         {
@@ -334,6 +343,21 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => WorkerStartupComplete && !WorkerReady;
     public bool CanOpenBatch => WorkerReady && !Busy && !IsSaving && Session.Count > 0;
+    public string DetectActionLabel => Active is not null && _detectionFailures.ContainsKey(Active.Path) ? "Retry" : "Detect";
+    public string RunActionHint => !WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
+        : Busy || IsSaving ? "Wait for the current operation, or cancel processing."
+        : Active is null ? "Add an image to start."
+        : !File.Exists(Active.Path) ? "Relink the missing image to continue."
+        : OperationError(!WillUseLoadedModel) is { } error ? error
+        : !WillUseLoadedModel && Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
+        : "Run the active workflow (F5).";
+    public string BatchFitHint => !WorkerReady ? "The processing engine is not ready."
+        : Busy || IsSaving ? "Wait for the current operation."
+        : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
+        : OperationError(true) ?? "Detect a chart and fit each selected image.";
+    public string BatchApplyHint => !File.Exists(LoadedModelPath) ? "Load or fit a model before applying it to a batch."
+        : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
+        : OperationError(false) ?? "Apply the current model to each selected image.";
     public string StatusStateLabel => HasWorkerError
         ? "Engine error"
         : Busy
@@ -1845,6 +1869,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         BatchApplyCommand.NotifyCanExecuteChanged();
         CancelBatchCommand.NotifyCanExecuteChanged();
         ForceCpuRestartCommand.NotifyCanExecuteChanged();
+        CheckSetupCommand.NotifyCanExecuteChanged();
+        InstallSupportCommand.NotifyCanExecuteChanged();
+        UseCpuCommand.NotifyCanExecuteChanged();
         SaveModelCommand.NotifyCanExecuteChanged();
         ExportCubeCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(ApplyLabel));
@@ -1857,6 +1884,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ShowStillPreview));
         OnPropertyChanged(nameof(ShowChartSection));
         OnPropertyChanged(nameof(CanOpenBatch));
+        OnPropertyChanged(nameof(RunActionHint));
+        OnPropertyChanged(nameof(DetectActionLabel));
+        OnPropertyChanged(nameof(BatchFitHint));
+        OnPropertyChanged(nameof(BatchApplyHint));
         OnPropertyChanged(nameof(HasWorkerError));
         OnPropertyChanged(nameof(StatusStateLabel));
         RefreshDetectSummary();
@@ -1884,9 +1915,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path) && OperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && OperationError(true) is null && Session.Count > 0;
+    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && OperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
-        WorkerReady && !Busy && !IsSaving && OperationError(false) is null && Session.Count > 0 && File.Exists(LoadedModelPath);
+        WorkerReady && !Busy && !IsSaving && OperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
     private bool CanRestartWorker() => !Busy && !IsSaving;
     private bool CanCancel() => Busy;
     private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);
@@ -2034,7 +2065,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        _ = DetectItemAsync(item);
+        _ = AutoDetectIfNeededAsync(item);
     }
 
     private string ResolvedOutputDir()
@@ -2148,12 +2179,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         if (message.Contains("No hardware", StringComparison.OrdinalIgnoreCase)
             || message.Contains("No compatible hardware", StringComparison.OrdinalIgnoreCase))
-            return "No compatible GPU is available. Check the graphics driver and selected inference mode.";
+            return "No compatible GPU is available. Choose Auto or CPU for detection, or check the graphics driver.";
         if (message.Contains("Couldn't load Vulkan", StringComparison.OrdinalIgnoreCase)
             || message.Contains("vulkan GPU-only inference unavailable", StringComparison.OrdinalIgnoreCase))
             return "Vulkan inference could not start. Check the Vulkan driver or choose another inference mode.";
         if (message.Contains("no detect execution provider", StringComparison.OrdinalIgnoreCase))
-            return "GPU inference could not start. Check the selected inference mode and graphics driver.";
+            return "Detection could not start. Choose Check setup to inspect the inference runtime and devices.";
         var first = message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Processing failed.";
         return first.Length > 280 ? first[..280] + "…" : first;
     }
@@ -2577,7 +2608,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     : _worker.Title;
                 Status = "Ready.";
                 CurrentStage = "";
-                Log("Engine", _worker.Warmed ? $"Ready · {LabelStage(_worker.Device)}" : "Ready; GPU inference has not completed warmup.", LogLevel.Info);
+                Log("Engine", _worker.Warmed ? $"Ready · {LabelStage(_worker.Device)}" : "Ready. Detection is checked when needed.", LogLevel.Info);
                 // Status bar already shows ready. A toast here covers the viewer.
             }).ConfigureAwait(false);
             await RefreshAccelAsync().ConfigureAwait(false);

@@ -91,6 +91,17 @@ class Engine:
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
         env["CCP_NEW_UI_ROOT"] = str(self.root)
+        if "CCP_INFERENCE_COMPONENTS" not in env:
+            config = (Path(env.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ColorCorrectStudio"
+                      if os.name == "nt" else Path(env.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "colorcorrect")
+            try:
+                state = json.loads((config / "setup-state.json").read_text(encoding="utf-8-sig"))
+                components = state.get("components")
+                if isinstance(components, list):
+                    selected = ["cpu", *(value for value in components if value in ("webgpu", "directml"))]
+                    env["CCP_INFERENCE_COMPONENTS"] = ",".join(dict.fromkeys(selected))
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
         extras = [self.executable.parent]
         for variable in ("PATH", "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"):
             if variable != "PATH" and os.name == "nt":
@@ -101,8 +112,8 @@ class Engine:
         runtime = self.executable.parent / name
         if self._explicit_root or runtime.is_file():
             # Keep an explicit package authoritative even when incomplete. ORT
-            # consumers then report its missing library instead of borrowing an
-            # inherited development runtime. Rust/wgpu-only work remains usable.
+            # startup reports its missing library instead of borrowing an
+            # inherited development runtime.
             env["ORT_DYLIB_PATH"] = str(runtime)
         return env
 
@@ -110,6 +121,20 @@ class Engine:
         if self._process and self._process.poll() is None:
             return
         self._stop()
+        if self.executable.name.lower() in ("ccp-engine", "ccp-engine.exe", "ccp-engine-launch"):
+            name = "onnxruntime.dll" if os.name == "nt" else (
+                "libonnxruntime.dylib" if sys.platform == "darwin" else "libonnxruntime.so")
+            runtime = self.executable.parent / name
+            if not runtime.is_file():
+                raise FileNotFoundError(
+                    f"Required ONNX Runtime library is missing: {runtime}. "
+                    "Repair the application using its original installer or portable archive.")
+            try:
+                with runtime.open("rb") as library:
+                    library.read(1)
+            except OSError as exc:
+                raise OSError(f"Required ONNX Runtime library cannot be read: {runtime}. "
+                              "Check file permissions or repair the application package.") from exc
         self._lines = queue.Queue()
         self._stderr.clear()
         self._process = subprocess.Popen([str(self.executable)], stdin=subprocess.PIPE,
@@ -188,6 +213,12 @@ class Engine:
         payload = json.dumps({"cmd": command, "policy": self.policy, **parameters}, default=_json_default, allow_nan=False)
         with self._lock:
             self._start()
+            if parameters.get("policy", self.policy) == "cpu-inference" and "cpu_inference_v1" not in set(self.ready.get("capabilities") or []):
+                reply = {"ok": False, "code": "unsupported_capability",
+                         "error": "This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine."}
+                if check:
+                    raise EngineError(reply["error"], reply)
+                return reply
             if parameters.get("reference_profiles") or parameters.get("reference_assignments"):
                 missing = {"custom_references_v1", "chart_identity_v1"} - set(self.ready.get("capabilities") or [])
                 if missing:
@@ -204,7 +235,10 @@ class Engine:
                 self._stop()
                 raise
             if command in ("shutdown", "quit"):
-                self._stop()
+                exit_code = self._stop(graceful=reply.get("ok") is True)
+                if reply.get("ok") is True and exit_code not in (None, 0):
+                    reply = {**reply, "ok": False, "code": "shutdown_failure", "exit_code": exit_code,
+                             "error": f"Worker cleanup failed after shutdown acknowledgement (exit code {exit_code})."}
             failures = [r for r in reply.get("results", []) if r.get("ok") is False]
             if check and (reply.get("ok") is not True or failures):
                 raise EngineError(reply.get("error") or f"{len(failures)} image(s) failed", reply)
@@ -262,31 +296,48 @@ class Engine:
             raise ValueError("LUT size must be an integer from 2 to 129")
         return self.request("export_cube", model=model, path=path, size=size, **options)
 
-    def _stop(self):
+    def _stop(self, *, graceful: bool = False):
         process, self._process = self._process, None
         if process:
-            if process.poll() is None:
-                process.kill()
-            process.wait()
-            for reader in self._readers:
-                reader.join(timeout=2)
-            for pipe in (process.stdin, process.stdout, process.stderr):
-                if pipe:
-                    pipe.close()
+            try:
+                if graceful and process.poll() is None:
+                    try:
+                        # The acknowledgement precedes native session destruction.
+                        # Let profiling, driver cleanup and deferred writes finish.
+                        process.wait(timeout=min(self.timeout, 10))
+                    except subprocess.TimeoutExpired:
+                        pass
+            finally:
+                # A Ctrl+C during the graceful wait must still reap this worker.
+                if process.poll() is None:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass  # The process can exit between poll() and kill().
+                process.wait()
+                for reader in self._readers:
+                    reader.join(timeout=2)
+                for pipe in (process.stdin, process.stdout, process.stderr):
+                    if pipe:
+                        pipe.close()
+            return process.returncode
+        return None
 
     def close(self):
         """Flush deferred previews and stop. In-flight requests finish first."""
         with self._lock:
+            graceful = False
             try:
                 if self._process and self._process.poll() is None:
                     self._process.stdin.write('{"cmd":"shutdown"}\n')
                     self._process.stdin.flush()
-                    self._read_reply(min(self.timeout, 10), report_progress=False)
+                    acknowledgement = self._read_reply(min(self.timeout, 10), report_progress=False)
+                    graceful = acknowledgement.get("ok") is True
             except (EngineError, OSError, ValueError, TimeoutError):
                 # Cleanup must not mask the error that caused context exit.
                 pass
             finally:
-                self._stop()
+                self._stop(graceful=graceful)
 
     def __enter__(self):
         with self._lock:
@@ -323,7 +374,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", default="{}", help="JSON parameters, @file.json, or - for stdin")
     parser.add_argument("--engine", help="Path to ccp-engine executable")
     parser.add_argument("--root", help="App resource folder with models/ and refs/")
-    parser.add_argument("--policy", default="auto", help="auto (default), directml, webgpu, vulkan; cpu selects CPU LUTs with GPU inference")
+    parser.add_argument("--policy", default="auto", help="auto (GPU then CPU inference), cpu-inference, directml, webgpu, vulkan; cpu selects CPU LUTs with Auto inference")
     parser.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args(argv)
     try:

@@ -5,8 +5,13 @@ models and matching inference libraries. Python is optional. The installers do
 not replace system graphics drivers.
 
 Choose the package for your operating system and architecture. The downloads are
-**unsigned previews**; ARM64 and WSL graphics workflows remain experimental.
+**unsigned builds**; ARM64 and WSL graphics workflows remain experimental.
 See [compatibility](../docs/compatibility.md) for platform requirements.
+
+The setup choices and CPU inference fallback below describe the **current,
+unreleased source**. Published **0.2.1** downloads remain unchanged and do not
+include these additions. Local candidates use their source manifest and checksums
+to distinguish them from the published release.
 
 ## Windows
 
@@ -23,14 +28,18 @@ Follow any restart instructions from the Microsoft installer.
 For a portable installation, extract the complete ZIP and run
 `ColorCorrect-Studio.cmd`. Keep every file in the extracted folder. You can run
 `check-system.ps1` to inspect prerequisites; `-InstallPrerequisites` explicitly
-opts into their installation.
+opts into their installation. `setup.ps1 -Diagnose -Verify` checks installed CPU/GPU
+engines; `setup.ps1 -Mode cpu -Install` applies CPU preferences after confirmation.
+Setup offers Recommended, CPU only, and Custom choices. CPU mode omits optional
+WebGPU files while retaining shared libraries needed to load CPU inference.
+Rerun the matching installer with Custom to add omitted acceleration components.
 
 ## Ubuntu 24.04
 
 Install the Debian package using its actual downloaded filename:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.2.0_amd64.deb
+sudo apt install ./colorcorrect-studio_0.2.1_amd64.deb
 colorcorrect-studio
 ```
 
@@ -39,7 +48,11 @@ libraries; offline installation needs those libraries already installed or cache
 
 For a portable installation, extract the archive, run `./check-system`, then
 launch `./ColorCorrect-Studio`. To install missing Ubuntu libraries, inspect and
-run `./install-dependencies --install`. System-library installation is a separate,
+run `./install-dependencies --install`. `./setup --diagnose --verify` checks device
+inventory and actual engine execution. `./setup --mode cpu --install` chooses CPU
+operation; `--mode custom --components webgpu` selects optional support. Setup
+previews changes and asks for confirmation; package maintainer scripts do not
+run interactive setup or nested apt commands. System-library installation is a separate,
 explicit action. Neither installation route changes graphics drivers.
 
 ## Python SDK
@@ -60,7 +73,7 @@ included in your application folder, `wsl-gpu-setup enable` activates it for wor
 processes; `wsl-gpu-setup disable` clears that preference. It does not change the
 GUI's graphics environment, a global graphics-driver setting or the selected GPU
 vendor. Use the Windows host's supported graphics driver, not a Linux kernel GPU
-driver inside WSL. CPU correction can apply a saved model without the add-on.
+driver inside WSL. CPU inference and CPU correction work without the add-on.
 
 For source preparation, see the [developer packaging instructions](../docs/development/README.md#packaging).
 

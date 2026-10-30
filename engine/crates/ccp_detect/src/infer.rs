@@ -1,4 +1,4 @@
-//! ONNX chart inference using the allowed GPU execution providers.
+//! ONNX chart inference using explicit GPU providers or the CPU backend.
 use std::path::Path;
 use crate::{DetectResult, DetectSettings};
 pub fn warmup_detector(settings: &DetectSettings) -> DetectResult {
@@ -15,5 +15,5 @@ pub fn detect_chart(path: &Path, settings: &DetectSettings) -> DetectResult {
 }
 #[cfg(not(feature = "ort-plane"))]
 fn disabled() -> DetectResult {
-    DetectResult { error: "GPU inference requires the ort-plane build feature.".into(), ..DetectResult::default() }
+    DetectResult { error: "Chart inference requires the ort-plane build feature.".into(), ..DetectResult::default() }
 }

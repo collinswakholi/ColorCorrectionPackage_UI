@@ -300,17 +300,30 @@ def main() -> int:
             f'#define VcVersion "{vc_runtime["version"]}"\n#define VcSha256 "{vc_runtime["sha256"]}"\n', encoding="utf-8")
     else:
         launcher = payload / "ColorCorrect-Studio"
-        for name in ("ColorCorrect-Studio", "ccp-engine-launch", "check-system", "wsl-gpu-setup", "install-dependencies"):
+        for name in ("ColorCorrect-Studio", "ccp-engine-launch", "check-system", "wsl-gpu-setup", "install-dependencies", "setup"):
             destination = payload / name
             shutil.copy2(root / "installer/linux" / name, destination)
             destination.chmod(0o755)
     instruction = root / "installer" / ("windows/INSTALL.txt" if expected[0] == "Windows" else "linux/INSTALL.txt")
     shutil.copy2(instruction, payload / "INSTALL.txt")
+    from setup_components import component_manifest
+    components = component_manifest(payload, args.rid, runtime_manifest, version)
+    optional = next(component for component in components["components"] if component["id"] == "webgpu")
+    for file in optional["files"]:
+        backup = payload / optional["bundled_source"]
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(payload / file["path"], backup)
+    (payload / "setup-components.json").write_text(json.dumps(components, indent=2), encoding="utf-8")
+    for component in components["components"]:
+        if component["id"] in ("cpu", "webgpu"):
+            name = "required" if component["id"] == "cpu" else "webgpu"
+            (payload / f"setup-{name}.sha256").write_text("".join(
+                f"{file['sha256']}  {file['path']}\n" for file in component["files"]), encoding="ascii")
     audit = dependency_audit(payload, expected[0], require_architecture, expected)
     (payload / "dependency-report.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
     (payload / "runtime-support.json").write_text(json.dumps({
         "schema": 1, "rid": args.rid, "version": version,
-        "inference": "hardware GPU required; DirectML/WebGPU/Vulkan", "correction_cpu_fallback": True,
+        "inference": "Auto GPU inference with explicit CPU recovery; CPU inference selectable", "correction_cpu_fallback": True,
         "wsl_addon": {"installed": bool(args.wsl_addon), "default_enabled": False, "status": "experimental; x64 only"},
         "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 24.04",
         "native_acceptance": "pending", "redistribution_review": model_manifest.get("redistribution_review", "pending")
@@ -326,7 +339,7 @@ def main() -> int:
     manifest = {"schema": 2, "rid": args.rid, "version": version, "source": source_identity(root),
                 "rust_target": TARGETS[args.rid][2], "native_validation": "pending",
                 "third_party_redistribution_review": "dependency notice collection complete; model training provenance and distribution obligations remain under review",
-                "worker_features_declared": features, "inference_policy": "DirectML or WebGPU; CPU EP fallback disabled",
+                "worker_features_declared": features, "inference_policy": "Auto GPU then explicit CPU inference; forced GPU engines fail clearly",
                 "media_scope": "still images", "sha256": hashes,
                 "limitations": ["Architecture validation does not prove dynamic dependency closure.",
                                 "Native launch, workflow validation, signing and notarization remain outstanding."]}

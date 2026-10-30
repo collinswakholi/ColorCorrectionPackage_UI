@@ -1,5 +1,9 @@
 # Processing and graphics
 
+This guide describes the current source. CPU detection, Auto inference recovery,
+and device-aware setup are additions since the published 0.2.1 packages, which
+require a compatible GPU for chart and plane detection.
+
 Choose **Auto**, **CPU** or **GPU** for image correction. The default Fast mode
 combines the enabled GC, WB and CC transforms in one **65³ LUT**. Spatial flat-field
 correction (FFC) runs separately.
@@ -10,10 +14,14 @@ correction (FFC) runs separately.
 | CPU | Applies correction on the processor. Useful without a compatible correction GPU. |
 | GPU | Attempts graphics acceleration, with CPU recovery if application fails. |
 
-These choices affect correction, not chart or plane detection. Detection requires
-GPU inference. Windows **Automatic** detection prefers DirectML; other available
-routes use WebGPU/Vulkan. Missing libraries or an unavailable adapter produce an
-actionable error rather than silently selecting CPU inference.
+Advanced **Detection engine** settings control chart and plane inference separately.
+Auto tries eligible GPU engines, then CPU inference when GPU initialization or
+execution fails. Windows prefers DirectML; Linux uses WebGPU/Vulkan and Apple
+silicon uses WebGPU/Metal. Explicit CPU detection bypasses GPU initialization.
+Forced GPU engines return an actionable error instead of changing engines.
+
+The existing device-details panel reports the backend actually used, including
+CPU recovery. A cached detection retains the backend that originally produced it.
 
 ## Choosing a mode
 
@@ -27,15 +35,16 @@ It evaluates the stages separately and is not a higher-accuracy setting. Keep th
 unless you need to match an older workflow. Inputs outside the combined LUT's
 domain use the established safe path automatically.
 
-Reports include the device actually used and any CPU recovery. Diagnostic details
+Reports include the backend actually used and any CPU recovery. Device identity
+is included where the runtime can establish it. Diagnostic details
 are available when troubleshooting; the main controls use the simpler mode names.
 
 ## Drivers and platforms
 
 Keep graphics drivers current through your operating system or GPU vendor. The
 application includes its private inference runtime, not a replacement system
-graphics driver. CPU correction can apply a saved model when GPU inference is
-unavailable, but it cannot detect a chart to fit a new one.
+graphics driver. CPU inference can detect charts and white planes and fit a new calibration
+without GPU support. CPU correction can also apply existing saved models.
 
 WSL GPU use is experimental and requires the separately built Mesa Dozen add-on
 in the current setup. Official Linux downloads do not include that add-on.

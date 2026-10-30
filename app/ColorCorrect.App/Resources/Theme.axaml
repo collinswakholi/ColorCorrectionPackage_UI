@@ -134,6 +134,10 @@
         <Style Selector="^:focus-visible /template/ Border#PART_Border">
             <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
         </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
         <Style Selector="^:disabled /template/ Border#PART_Border">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
@@ -1000,6 +1004,15 @@
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="18,10" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Style Selector="^:disabled">
+            <Setter Property="Cursor" Value="Arrow"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="^:disabled /template/ Border#PART_Border">
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource SidebarBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
+        </Style>
     </ControlTheme>
     <ControlTheme x:Key="TinyButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
         <Setter Property="FontSize" Value="12" />

@@ -22,7 +22,8 @@ public partial class MainWindowViewModel
     public IReadOnlyList<NamedValue> FfcFitMethods { get; }
     public IReadOnlyList<NamedValue> AccelPolicies { get; } =
     new NamedValue[] {
-        new("auto", "Automatic (recommended)"),
+        new("auto", "Auto (recommended)"),
+        new("cpu-inference", "CPU"),
         new("webgpu", "WebGPU"),
         new("directml", "DirectML"),
         new("vulkan", "Vulkan"),
@@ -58,13 +59,14 @@ public partial class MainWindowViewModel
     [ObservableProperty] private string _lutNote = "LUT does not include flat-field.";
     [ObservableProperty] private bool _forceCpu;
     [ObservableProperty] private bool _fastMode = true;
-    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Automatic (recommended)");
+    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Auto (recommended)");
     private bool _accelSync;
     [ObservableProperty] private bool _phase2Teacher = true;
     [ObservableProperty] private string _lastPreviewDir = "";
     [ObservableProperty] private string _accelHint = "Checking graphics hardware…";
     private readonly Dictionary<string, Bitmap> _stageBitmaps = new(StringComparer.OrdinalIgnoreCase);
     private string _usedDetect = "";
+    private string _detectFallback = "";
     private string _usedPlane = "";
     private string _usedApply = "";
     private int _stageLoadGen;
@@ -293,6 +295,8 @@ public partial class MainWindowViewModel
     {
         var cancellation = BeginJob();
         _worker.Policy = SelectedAccelPolicy.Value;
+        _detectionFailures.Clear();
+        _engineGeneration++;
         _usedDetect = _usedPlane = _usedApply = "";
         await OnUi(() =>
         {
@@ -496,6 +500,7 @@ public partial class MainWindowViewModel
     partial void OnSelectedProcessingDeviceChanged(NamedValue value)
     {
         ForceCpu = value.Value == "cpu";
+        RefreshDeviceSummary();
         if (!_restoring) ScheduleSave();
     }
 
@@ -515,6 +520,9 @@ public partial class MainWindowViewModel
         try
         {
             _worker.Policy = value.Value;
+            _detectionFailures.Clear();
+            _usedDetect = _usedPlane = _detectFallback = "";
+            RefreshDeviceSummary();
             if (!_restoring)
             {
                 ScheduleSave();
@@ -777,6 +785,7 @@ public partial class MainWindowViewModel
         if (!string.IsNullOrWhiteSpace(detect))
         {
             _usedDetect = detect.Trim();
+            OnPropertyChanged(nameof(DetectionStatus));
         }
 
         if (!string.IsNullOrWhiteSpace(plane))
@@ -791,6 +800,7 @@ public partial class MainWindowViewModel
 
         if (string.IsNullOrWhiteSpace(AccelJson))
         {
+            RefreshDeviceSummary();
             return;
         }
 
@@ -813,11 +823,21 @@ public partial class MainWindowViewModel
 
     private string AccelHintFrom(JsonElement report)
     {
-        var lines = new List<string> { $"Inference mode: {SelectedAccelPolicy.Label}" };
-        if (!string.IsNullOrWhiteSpace(_usedDetect)) lines.Add($"Last detection: {LabelStage(_usedDetect)}");
-        if (!string.IsNullOrWhiteSpace(_usedPlane)) lines.Add($"Last plane inference: {LabelStage(_usedPlane)}");
-        lines.Add(string.IsNullOrWhiteSpace(_usedApply) ? "LUT: not run yet" : $"Last LUT: {LabelStage(_usedApply)}");
+        var lines = new List<string> { DetectionStatus };
+        if (!string.IsNullOrWhiteSpace(_detectFallback)) lines.Add($"Fallback: {_detectFallback}");
+        if (!string.IsNullOrWhiteSpace(_usedPlane)) lines.Add($"White-plane detection: {LabelStage(_usedPlane)}");
+        lines.Add($"Correction: {SelectedProcessingDevice.Label}" + (string.IsNullOrWhiteSpace(_usedApply) ? " — not run" : $" · last used {LabelStage(_usedApply)}"));
         return string.Join("\n", lines);
+    }
+
+    public string DetectionStatus => string.IsNullOrWhiteSpace(_usedDetect)
+        ? $"Detection: {SelectedAccelPolicy.Label} — not checked"
+        : $"Detection: {LabelStage(_usedDetect)}";
+
+    private void RefreshDeviceSummary()
+    {
+        OnPropertyChanged(nameof(DetectionStatus));
+        AccelHint = AccelHintFrom(default);
     }
 
     private static string LabelStage(string value) => value.Trim().ToLowerInvariant() switch
@@ -827,6 +847,9 @@ public partial class MainWindowViewModel
         "webgpu" => "WebGPU",
         "vulkan" => "Vulkan",
         "cpu" => "CPU",
+        "cpu-inference" => "CPU",
+        var backend when backend.StartsWith("mixed:", StringComparison.Ordinal) => backend.Contains("cpu", StringComparison.Ordinal)
+            ? "GPU + CPU (mixed detection)" : "GPU (multiple engines)",
         var backend when backend.StartsWith("webgpu:", StringComparison.Ordinal) => "WebGPU",
         var backend when backend.StartsWith("wgpu:", StringComparison.Ordinal) && backend.Contains("cpu", StringComparison.Ordinal) => "GPU + CPU",
         var backend when backend.StartsWith("wgpu:", StringComparison.Ordinal) => "GPU",
@@ -837,6 +860,7 @@ public partial class MainWindowViewModel
     {
         "OrtDirectMl" => "DirectML",
         "OrtWebGpu" => "WebGPU",
+        "OrtCpu" => "CPU inference",
         _ => kind,
     };
 
@@ -857,7 +881,7 @@ public partial class MainWindowViewModel
         {
             var brand = Str(cpu, "brand");
             var simd = Str(cpu, "simd");
-            var cpuBusy = detect is "cpu" or "" || plane is "cpu" or "" || apply is "cpu" or "" || apply.EndsWith("+cpu", StringComparison.Ordinal);
+            var cpuBusy = _usedDetect == "cpu" || _usedPlane == "cpu" || _usedApply == "cpu" || _usedApply.EndsWith("+cpu", StringComparison.Ordinal);
             rows.Add(new AccelRow
             {
                 Name = string.IsNullOrWhiteSpace(brand) ? "CPU" : brand,

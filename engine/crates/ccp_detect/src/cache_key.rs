@@ -21,13 +21,15 @@ pub fn model_cache_identity(path: &Path) -> String {
 
 pub fn runtime_cache_identity() -> String {
     format!(
-        "{}:{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}:{}:{}",
         crate::runtime_policy().as_str(),
         serde_json::to_string(&crate::runtime_assignment()).unwrap_or_default(),
         std::env::var("ORT_DYLIB_PATH").unwrap_or_default(),
         std::env::var("CCP_ORT_DEVICE_ID").unwrap_or_default(),
         std::env::var("CCP_WEBGPU_LIBRARY").unwrap_or_default(),
-        std::env::var("CCP_WGPU_INFERENCE_ADAPTER").unwrap_or_default()
+        std::env::var("CCP_WGPU_INFERENCE_ADAPTER").unwrap_or_default(),
+        { #[cfg(feature="ort-plane")] {crate::gpu_inference::component_policy_identity()}
+          #[cfg(not(feature="ort-plane"))] {String::new()} }
     )
 }
 

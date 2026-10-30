@@ -1,4 +1,4 @@
-//! Opt2 chart detect via ONNX Runtime (DirectML / WebGPU EP, CPU fallback disabled).
+//! Opt2 chart detection with explicit inference providers and bounded Auto recovery.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -13,17 +13,20 @@ use crate::handshake::{make_handshake, warmup_json};
 use crate::paths::{default_deploy_dir, primary_onnx_path, recall_onnx_path};
 use crate::{DetectResult, DetectSettings};
 
-use crate::gpu_inference::{provider_order as detect_ep_order, commit_inference_session as commit_detect_session, InferenceSession};
+use crate::gpu_inference::{CachedInference, ExecutionRecord, InferenceSession};
 
-struct CachedDetect {
-    model_identity: String,
-    policy: String,
-    ep: String,
-    session: InferenceSession,
+static DETECT_PRIMARY: Mutex<Option<CachedInference>> = Mutex::new(None);
+static DETECT_RECALL: Mutex<Option<CachedInference>> = Mutex::new(None);
+
+pub fn inference_records(include_recall: bool) -> serde_json::Value {
+    let detect=last_record(false);
+    let recall=if include_recall {last_record(true)} else {None};
+    serde_json::json!({"detect":detect,"recall":recall})
 }
-
-static DETECT_PRIMARY: Mutex<Option<CachedDetect>> = Mutex::new(None);
-static DETECT_RECALL: Mutex<Option<CachedDetect>> = Mutex::new(None);
+fn last_record(recall: bool) -> Option<ExecutionRecord> {
+    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
+    cache.lock().ok().and_then(|c|c.as_ref().map(|active|active.record.clone()))
+}
 
 pub(crate) fn clear_sessions() {
     if let Ok(mut cache) = DETECT_PRIMARY.lock() { *cache = None; }
@@ -43,51 +46,15 @@ fn last_detect_ep_for(recall: bool) -> Option<String> {
     cache
         .lock()
         .ok()
-        .and_then(|g| g.as_ref().map(|c| c.ep.clone()))
+        .and_then(|g| g.as_ref().map(|c| c.record.backend.clone()))
 }
 
 fn with_detect_session<F, T>(model_path: &Path, recall: bool, f: F) -> Result<T, String>
-where
-    F: FnOnce(&mut InferenceSession, &str) -> Result<T, String>,
+where F: FnMut(&mut InferenceSession, &str) -> Result<T, String>,
 {
-    let policy = crate::cache_key::runtime_cache_identity();
-    let model_identity = crate::cache_key::model_cache_identity(model_path);
-    let lock = if recall {
-        DETECT_RECALL.lock().map_err(|e| e.to_string())?
-    } else {
-        DETECT_PRIMARY.lock().map_err(|e| e.to_string())?
-    };
-    let mut guard = lock;
-    let reuse = guard
-        .as_ref()
-        .is_some_and(|c| c.model_identity == model_identity && c.policy == policy);
-    if !reuse {
-        let mut last_err = "no detect execution provider".to_string();
-        let mut built: Option<CachedDetect> = None;
-        for ep in detect_ep_order() {
-            match commit_detect_session(model_path, ep) {
-                Ok(session) => {
-                    eprintln!("ccp_detect: detect ONNX on {}", ep.key());
-                    built = Some(CachedDetect {
-                        model_identity: model_identity.clone(),
-                        policy: policy.clone(),
-                        ep: session.backend(ep),
-                        session,
-                    });
-                    break;
-                }
-                Err(err) => {
-                    eprintln!("ccp_detect: detect {} unavailable: {err}", ep.key());
-                    last_err.push_str(&format!("; {}: {err}", ep.key()));
-                }
-            }
-        }
-        *guard = Some(built.ok_or(last_err)?);
-    }
-    let cached = guard
-        .as_mut()
-        .ok_or_else(|| "detect session missing".to_string())?;
-    f(&mut cached.session, &cached.ep)
+    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
+    let mut guard=cache.lock().map_err(|e|e.to_string())?;
+    crate::gpu_inference::execute(&mut guard,model_path,f)
 }
 
 fn letterbox_to_nchw(canvas: &[u8], imgsz: i32) -> Vec<f32> {
@@ -120,7 +87,7 @@ fn run_detect_forward(
     let lb = letterbox_rgb(rgb, width, height, imgsz);
     let chw = letterbox_to_nchw(&lb.canvas, imgsz);
     with_detect_session(model_path, recall, |session, _ep| {
-        let (dims, data) = session.forward(chw, imgsz as usize)?;
+        let (dims, data) = session.forward(chw.clone(), imgsz as usize)?;
         validate_output(&dims, &data)?;
         let rows = preds_to_obb_rows(&data, &dims.iter().map(|&d| d as usize).collect::<Vec<_>>());
         let raw = decode_obb(&rows, conf, iou, max_det.max(1) as usize);
@@ -178,7 +145,7 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
     let imgsz = PRIMARY_SIZE;
     let chw = vec![0.0f32; (3 * imgsz * imgsz) as usize];
     match with_detect_session(&primary, false, |session, ep| {
-            let (dims,data)=session.forward(chw,imgsz as usize)?;
+            let (dims,data)=session.forward(chw.clone(),imgsz as usize)?;
             validate_output(&dims,&data)?;
             Ok(ep.to_string())
         }) {
@@ -187,6 +154,7 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
                 result.device = ep;
                 if result.device.contains(":wgpu:") { result.runtime="burn-wgpu".into(); }
                 result.json = warmup_json(&result.device);
+                result.inference = inference_records(false);
                 result
             }
             Err(err) if is_oom(&err) => {
@@ -286,12 +254,11 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
                     result.recall_source = "recall_1536".into();
                     charts = assemble_charts(&dets, &settings.prefer, crop, width, height);
                 }
-                Err(err) => {
-                    eprintln!("ccp_detect: recall ONNX failed: {err}");
-                }
+                Err(err) => return failed_recall(result,err),
             }
         }
     }
+    result.inference = inference_records(result.recall_source == "recall_1536");
     result.n_dets = dets.len() as i32;
     if charts.is_empty() {
         result.error = "no lattice".into();
@@ -305,9 +272,35 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     result.cli_chart = cli_chart_from_detector(&charts[0].chart_type).to_string();
     result.quad = format_quad(charts[0].corners);
     result.charts = charts.clone();
+    result.inference = inference_records(result.recall_source == "recall_1536");
     match make_handshake(&result, &charts, crop, image_path) {
         Ok(json) => result.json = json,
         Err(err) => result.error = err.to_string(),
     }
     result
+}
+
+/// Recall only runs after primary produced no usable chart. An unavailable
+/// recall engine is not evidence that the photograph contains no chart.
+fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
+    result.ok=false;
+    result.error=format!("Recall chart detection failed: {reason}. Check setup, choose Auto or CPU, and retry detection.");
+    result.recall_source="failed".into();
+    result.inference=inference_records(false);
+    result.inference["recall_error"]=serde_json::json!(reason);
+    result
+}
+
+#[cfg(test)]
+mod recall_failure_tests {
+    #[test]
+    fn failed_recall_is_not_reported_as_a_no_chart_result() {
+        let result=super::failed_recall(crate::DetectResult::default(),"CPU execution failed after GPU was unavailable".into());
+        assert!(!result.ok);
+        assert!(result.error.contains("Recall chart detection failed"));
+        assert!(result.error.contains("CPU execution failed"));
+        assert_ne!(result.error,"no lattice");
+        assert_eq!(result.recall_source,"failed");
+        assert_eq!(result.inference["recall_error"],"CPU execution failed after GPU was unavailable");
+    }
 }

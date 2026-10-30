@@ -10,6 +10,104 @@ namespace ColorCorrect.App.Headless.Tests;
 public sealed class PortableComputeTests
 {
     [AvaloniaFact]
+    public void CpuInferenceSelectionDoesNotForceCpuCorrectionAndBatchReasonsAreVisible()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        vm.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
+        Assert.False(vm.ForceCpu);
+        Assert.Contains("CPU", vm.DetectionStatus);
+        Assert.Contains("not checked", vm.DetectionStatus);
+        Assert.Contains("Load or fit a model", vm.BatchApplyHint);
+        vm.RememberJobAccel(null, null, "cpu");
+        Assert.Equal("Detection: CPU", vm.DetectionStatus);
+    }
+
+    [AvaloniaFact]
+    public void SetupChecksUseSelectedModeAndCustomComponents()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        var configure = typeof(MainWindowViewModel).GetMethod("AddSetupSelection", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        var cpu = new System.Diagnostics.ProcessStartInfo();
+        configure.Invoke(vm, [cpu]);
+        Assert.Equal(OperatingSystem.IsWindows() ? new[] { "-Mode", "cpu" } : new[] { "--mode", "cpu" }, cpu.ArgumentList);
+        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
+        vm.SetupWebGpu = true; vm.SetupDirectMl = false;
+        var custom = new System.Diagnostics.ProcessStartInfo();
+        configure.Invoke(vm, [custom]);
+        Assert.Equal(OperatingSystem.IsWindows() ? new[] { "-Mode", "custom", "-Components", "webgpu" }
+            : new[] { "--mode", "custom", "--components", "webgpu" }, custom.ArgumentList);
+    }
+
+    [AvaloniaFact]
+    public void DetectionFailureKeysChangeWithContentCropAndBackend()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        var file = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".jpg");
+        try
+        {
+            File.WriteAllText(file, "aaaa");
+            // This key test replaces file bytes; keep thumbnail decoding on a
+            // separate missing path so its background read cannot lock the fixture.
+            using var item = new SessionItemViewModel(file + ".missing");
+            typeof(SessionItemViewModel).GetProperty(nameof(SessionItemViewModel.Path))!.SetValue(item, file);
+            var key = typeof(MainWindowViewModel).GetMethod("DetectionFailureKey", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var first = key.Invoke(vm, [item]);
+            var stamp = File.GetLastWriteTimeUtc(file);
+            File.WriteAllText(file, "bbbb"); File.SetLastWriteTimeUtc(file, stamp);
+            var replaced = key.Invoke(vm, [item]);
+            Assert.NotEqual(first, replaced);
+            vm.Crop = .5;
+            var cropped = key.Invoke(vm, [item]);
+            Assert.NotEqual(replaced, cropped);
+            vm.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
+            Assert.NotEqual(cropped, key.Invoke(vm, [item]));
+        }
+        finally { File.Delete(file); }
+    }
+
+    [Fact]
+    public void SetupSummaryKeepsFailureAndUncheckedReasons()
+    {
+        using var report = JsonDocument.Parse("""{"inventory_status":"not_checked","probes":[{"policy":"cpu-inference","status":"verified"},{"policy":"webgpu","status":"failed","reason":"Driver unavailable"}]}""");
+        var text = MainWindowViewModel.FormatSetupReport(report.RootElement);
+        Assert.Contains("not_checked", text);
+        Assert.Contains("CPU inference: verified", text);
+        Assert.Contains("Driver unavailable", text);
+    }
+
+    [Fact]
+    public void SetupSummaryDistinguishesInferenceSuccessFromCorrectionRecovery()
+    {
+        using var report = JsonDocument.Parse("""{"probes":[{"policy":"webgpu","status":"verified","result":{"inference":{"warmed":true},"correction":{"status":"verified","backend":"cpu","fallback":"Adapter initialization failed"}}},{"policy":"cpu-inference","status":"verified","output":"{\"inference\":{\"warmed\":true},\"correction\":{\"status\":\"verified\",\"backend\":\"cpu\",\"fallback\":null}}\n{\"ok\":true}"}]}""");
+        var text = MainWindowViewModel.FormatSetupReport(report.RootElement);
+        Assert.Contains("WebGPU inference: verified", text);
+        Assert.Contains("Correction: CPU · verified · CPU recovery: Adapter initialization failed", text);
+        Assert.Contains("CPU inference: verified", text);
+    }
+
+    [Fact]
+    public void SetupSummaryDoesNotPromoteAFailedProbeFromAWarmSession()
+    {
+        using var report = JsonDocument.Parse("""{"probes":[{"policy":"cpu-inference","status":"failed","exit_code":3,"reason":"Worker exited with code 3.","result":{"inference":{"warmed":true},"correction":{"status":"verified","backend":"cpu"}}}]}""");
+        var text = MainWindowViewModel.FormatSetupReport(report.RootElement);
+        Assert.Contains("CPU inference: failed", text);
+        Assert.Contains("Worker exited with code 3", text);
+        Assert.Contains("Correction: CPU · not verified", text);
+        Assert.DoesNotContain("CPU inference: verified", text);
+    }
+
+    [Fact]
+    public void SetupSummaryIncludesInferenceFailureInsideLinuxProbeOutput()
+    {
+        using var report = JsonDocument.Parse("""{"probes":[{"policy":"webgpu","status":"failed","output":"{\"inference\":{\"warmed\":false,\"error\":\"Vulkan driver unavailable. Use CPU or check GPU setup.\"},\"correction\":{\"status\":\"verified\",\"backend\":\"cpu\"}}\n{\"ok\":true}"}]}""");
+        var text = MainWindowViewModel.FormatSetupReport(report.RootElement);
+        Assert.Contains("WebGPU inference: failed", text);
+        Assert.Contains("Vulkan driver unavailable. Use CPU or check GPU setup.", text);
+        Assert.DoesNotContain("WebGPU inference: verified", text);
+    }
+
+    [AvaloniaFact]
     public void PreviewOnlyOutcomeDoesNotClaimASavedFileAndRetainsCpuRecovery()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
@@ -51,8 +149,8 @@ public sealed class PortableComputeTests
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         Assert.True(vm.FastMode);
         Assert.True(new CorrectionOptions().FastMode);
-        Assert.Equal(OperatingSystem.IsWindows() ? new[] { "Automatic (recommended)", "WebGPU", "DirectML", "Vulkan" }
-            : new[] { "Automatic (recommended)", "WebGPU", "Vulkan" }, vm.AccelPolicies.Select(x => x.Label));
+        Assert.Equal(OperatingSystem.IsWindows() ? new[] { "Auto (recommended)", "CPU", "WebGPU", "DirectML", "Vulkan" }
+            : new[] { "Auto (recommended)", "CPU", "WebGPU", "Vulkan" }, vm.AccelPolicies.Select(x => x.Label));
         var build = typeof(MainWindowViewModel).GetMethod("BuildOptions", BindingFlags.Instance | BindingFlags.NonPublic)!;
         for (var cycle = 0; cycle < 100; cycle++)
         {

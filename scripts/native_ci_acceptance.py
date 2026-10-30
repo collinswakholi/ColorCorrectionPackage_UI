@@ -19,13 +19,15 @@ from fetch_gpu_runtime import fetch, fetch_vc_redist
 from package_support import native_version, source_identity
 
 
-def rust_component_test_command(root: Path, rid: str) -> list:
+def rust_component_test_command(root: Path, rid: str, target_directory: Path | None = None) -> list:
     """Test every shipping crate; the Rust inference fallback ships only on Linux."""
     system = TARGETS[rid][0]
     packages = ["ccp_core", "ccp_detect", "ccp_bridge"]
     if system == "Linux":
         packages.append("ccp_wgpu_infer")
     command = ["cargo", "test", "--release", "--locked", "--manifest-path", root / "engine/Cargo.toml"]
+    if target_directory is not None:
+        command += ["--target-dir", target_directory]
     for package in packages:
         command += ["-p", package]
     # Match the worker features explicitly without selecting target-inactive
@@ -33,6 +35,16 @@ def rust_component_test_command(root: Path, rid: str) -> list:
     command += ["--no-default-features", "--features",
                 "ccp_bridge/ort-plane,ccp_bridge/wgpu-lut,ccp_bridge/rust-inference"]
     return command
+
+
+def rust_build_outputs(work: Path, rid: str) -> dict[str, Path]:
+    """Paths shared by Cargo invocation, packaging and component examples."""
+    target = work / ("source-build/.build/rust-target" if rid == "osx-arm64" else "rust-target")
+    if os.path.lexists(target):
+        raise RuntimeError(f"Refusing pre-existing Rust build directory: {target}. Choose a new --output directory.")
+    suffix = ".exe" if TARGETS[rid][0] == "Windows" else ""
+    return {"target": target, "worker": target / f"release/ccp-engine{suffix}",
+            "example": target / f"release/examples/wgpu_lut_check{suffix}"}
 
 
 def emitted_package_versions(package: Path, payload: Path, rid: str, version: str) -> dict:
@@ -134,6 +146,10 @@ def main():
             if hashlib.sha256((fixtures / name).read_bytes()).hexdigest() != expected:
                 raise RuntimeError("Fixture checksum mismatch: " + name)
         exe = ".exe" if os.name == "nt" else ""
+        # A fresh per-run location prevents ambient CARGO_TARGET_DIR or an old,
+        # protected workspace executable from supplying a stale worker.
+        rust_outputs = rust_build_outputs(work, args.rid)
+        rust_target = rust_outputs["target"]
         if args.rid == "osx-arm64":
             run(["bash", root / "scripts/build_macos.sh", work / "source-build"])
             payload = work / "source-build"
@@ -142,11 +158,11 @@ def main():
         else:
             runtime = work / "runtime"
             report["runtime"] = fetch(args.rid, runtime, work / "download-cache")
-            run(["cargo", "build", "--locked", "--manifest-path", root / "engine/Cargo.toml", "--release", "-j", "2",
+            run(["cargo", "build", "--locked", "--manifest-path", root / "engine/Cargo.toml", "--target-dir", rust_target, "--release", "-j", "2",
                  "-p", "ccp_bridge", "-p", "ccp_detect", "--no-default-features", "--features", "ort-plane,wgpu-lut,rust-inference",
                  "--bin", "ccp-engine", "--example", "wgpu_lut_check"])
             command = [sys.executable, root / "scripts/package_native.py", "--rid", args.rid,
-                "--worker", root / f"engine/target/release/ccp-engine{exe}", "--ort-runtime", runtime,
+                "--worker", rust_outputs["worker"], "--ort-runtime", runtime,
                 "--output", work / "package", "--fetch-notices"]
             if os.name == "nt":
                 command += ["--vc-redist", fetch_vc_redist(args.rid, work / "prerequisites")]
@@ -183,11 +199,21 @@ def main():
                     installer = next((work / "package").glob("*.deb"))
                     run(["sudo", "apt-get", "install", "-y", installer])
                     installed = Path("/opt/colorcorrect-studio")
+                components = json.loads((installed / "setup-components.json").read_text(encoding="utf-8"))
+                optional_paths = {item["path"] for component in components["components"]
+                                  if not component["required"] for item in component["files"]}
+                required_paths = {item["path"] for component in components["components"]
+                                  if component["required"] for item in component["files"]}
+                optional_paths -= required_paths
+                omitted = []
                 for name, expected in manifest["sha256"].items():
+                    if name in optional_paths and not (installed / name).exists():
+                        omitted.append(name)
+                        continue
                     if hashlib.sha256((installed / name).read_bytes()).hexdigest() != expected:
                         raise RuntimeError("Installed package checksum mismatch: " + name)
                 payload = installed
-                report["native_installation"] = "installer completed; installed file hashes verified"
+                report["native_installation"] = {"status": "installed file hashes verified", "omitted_optional_files": omitted}
             else:
                 report["native_installation"] = "pending; only portable archive extraction requested"
             app = payload / f"app/ColorCorrect.App{exe}"
@@ -195,7 +221,8 @@ def main():
         # Component tests are distinct from interactive UI/hardware acceptance.
         report["component_tests"] = {}
         component_failures = []
-        rust_tests = rust_component_test_command(root, args.rid)
+        report["rust_target_directory"] = str(rust_target)
+        rust_tests = rust_component_test_command(root, args.rid, rust_target)
         report["rust_component_packages"] = [rust_tests[index + 1] for index, value in enumerate(rust_tests) if value == "-p"]
         component_commands = {
             "rust_workspace": rust_tests,
@@ -236,13 +263,21 @@ def main():
             # A deliberately nonexistent adapter proves the production LUT path
             # can recover to CPU on ordinary runners without advertising GPU use.
             fallback_environment = dict(env, CCP_LUT_ADAPTER="__ccp_intentionally_missing_adapter__")
-            run([root / f"engine/target/release/examples/wgpu_lut_check{exe}", "1048833", "65", "1"],
+            run([rust_outputs["example"], "1048833", "65", "1"],
                 cwd=work, env=fallback_environment)
         # The smoke script is copied outside the source tree and imports only the installed SDK.
         smoke = work / "acceptance_bootstrap.py"
         shutil.copy2(root / "scripts/acceptance_bootstrap.py", smoke)
         run([python, "-I", smoke, "--package", payload, "--fixtures", fixtures, "--output", evidence / "sdk-smoke"], cwd=work, env=env)
         report["installed_sdk_smoke"] = "passed" if args.rid != "osx-arm64" else "installed SDK against local source build passed"
+        # Full CPU workflows run on every native architecture, independently of
+        # whether hosted graphics happen to be available. Auto must also work.
+        cpu_workflow = work / "acceptance_cpu_workflow.py"
+        shutil.copy2(root / "scripts/acceptance_cpu_workflow.py", cpu_workflow)
+        for policy in ("cpu-inference", "auto"):
+            run([python, "-I", cpu_workflow, "--package", payload, "--fixtures", fixtures,
+                 "--output", evidence / ("sdk-full-" + policy), "--backend", policy], cwd=work, env=env)
+        report["installed_full_workflows"] = "explicit CPU inference and Auto completed detection/FFC/fit/apply/batch/reload"
         if args.mode == "hardware":
             test = work / "acceptance_installed.py"
             shutil.copy2(root / "api/tests/acceptance_installed.py", test)

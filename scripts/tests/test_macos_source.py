@@ -60,6 +60,22 @@ class MacSourceTests(unittest.TestCase):
             (root / "engine/target/release/ccp-engine").write_bytes(b"later build")
             self.assertEqual((output / "ccp-engine").read_bytes(), fixtures.executable("Darwin", "arm64"))
 
+    def test_explicit_fresh_worker_avoids_stale_workspace_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            output = self.inputs(root)
+            old = root / "engine/target/release/ccp-engine"
+            old.write_bytes(fixtures.executable("Darwin", "x64"))
+            fresh = output / ".build/rust-target/release/ccp-engine"
+            fresh.parent.mkdir(parents=True)
+            fresh.write_bytes(fixtures.executable("Darwin", "arm64"))
+            stage(root, output, fresh)
+            self.assertEqual((output / "ccp-engine").read_bytes(), fresh.read_bytes())
+            self.assertEqual(old.read_bytes(), fixtures.executable("Darwin", "x64"))
+            fresh.unlink()
+            with self.assertRaises(FileNotFoundError):
+                stage(root, output, fresh)  # Never recover by copying the stale worker.
+
     def test_corrupt_runtime_is_rejected_before_staging_worker(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

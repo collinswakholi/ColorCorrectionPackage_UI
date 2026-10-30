@@ -39,15 +39,20 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Types]
-Name: "standard"; Description: "Desktop application"
+Name: "recommended"; Description: "Recommended - CPU and detected GPU support"
+Name: "cpu"; Description: "CPU only"
 Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Components]
-Name: "app"; Description: "ColorCorrect Studio and required application libraries"; Types: standard custom; Flags: fixed
-Name: "python"; Description: "Optional Python API wheel and examples (Python installed separately)"; Types: custom
+Name: "app"; Description: "ColorCorrect Studio and required application libraries"; Types: recommended cpu custom; Flags: fixed
+Name: "directml"; Description: "DirectML acceleration (shared libraries are always retained)"; Types: recommended custom
+Name: "webgpu"; Description: "Optional WebGPU acceleration"; Types: recommended custom; Check: WantsWebGpu
+Name: "python"; Description: "Optional Python API wheel and examples (Python installed separately)"; Types: recommended cpu custom
 
 [Files]
-Source: "{#Dist}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "python\*,*.pdb"; Components: app
+Source: "{#Dist}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "python\*,optional-payloads\*,*.pdb,onnxruntime_providers_webgpu.dll"; Components: app
+Source: "{#Dist}\optional-payloads\webgpu\*"; DestDir: "{app}\optional-payloads\webgpu"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: app
+Source: "{#Dist}\onnxruntime_providers_webgpu.dll"; DestDir: "{app}"; Flags: ignoreversion; Components: webgpu
 Source: "{#Dist}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs; Components: python
 
 [Icons]
@@ -63,6 +68,38 @@ Filename: "{app}\ColorCorrect-Studio.cmd"; Description: "Launch ColorCorrect Stu
 
 [Code]
 var RuntimeRestart: Boolean;
+
+function WantsWebGpu: Boolean;
+var Locator, Service, Adapters: Variant;
+begin
+  Result := True; { Unknown inventory keeps the optional route available. }
+  if WizardSetupType(False) = 'custom' then exit;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Service := Locator.ConnectServer('', 'root\CIMV2');
+    Adapters := Service.ExecQuery('SELECT Name FROM Win32_VideoController WHERE ConfigManagerErrorCode = 0 AND PNPDeviceID LIKE ''PCI%''');
+    Result := Adapters.Count > 0;
+  except
+    Log('Graphics inventory unavailable; install support and verify afterward.');
+  end;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := MemoDirInfo + NewLine + NewLine + MemoTypeInfo + NewLine + MemoComponentsInfo + NewLine + NewLine + MemoTasksInfo + NewLine + NewLine +
+    'CPU inference and correction are always available. Selected GPU support uses bundled libraries. Missing Microsoft runtime installation requests administrator access. Graphics drivers are not changed. Setup verifies selected engines after copying files.';
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpSelectComponents then begin
+    if WantsWebGpu then
+      WizardForm.ComponentsDiskSpaceLabel.Caption := 'A graphics device is present. GPU execution is checked after installation; CPU support is always installed.'
+    else
+      WizardForm.ComponentsDiskSpaceLabel.Caption := 'No physical PCI graphics device was observed. CPU operation is available; virtual devices require a later execution check.';
+  end;
+end;
+
 
 function VersionAtLeast(Installed, Required: String): Boolean;
 var I, A, B, P: Integer; Part: String;
@@ -98,8 +135,9 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var Code: Integer; Redist: String;
+var Code: Integer; Redist, Mode, Components, Args: String;
 begin
+  if CurStep = ssPostInstall then Log('Selected components: ' + WizardSelectedComponents(False));
   if (CurStep = ssPostInstall) and NeedsVCRuntime then begin
     if WizardIsTaskSelected('installvcruntime') and not WizardSilent then begin
       Redist := ExpandConstant('{app}\prerequisites\vc_redist.exe');
@@ -115,6 +153,23 @@ begin
     end;
     if NeedsVCRuntime and not WizardSilent then
       MsgBox('The application files are installed, but the Microsoft runtime prerequisite is incomplete. Run check-system.ps1 -InstallPrerequisites before starting the app. No GPU drivers were changed.', mbInformation, MB_OK);
+  end;
+  if (CurStep = ssPostInstall) and HasVCRuntime then begin
+    Mode := 'recommended'; Components := '';
+    if WizardSetupType(False) = 'cpu' then Mode := 'cpu'
+    else if WizardSetupType(False) = 'custom' then begin
+      Mode := 'custom';
+      if WizardIsComponentSelected('webgpu') then Components := 'webgpu';
+      if WizardIsComponentSelected('directml') then begin
+        if Components <> '' then Components := Components + ',';
+        Components := Components + 'directml';
+      end;
+      if Components <> '' then Components := ' -Components ' + Components;
+    end;
+    Args := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup.ps1') + '" -Mode ' + Mode + Components + ' -Install -Verify -NonInteractive';
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Args,
+      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+      Log('Setup preferences could not be saved. Use Check setup in the application to repair.');
   end;
 end;
 

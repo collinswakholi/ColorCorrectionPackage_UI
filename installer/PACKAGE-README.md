@@ -6,7 +6,7 @@ the desktop application needs no Python, Rust or separate .NET installation.
 
 ## Graphics and platforms
 
-Chart and plane detection need a compatible GPU and driver. CPU correction can
+Chart and plane detection use Auto GPU acceleration with CPU inference recovery. CPU correction can
 apply a saved model when GPU inference is unavailable. No installer replaces
 system graphics drivers.
 

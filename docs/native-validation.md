@@ -16,7 +16,7 @@ Windows/Linux x64 and ARM64 are packaging targets. Apple-silicon macOS has sourc
 | GitHub Actions Windows/Linux x64/ARM64 | Native architecture builds, package/install checks, unit/headless tests; usable hardware GPU coverage is separate |
 | Apple-silicon macOS CI | Source build/tests only; no installer/archive or support certification |
 
-Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available; inference must never silently switch to CPU.
+Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available. The current local implementation also adds visible, recorded CPU inference recovery under Auto; forced GPU inference still fails clearly. Historical results below retain their original policies.
 
 ## Public 0.2.0 download qualification
 

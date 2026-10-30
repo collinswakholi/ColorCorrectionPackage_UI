@@ -8,8 +8,17 @@ Alternatively, extract the portable archive and run ./check-system, then
 ./install-dependencies --install explicitly requests apt installation on Ubuntu
 24.04. No command downloads or changes a GPU driver automatically.
 
-Detection requires a working hardware GPU/Vulkan driver. CPU fallback applies to
-image correction. Native Wayland is not certified; this version uses X11/XWayland.
+Auto uses compatible GPU inference, otherwise explicit CPU inference. CPU
+correction remains available. Inspect device inventory and actual engine results:
+./setup --diagnose --verify
+./setup --mode cpu --install
+./setup --mode custom --components webgpu --install
+The command previews changes and asks for confirmation before using apt. It is
+never run from a .deb maintainer script. Required libraries remain installed even
+in CPU mode. Private runtime payloads are bundled; no driver is installed.
+Automatic dependency installation is currently Ubuntu 24.04 only. Debian 13
+installation/dependency validation remains pending; no broader support is implied.
+ Native Wayland is not certified; this version uses X11/XWayland.
 
 WSL GPU support is an optional experimental x64 add-on. If included, enable it
 with ./wsl-gpu-setup enable and restart the app/client. Disable it with

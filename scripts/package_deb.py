@@ -27,7 +27,7 @@ def build_deb(payload: Path, output: Path, version: str, rid: str) -> Path:
         f"Depends: {', '.join(depends)}\n"
         "Description: Chart-based still-image color correction\n"
         " Self-contained desktop application and native processing worker.\n"
-        " Detection requires a compatible hardware GPU driver.\n", encoding="utf-8")
+        " CPU inference is included; compatible GPU acceleration is optional.\n", encoding="utf-8")
     applications = staging / "usr/share/applications"
     applications.mkdir(parents=True)
     (applications / "colorcorrect-studio.desktop").write_text(

@@ -67,9 +67,14 @@ their transforms automatically; there are no manual gamma or white-temperature
 parameters. Notebook 2 shows polynomial degree, PLS components, and CC neural
 settings. FFC neural settings are separate.
 
-Chart and automatic white-plane detection need a supported GPU/driver.
-`backend="cpu"` selects CPU image correction, not CPU chart inference. Standard
-WSL packages do not supply the experimental Dozen add-on: follow the
+With the current source engine, Auto chart and white-plane detection try an
+eligible GPU and recover to CPU when needed. `backend="cpu-inference"` selects
+CPU detection explicitly and requires the `cpu_inference_v1` worker capability.
+The legacy `backend="cpu"` selects CPU image correction while detection follows
+Auto. Published 0.2.1 packages still require GPU inference; a newer Python wheel
+does not replace their native engine.
+
+Standard WSL packages do not supply the experimental Dozen GPU add-on: follow the
 [WSL installation notes](../installer/README.md#experimental-wsl-gpu-setup) and
 identify any add-on variant when reporting results.
 

@@ -72,7 +72,7 @@ pub fn parse_crop_rect(s: &str) -> Option<Rect> {
     }
     let nums: Result<Vec<i32>, _> = parts.iter().map(|p| p.parse::<i32>()).collect();
     let nums = nums.ok()?;
-    Some(Rect::from_xyxy(nums[0], nums[1], nums[2], nums[3]))
+    Some(Rect {x:nums[0],y:nums[1],width:nums[2].checked_sub(nums[0])?,height:nums[3].checked_sub(nums[1])?})
 }
 
 /// Manual crop wins; else detected box; miss → full frame.
@@ -277,22 +277,22 @@ pub fn plane_box_from_output(data: &[f32], dims: &[i64], width: i32, height: i32
 }
 
 #[cfg(feature = "ort-plane")]
-use crate::gpu_inference::{provider_order as plane_ep_order, commit_inference_session as commit_plane_session, InferenceSession};
+use crate::gpu_inference::CachedInference;
 
 #[cfg(feature = "ort-plane")]
-struct CachedPlane {
-    model_identity: String,
-    policy: String,
-    ep: String,
-    session: InferenceSession,
-}
-
-#[cfg(feature = "ort-plane")]
-static PLANE_SESSION: std::sync::Mutex<Option<CachedPlane>> = std::sync::Mutex::new(None);
+static PLANE_SESSION: std::sync::Mutex<Option<CachedInference>> = std::sync::Mutex::new(None);
 
 #[cfg(feature = "ort-plane")]
 pub(crate) fn clear_session() {
     if let Ok(mut cache) = PLANE_SESSION.lock() { *cache = None; }
+}
+
+pub fn last_plane_inference() -> Option<serde_json::Value> {
+    #[cfg(feature="ort-plane")]
+    if last_plane_ep().is_some() {
+        return PLANE_SESSION.lock().ok().and_then(|cache|cache.as_ref().and_then(|c|serde_json::to_value(&c.record).ok()));
+    }
+    None
 }
 
 static PLANE_EXECUTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
@@ -307,43 +307,6 @@ pub fn last_plane_ep() -> Option<String> {
 }
 
 #[cfg(feature = "ort-plane")]
-fn plane_session_mut(
-    model_path: &std::path::Path,
-) -> Result<std::sync::MutexGuard<'static, Option<CachedPlane>>, PlaneError> {
-    let policy = crate::cache_key::runtime_cache_identity();
-    let model_identity = crate::cache_key::model_cache_identity(model_path);
-    let mut guard = PLANE_SESSION
-        .lock()
-        .map_err(|e| PlaneError::Message(e.to_string()))?;
-    let reuse = guard
-        .as_ref()
-        .is_some_and(|c| c.model_identity == model_identity && c.policy == policy);
-    if reuse {
-        return Ok(guard);
-    }
-    let mut last_err = "no plane execution provider".to_string();
-    for ep in plane_ep_order() {
-        match commit_plane_session(model_path, ep) {
-            Ok(session) => {
-                eprintln!("ccp_detect: plane ONNX on {}", ep.key());
-                *guard = Some(CachedPlane {
-                    model_identity: model_identity.clone(),
-                    policy,
-                    ep: session.backend(ep),
-                    session,
-                });
-                return Ok(guard);
-            }
-            Err(err) => {
-                eprintln!("ccp_detect: plane {} unavailable: {err}", ep.key());
-                last_err.push_str(&format!("; {}: {err}", ep.key()));
-            }
-        }
-    }
-    Err(PlaneError::Message(last_err))
-}
-
-#[cfg(feature = "ort-plane")]
 fn detect_plane_ort(
     rgb: &[u8],
     width: u32,
@@ -351,13 +314,13 @@ fn detect_plane_ort(
     model_path: &std::path::Path,
 ) -> Result<Option<Rect>, PlaneError> {
     let chw = resize_rgb_to_nchw(rgb, width, height, PLANE_INPUT);
-    let mut guard = plane_session_mut(model_path)?;
-    let session = guard
-        .as_mut()
-        .ok_or_else(|| PlaneError::Message("plane session missing".into()))?;
-    let (dims,data)=session.session.forward(chw,PLANE_INPUT as usize).map_err(PlaneError::Message)?;
-    validate_output(&dims,&data)?;
-    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = Some(session.ep.clone()); }
+    let mut guard=PLANE_SESSION.lock().map_err(|e|PlaneError::Message(e.to_string()))?;
+    let (dims,data,backend)=crate::gpu_inference::execute(&mut guard,model_path,|session,backend| {
+        let (dims,data)=session.forward(chw.clone(),PLANE_INPUT as usize)?;
+        validate_output(&dims,&data).map_err(|e|e.to_string())?;
+        Ok((dims,data,backend.to_string()))
+    }).map_err(PlaneError::Message)?;
+    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = Some(backend); }
     Ok(plane_box_from_output(
         &data,
         &dims,
@@ -401,4 +364,14 @@ pub fn detect_plane_or_full(
         }
     }
     Rect::full(width as i32, height as i32)
+}
+
+#[cfg(test)]
+mod crop_validation_tests {
+    #[test]
+    fn extreme_manual_crop_does_not_overflow() {
+        assert!(super::parse_crop_rect("-2147483648,0,2147483647,1").is_none());
+        let crop=super::parse_crop_rect("2,3,12,13").unwrap();
+        assert_eq!((crop.x,crop.y,crop.width,crop.height),(2,3,10,10));
+    }
 }

@@ -9,10 +9,22 @@ may choose to install the included Microsoft prerequisite; only that action asks
 for elevation. A portable installation can run check-system.ps1 first and opt in
 with -InstallPrerequisites. Installation never silently downloads a GPU driver.
 
-Chart/plane detection requires a working hardware GPU and driver. CPU processing
-is available for applying a saved correction; it is not CPU chart detection.
-If detection is unavailable, use Windows Update or your GPU vendor's official
-driver support page. Vulkan is optional; Auto prefers DirectML on Windows.
+Setup offers Recommended, CPU only, and Custom installation. CPU inference and
+correction are always included. Auto prefers a verified GPU and recovers to CPU.
+CPU only skips the optional WebGPU plugin; DirectML.dll may remain because the
+shared ONNX Runtime build imports it even for CPU operation.
+
+Portable setup and repair (PowerShell from this folder):
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Diagnose -Verify
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Mode cpu -Install
+Use -Mode custom -Components webgpu,directml to select optional engines. The
+command previews changes and requests confirmation. Bundled runtimes work
+offline. No system graphics driver is installed or replaced. To add a component
+omitted during installation, rerun the matching installer using Custom or extract
+the full portable ZIP. Check setup in the app diagnoses changes to hardware.
+Silent setup accepts /TYPE=recommended, /TYPE=cpu, or /TYPE=custom and explicit
+/COMPONENTS=app,directml,webgpu,python. It never elevates VC installation silently.
+A restart requested by Microsoft must complete before reliable verification.
 
 Python API (optional, PowerShell from the installation folder):
 $wheel = (Get-ChildItem .\python\*.whl).FullName

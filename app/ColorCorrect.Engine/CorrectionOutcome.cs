@@ -15,5 +15,6 @@ public sealed class CorrectionOutcome
     public string FfcSkipped { get; init; } = "";
     public string ApplyBackend { get; init; } = "";
     public string PlaneBackend { get; init; } = "";
+    public string DetectBackend { get; init; } = "";
     public CorrectionReport? Report { get; init; }
 }

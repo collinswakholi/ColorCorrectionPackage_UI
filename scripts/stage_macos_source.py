@@ -13,13 +13,13 @@ from package_native import require_architecture
 from package_support import RUNTIMES, check_model_manifest, check_runtime_manifest
 
 
-def stage(root: Path, output: Path) -> None:
+def stage(root: Path, output: Path, worker: Path | None = None) -> None:
     root, output = root.resolve(strict=True), output.resolve(strict=True)
     if any(output.is_relative_to(root / resource) for resource in ("models", "refs")):
         raise ValueError("Local build output cannot be inside copied model/reference resources")
     check_runtime_manifest(output, "osx-arm64", "Darwin")
     check_model_manifest(root)
-    worker = root / "engine/target/release/ccp-engine"
+    worker = (worker or root / "engine/target/release/ccp-engine").resolve(strict=True)
     app = output / "app/ColorCorrect.App"
     require_architecture(worker, ("Darwin", "arm64"))
     require_architecture(app, ("Darwin", "arm64"))
@@ -49,5 +49,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--worker", type=Path, help="worker from the explicit source-build Cargo target directory")
     args = parser.parse_args()
-    stage(args.root, args.output)
+    stage(args.root, args.output, args.worker)

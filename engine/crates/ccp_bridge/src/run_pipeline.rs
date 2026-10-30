@@ -90,18 +90,15 @@ impl PreviewPngEncoders {
     }
 
     fn join(&self, path: &Path) {
-        let handle = self.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(path);
-        if let Some(handle) = handle {
-            let _ = handle.join();
-        }
+        let mut pending=self.pending.lock().unwrap_or_else(|e|e.into_inner());
+        if let Some(handle)=pending.remove(path) {let _=handle.join();}
+        // Keep registry ownership until completion. A concurrent flush/join must
+        // never interpret an already-drained but still-running encode as done.
     }
 
     fn flush(&self) {
-        let handles: Vec<_> = self.pending.lock().unwrap_or_else(|e| e.into_inner())
-            .drain().map(|(_, handle)| handle).collect();
-        for handle in handles {
-            let _ = handle.join();
-        }
+        let mut pending=self.pending.lock().unwrap_or_else(|e|e.into_inner());
+        for (_,handle) in pending.drain() {let _=handle.join();}
     }
 
     fn spawn(&self, rgb: Rgb8, path: PathBuf) {
@@ -237,7 +234,7 @@ fn apply_cc_accel(
 fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Result<()> {
     // LUT selection is independent of GPU inference. Keep the legacy CPU policy.
     let small_auto = AUTO_LUT_REQUEST.get() && auto_uses_cpu(img.len()/3);
-    if runtime_policy() != DevicePolicy::Cpu && !CPU_LUT_REQUEST.get() && !small_auto {
+    if runtime_policy() != DevicePolicy::Cpu && ccp_detect::probe::gpu_correction_enabled() && !CPU_LUT_REQUEST.get() && !small_auto {
         if img.as_slice_mut().is_none() {
             let dim = img.raw_dim();
             let owned: Vec<f32> = img.iter().copied().collect();
@@ -304,6 +301,8 @@ pub struct SavedPipeline {
     pub ffc_white_size: Option<[i32; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_context: Option<ResolvedReferenceContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<Value>,
 }
 
 impl Default for SavedPipeline {
@@ -329,6 +328,7 @@ impl Default for SavedPipeline {
             ffc_plane_source: None,
             ffc_white_size: None,
             reference_context: None,
+            inference: None,
         }
     }
 }
@@ -1428,7 +1428,7 @@ pub struct CachedFfc {
 
 impl CachedFfc {
     pub fn compute(white: &Path, crop: Option<&str>, params: &FfcFitParams) -> Result<Self> {
-        let white_img = load_image(white)?;
+        let white_img = load_image(white).map_err(|error|Error::Message(format!("Cannot load FFC white image {}: {error}. Provide a readable blank white-field image from the same capture setup.",white.display())))?;
         let (rect, source) = ffc_plane_info(&white_img, crop)?;
         let white_size = [white_img.width as i32, white_img.height as i32];
         let white_arr = rgb_image_into_array3(white_img)?;
@@ -1589,21 +1589,23 @@ pub fn write_corrected_image(work: &Array3<f32>, output: &Path, space: &RgbColor
 /// White-image crop used for FFC: manual rect, YOLO plane, or full frame.
 fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4], &'static str)> {
     if let Some(s) = crop_rect {
-        if let Some(r) = ccp_detect::plane::parse_crop_rect(s) {
-            if r.width > 0 && r.height > 0 {
-                return Ok(([r.x, r.y, r.width, r.height], "crop_rect"));
-            }
+        let r=ccp_detect::plane::parse_crop_rect(s).ok_or_else(||Error::Message("Invalid FFC crop: use x0,y0,x1,y1 coordinates.".into()))?;
+        if r.width<=0 || r.height<=0 || r.x<0 || r.y<0 || i64::from(r.x)+i64::from(r.width)>i64::from(white.width) || i64::from(r.y)+i64::from(r.height)>i64::from(white.height) {
+            return Err(Error::Message("FFC crop must have positive dimensions and lie inside the white image.".into()));
         }
+        return Ok(([r.x,r.y,r.width,r.height],"crop_rect"));
     }
     let rgb8: Vec<u8> = white
         .rgb
         .iter()
         .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
         .collect();
-    let plane = ccp_detect::paths::plane_onnx_path();
-    if let Some(path) = plane.as_deref() {
+    let plane = ccp_detect::paths::plane_onnx_path().ok_or_else(||Error::Message(
+        "White-plane detection model is missing. Repair the application setup or provide a manual FFC crop.".into()))?;
+    {
+        let path=plane.as_path();
         if let Some(r) = ccp_detect::plane::detect_plane(&rgb8, white.width, white.height, path)
-            .map_err(|e| Error::Message(e.to_string()))?
+            .map_err(|e| Error::Message(format!("White-plane detection failed: {e}. Check the detection engine or provide a manual FFC crop.")))?
         {
             if r.width > 0 && r.height > 0 {
                 return Ok(([r.x, r.y, r.width, r.height], "detected"));
@@ -1768,7 +1770,7 @@ pub fn run_from_json_ex(
                     ffc_applied = true;
                     ffc_elapsed = t.elapsed().as_secs_f64();
                 }
-                Err(error) => return Err(Error::Message(format!("FFC reference could not be loaded or fitted: {error}. Provide a readable blank white-field image from the same capture setup."))),
+                Err(error) => return Err(Error::Message(format!("FFC could not complete: {error}"))),
             }
         } else {
             progress("FFC skipped (white miss)");
@@ -1842,6 +1844,8 @@ pub fn run_from_json_ex(
         ffc_white_size,
         ffc_params: ffc_applied.then_some(ffc_params),
         reference_context: reference_context.clone(),
+        inference: Some(json!({"calibration":handshake.get("inference"),
+            "plane":ccp_detect::plane::last_plane_inference()})),
         ..SavedPipeline::default()
     };
     saved.kind = kind.name().into();
@@ -2013,6 +2017,10 @@ pub fn run_from_json_ex(
         },
     );
     report_json["apply_execution"] = json!(last_apply_execution());
+    report_json["inference"] = json!(saved.inference);
+    if saved.ffc_plane_source.as_deref()==Some("full") {
+        report_json["ffc_warning"]=json!("No white plane was found; the full white image was used.");
+    }
     report_json["fast_mode"] = json!(fast_mode);
     report_json["combined_render_secs"] = json!(combined_render_secs);
     report_json["fit_patch_count"] = json!(patches.len());
@@ -2098,7 +2106,8 @@ pub fn run_from_json_ex(
 }
 
 pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
-    let text = std::fs::read_to_string(path)?;
+    let path=path.as_ref();
+    let text = std::fs::read_to_string(path).map_err(|error|Error::Message(format!("Cannot load calibration model {}: {error}. Locate the saved model or fit a new calibration.",path.display())))?;
     let v: Value = serde_json::from_str(&text)?;
     if v.get("correction").is_some()
         || v.get("gc_coeffs").is_some()
@@ -2839,6 +2848,26 @@ mod tests {
         assert_eq!(std::fs::read(&blocker).unwrap(), b"preserve this file");
         assert_eq!(image::open(recovered).unwrap().to_rgb8().get_pixel(0, 0).0, [7, 8, 9]);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preview_join_waits_for_concurrent_shutdown_flush() {
+        let encoders=Arc::new(PreviewPngEncoders::default());
+        let path=PathBuf::from("blocked-preview-for-flush-test.png");
+        let (release,wait)=std::sync::mpsc::channel();
+        encoders.pending.lock().unwrap().insert(path.clone(),std::thread::spawn(move||{wait.recv().unwrap();}));
+        let flushing=Arc::clone(&encoders);
+        let flush=std::thread::spawn(move||flushing.flush());
+        let deadline=Instant::now()+std::time::Duration::from_secs(5);
+        while encoders.pending.try_lock().is_ok() {
+            assert!(Instant::now()<deadline);std::thread::yield_now();
+        }
+        let reading=Arc::clone(&encoders);
+        let (done,done_rx)=std::sync::mpsc::channel();
+        let reader=std::thread::spawn(move||{reading.join(&path);done.send(()).unwrap();});
+        assert!(done_rx.recv_timeout(std::time::Duration::from_millis(20)).is_err());
+        release.send(()).unwrap();flush.join().unwrap();reader.join().unwrap();
+        done_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
     }
 
     #[test]

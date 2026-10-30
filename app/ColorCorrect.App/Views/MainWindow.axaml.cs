@@ -50,6 +50,14 @@ public partial class MainWindow : Window
             {
                 vm.LogEntries.CollectionChanged -= OnLogChanged;
                 vm.LogEntries.CollectionChanged += OnLogChanged;
+                if (vm.ShowFirstRunSetup)
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        AccelMenu.PlacementTarget = TopBar;
+                        AdvancedAcceleration.IsExpanded = true;
+                        ProcessingDeviceDetails.IsExpanded = true;
+                        AccelMenu.IsOpen = true;
+                    }, DispatcherPriority.Loaded);
             }
 
             ApplyLayoutScale(ClientSize);

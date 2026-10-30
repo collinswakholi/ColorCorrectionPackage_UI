@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add explicit CPU chart and white-plane detection. Auto tries available GPU engines and falls back to CPU when GPU inference cannot complete.
+- Add Recommended, CPU-only and Custom setup choices, offline runtime repair and Check setup device diagnostics.
+- Report the backend and recovery used by each detection operation, including cached results and saved calibration provenance.
+- Improve detection retries, missing-dependency errors and disabled processing controls while preserving completed results after failure or cancellation.
+- Fix Python worker shutdown after normal completion, timeouts and interruption, and wait for native worker cleanup.
+- Isolate native build outputs so packaging cannot reuse a stale worker from another build.
+- Clarify source-build requirements, installation choices and the distinction between these changes and the published 0.2.1 packages.
+
 ## 0.2.1 — 2026-10-29
 
 - Refresh existing log and ΔE colors when switching themes, preserving completed results.

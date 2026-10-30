@@ -6,6 +6,11 @@ Python 3.10+; direct protocol clients do not require Python. Keep the worker,
 models, references, and native libraries together. A desktop window does not
 need to be open for processing.
 
+This reference follows the current source. The `cpu_inference_v1` capability and
+CPU inference recovery are additions since the published 0.2.1 engine. Check the
+worker's capabilities before requesting new functionality; a newer SDK does not
+upgrade a separately installed worker.
+
 ## Legacy Engine workflow
 
 For everyday work start with the [installed run/predict SDK](../../api/README.md)
@@ -71,7 +76,7 @@ python api/colorcorrect.py devices
 python api/colorcorrect.py detect --json '{"image":"test_images/ColorCard_Big.JPG","handshake_out":"chart.json"}'
 ```
 
-For Windows shells with JSON-quoting differences, put parameters in a UTF-8 JSON file and use `--json @request.json`, or pipe JSON through `--json -`. The CLI writes progress to stderr and one result object to stdout; exit code 0 means complete success, 1 means failure (including partial batch failure). `--engine`, `--root`, `--policy` and `--timeout` work for every command. The CLI defaults to `auto`. Legacy `Engine()` retains its `cpu` policy default, which selects CPU LUT processing while detection still requires GPU inference.
+For Windows shells with JSON-quoting differences, put parameters in a UTF-8 JSON file and use `--json @request.json`, or pipe JSON through `--json -`. The CLI writes progress to stderr and one result object to stdout; exit code 0 means complete success, 1 means failure (including partial batch failure). `--engine`, `--root`, `--policy` and `--timeout` work for every command. The CLI defaults to `auto`. Legacy `Engine()` retains its `cpu` policy default, which selects CPU LUT processing while detection follows Auto.
 
 Python import after installing the SDK:
 
@@ -122,7 +127,7 @@ For contributor checks and execution records, see
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference always require DirectML or WebGPU. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
@@ -146,7 +151,7 @@ Launch `ccp-engine` with the same runtime environment as the app. Its first stdo
 
 ### `devices` / `warmup`
 
-Optional `policy`: `auto`, `cpu`, `directml` (alias `dml`), `webgpu`, or `vulkan`. `auto` tries DirectML then WebGPU on Windows, and WebGPU on Linux/macOS. `cpu` selects CPU correction only; chart and plane inference still require a hardware GPU. Explicit GPU policies select that inference route; Vulkan uses the WebGPU route with its Vulkan graphics backend. Inference never falls back to CPU. Unsupported policy strings normalize to `auto` for legacy compatibility; they do not enable other inference engines.
+Optional `policy`: `auto`, `cpu`, `cpu-inference`, `directml` (alias `dml`), `webgpu`, or `vulkan`. Auto tries eligible GPU routes, then explicitly selected CPU inference. `cpu` selects CPU correction with Auto detection; `cpu-inference` explicitly selects CPU detection and requires capability `cpu_inference_v1`. Explicit GPU policies select only that inference route; Vulkan uses the WebGPU route with its Vulkan graphics backend. GPU correction retains independent CPU recovery. Unsupported policy strings normalize to `auto` for legacy compatibility; they do not enable other inference engines.
 
 Detection options below also apply to warmup. `devices` returns the planned `assignment`, backend availability and runtime diagnostics; planning alone does not prove execution. `warmup` returns `warmed`, `device`, `title`, or an error. Inspect the completed operation's backend diagnostics for actual execution.
 

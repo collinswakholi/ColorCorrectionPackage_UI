@@ -134,7 +134,7 @@ public sealed class CorrectionClient
             return new PreparedApply(run, ownedModel, destination, preview, identities);
         }, cancellationToken).ConfigureAwait(false);
         if (prepared is null)
-            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = "Load or fit a model first." }).ToArray();
+            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = $"The saved model is missing: {modelPath}. Locate the model or fit a new correction." }).ToArray();
         var runDir = prepared.Run;
         modelPath = prepared.Model;
         var destDir = prepared.Destination;
@@ -229,6 +229,7 @@ public sealed class CorrectionClient
                     FfcSkipped = JsonStr(row, "ffc_skipped"),
                     ApplyBackend = FirstNonEmpty(JsonStr(row, "apply_backend"), JsonStr(result, "apply_backend")),
                     PlaneBackend = FirstNonEmpty(JsonStr(row, "plane_backend"), JsonStr(result, "plane_backend")),
+                    DetectBackend = JsonStr(row, "detect_backend"),
                 });
             }
 
@@ -425,6 +426,7 @@ public sealed class CorrectionClient
             FfcSkipped = JsonStr(result, "ffc_skipped"),
             ApplyBackend = JsonStr(result, "apply_backend"),
             PlaneBackend = JsonStr(result, "plane_backend"),
+            DetectBackend = JsonStr(result, "detect_backend"),
             Report = report,
         };
     }

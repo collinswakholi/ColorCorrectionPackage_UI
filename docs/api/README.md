@@ -2,7 +2,13 @@
 
 The Python API uses the same local native engine as the desktop app. Python 3.10+
 is required; the SDK has no runtime dependencies on Python ML or GUI packages.
-Automatic DirectML/WebGPU inference is the default, with CPU inference fallback disabled. LUT application uses wgpu with CPU recovery; `backend="cpu"` selects CPU LUTs while retaining GPU inference.
+In the current source, automatic DirectML/WebGPU inference is the default, with
+explicit CPU recovery when GPU execution is unavailable or fails. LUT application
+uses wgpu with CPU recovery. `backend="cpu"` retains CPU correction with Auto
+detection; `backend="cpu-inference"` explicitly selects CPU detection.
+
+CPU inference requires the newly built native engine. Published 0.2.1 packages
+use GPU inference; updating the Python wheel does not replace that engine.
 
 Prefer the familiar `ColorCorrection(Config(save_path=...))` workflow if you used
 the original Python package: `run(Image=...)` calibrates, and `predict_image()` /
@@ -63,8 +69,10 @@ worker. `timeout` is a positive finite number of seconds per command (startup is
 bounded separately); `progress` receives text on the calling thread and must not
 issue recursive requests. `executable=` explicitly selects a worker; keep its
 compatible models/references/runtime together. `backend` accepts `auto`, `cpu`,
-`directml`, `webgpu`, or `vulkan`. CPU selects correction only; detection remains
-GPU-only. DirectML is a Windows route; actual availability is checked at execution.
+`cpu-inference`, `directml`, `webgpu`, or `vulkan`. Legacy `cpu` selects CPU
+correction and Auto detection. `cpu-inference` requires worker capability
+`cpu_inference_v1`; older workers are rejected clearly. DirectML is Windows-only.
+Forced GPU detection does not switch engines; correction CPU recovery remains enabled.
 
 `DetectionOptions(confidence=None, crop=0.75, prefer=None, allow_recall=True)`
 configures automatic detection. `confidence=None` retains the native detector

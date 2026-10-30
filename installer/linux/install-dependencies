@@ -1,11 +1,20 @@
 #!/bin/sh
 set -eu
-if [ "${1:-}" != --install ]; then
-    echo 'Ubuntu 24.04 prerequisites: libc6 libgcc-s1 libstdc++6 libicu74 libssl3t64 libkrb5-3 zlib1g libfontconfig1 libx11-6 libice6 libsm6 libxrandr2 libxi6 libgl1 libvulkan1 libgtk-3-0t64'
-    echo 'Use your package manager or rerun with --install to request installation. No GPU driver will be installed.'
-    exit 0
-fi
+install=0; mode=recommended
+while [ "$#" -gt 0 ]; do
+    case "$1" in --install) install=1 ;; --mode) mode=${2:?missing mode}; shift ;; *) echo 'Usage: install-dependencies [--install] [--mode recommended|cpu|custom]' >&2; exit 64 ;; esac
+    shift
+done
+case "$mode" in recommended|cpu|custom) ;; *) echo 'Unknown mode.' >&2; exit 64 ;; esac
 . /etc/os-release
-[ "$ID" = ubuntu ] && [ "$VERSION_ID" = 24.04 ] || { echo 'Automatic prerequisite setup is limited to Ubuntu 24.04. Use your distribution package manager.' >&2; exit 1; }
-echo 'This explicit action requests administrator permission to install the listed system libraries using apt.'
-exec sudo apt-get install libc6 libgcc-s1 libstdc++6 libicu74 libssl3t64 libkrb5-3 zlib1g libfontconfig1 libx11-6 libice6 libsm6 libxrandr2 libxi6 libgl1 libvulkan1 libgtk-3-0t64
+# Wider distro declarations require complete native dependency validation.
+[ "$ID" = ubuntu ] && [ "$VERSION_ID" = 24.04 ] || {
+    echo 'Automatic setup is currently validated for Ubuntu 24.04 only. Consult INSTALL.txt and your distribution package manager. Debian 13 validation is pending.' >&2
+    exit 1
+}
+# Vulkan/GL loaders may be linked even when no GPU is used; do not remove shared closure.
+packages='libc6 libgcc-s1 libstdc++6 libicu74 libssl3t64 libkrb5-3 zlib1g libfontconfig1 libx11-6 libice6 libsm6 libxrandr2 libxi6 libgl1 libvulkan1 libgtk-3-0t64'
+printf 'Required Ubuntu 24.04 system libraries: %s\n' "$packages"
+echo 'Private inference runtimes are bundled. No graphics driver or third-party repository is installed.'
+[ "$install" = 1 ] || { echo 'Preview only; --install explicitly requests the package manager action.'; exit 0; }
+if [ "$(id -u)" = 0 ]; then exec apt-get install $packages; else exec sudo apt-get install $packages; fi

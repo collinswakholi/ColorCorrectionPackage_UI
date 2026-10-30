@@ -32,6 +32,9 @@ public sealed class HandshakeDocument
     public string Runtime => Str("runtime");
     public string Backend => Str("backend");
     public string Device => Str("device");
+    public JsonElement? Inference => Root.TryGetProperty("inference", out var inference) ? inference : null;
+    public string Provider => Str("provider");
+    public JsonElement? Fallback => Root.TryGetProperty("fallback", out var fallback) ? fallback : null;
     public string SnapshotId => Str("snapshot_id");
     public string ChartId(int choice) => GetStr(ActiveFace(choice), "chart_id") ?? "";
     public int DetectionCount => GetInt("n_dets");
@@ -191,6 +194,7 @@ public sealed class HandshakeDocument
                 writer.WriteStartObject();
                 writer.WriteBoolean("ok", true);
                 writer.WriteString("snapshot_id", SnapshotId);
+                WriteExecutionMetadata(writer, Root);
                 writer.WriteBoolean("use_all", true);
                 writer.WriteNumber("crop", crop);
                 writer.WriteNumber("n_charts", Faces().Count);
@@ -206,7 +210,7 @@ public sealed class HandshakeDocument
             }
             else
             {
-                WriteFace(writer, ActiveFace(choice), crop, SnapshotId);
+                WriteFace(writer, ActiveFace(choice), crop, SnapshotId, Root);
             }
         }
 
@@ -216,10 +220,11 @@ public sealed class HandshakeDocument
         return path;
     }
 
-    private static void WriteFace(Utf8JsonWriter writer, JsonElement face, double crop, string snapshotId)
+    private static void WriteFace(Utf8JsonWriter writer, JsonElement face, double crop, string snapshotId, JsonElement? inheritedExecution = null)
     {
         writer.WriteStartObject();
         writer.WriteString("snapshot_id", snapshotId);
+        WriteExecutionMetadata(writer, face, inheritedExecution);
         CopyString(writer, face, "chart_id");
         CopyString(writer, face, "chart_type");
         CopyString(writer, face, "cli_chart");
@@ -251,6 +256,25 @@ public sealed class HandshakeDocument
         }
 
         writer.WriteEndObject();
+    }
+
+    private static readonly string[] ExecutionMetadataNames =
+    [
+        "runtime", "backend", "device", "provider", "fallback", "inference",
+        "requested_policy", "adapter", "threads", "cached", "attempts", "detect_backend",
+    ];
+
+    private static void WriteExecutionMetadata(Utf8JsonWriter writer, JsonElement source, JsonElement? inherited = null)
+    {
+        foreach (var name in ExecutionMetadataNames)
+        {
+            // Selecting a face must retain the image's detection provenance. An
+            // explicit annotation on that face takes precedence, including null.
+            if (!source.TryGetProperty(name, out var value)
+                && !(inherited is { ValueKind: JsonValueKind.Object } root && root.TryGetProperty(name, out value))) continue;
+            writer.WritePropertyName(name);
+            value.WriteTo(writer);
+        }
     }
 
     private static void WriteQuads(Utf8JsonWriter writer, string name, IReadOnlyList<Quad> quads)

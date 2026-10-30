@@ -14,7 +14,7 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from package_support import check_runtime_manifest, check_model_manifest, pe_details, dependency_audit, digest
-from native_ci_acceptance import clean_environment, rust_component_test_command
+from native_ci_acceptance import clean_environment, rust_component_test_command, rust_build_outputs
 from package_wsl_addon import validate_addon
 from collect_dependency_notices import collect, validate_notices
 import test_package_native as fixtures
@@ -77,6 +77,32 @@ class ReleaseContracts(unittest.TestCase):
                 self.assertIn("--no-default-features", command)
                 self.assertEqual(set(command[command.index("--features") + 1].split(",")),
                                  {"ccp_bridge/ort-plane", "ccp_bridge/wgpu-lut", "ccp_bridge/rust-inference"})
+
+    def test_native_rust_paths_ignore_ambient_target_and_stale_workspace_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work = root / "new run"
+            stale = root / "engine/target/release/ccp-engine.exe"
+            stale.parent.mkdir(parents=True)
+            stale.write_bytes(fixtures.executable("Windows", "arm64"))
+            with patch.dict(os.environ, {"CARGO_TARGET_DIR": str(root / "unrelated protected target")}):
+                paths = rust_build_outputs(work, "win-x64")
+                paths["worker"].parent.mkdir(parents=True)
+                paths["worker"].write_bytes(fixtures.executable("Windows", "x64"))
+                command = rust_component_test_command(root, "win-x64", paths["target"])
+            self.assertEqual(command[command.index("--target-dir") + 1], work / "rust-target")
+            self.assertEqual(paths["worker"], work / "rust-target/release/ccp-engine.exe")
+            self.assertEqual(paths["example"], work / "rust-target/release/examples/wgpu_lut_check.exe")
+            fixtures.package.require_architecture(paths["worker"], ("Windows", "x64"))
+            with self.assertRaisesRegex(ValueError, "architecture does not match"):
+                fixtures.package.require_architecture(stale, ("Windows", "x64"))
+            mac = rust_build_outputs(work, "osx-arm64")
+            self.assertEqual(mac["target"], work / "source-build/.build/rust-target")
+            self.assertEqual(mac["worker"], mac["target"] / "release/ccp-engine")
+            with self.assertRaisesRegex(RuntimeError, "pre-existing Rust build directory"):
+                rust_build_outputs(work, "win-x64")
+            self.assertEqual(stale.read_bytes(), fixtures.executable("Windows", "arm64"))
+            self.assertEqual(paths["worker"].read_bytes(), fixtures.executable("Windows", "x64"))
 
     def test_runtime_missing_provider_or_notice_is_rejected(self):
         helper = fixtures.NativePackageTests()

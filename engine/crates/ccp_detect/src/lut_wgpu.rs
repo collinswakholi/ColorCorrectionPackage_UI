@@ -113,10 +113,7 @@ mod native {
             let mut adapters = block_on(instance.enumerate_adapters(backends));
             adapters.retain(|a| {
                 let i = a.get_info();
-                matches!(
-                    i.device_type,
-                    wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
-                ) && (selection.1.is_empty() || i.name.to_lowercase().contains(&selection.1))
+                crate::probe::eligible_wgpu_adapter(&i) && (selection.1.is_empty() || i.name.to_lowercase().contains(&selection.1))
             });
             // Discrete hardware first; on Windows the measured DX12 path wins.
             // Other native platforms use Vulkan/Metal without translation layers.

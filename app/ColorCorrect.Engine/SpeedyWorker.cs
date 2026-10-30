@@ -43,7 +43,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
         {
             if (!IsAlive()) await StartLockedAsync(cancellationToken).ConfigureAwait(false);
             if (!Capabilities.Contains(capability))
-                throw new NotSupportedException($"This worker does not support {capability}. Build or install the matching ColorCorrect engine before using custom references.");
+                throw new NotSupportedException($"This worker does not support {capability}. Install the matching ColorCorrect engine to use this feature.");
         }
         finally { _gate.Release(); }
     }
@@ -107,6 +107,10 @@ public sealed class SpeedyWorker : IAsyncDisposable
                 await StartLockedAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            var requestedPolicy = payload.TryGetValue("policy", out var policy) ? policy?.ToString() : Policy;
+            if (requestedPolicy == "cpu-inference" && !Capabilities.Contains("cpu_inference_v1"))
+                throw new NotSupportedException("This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine.");
+
             var line = JsonSerializer.Serialize(payload);
             JsonElement result;
             try
@@ -164,7 +168,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
         string inputPath,
         double crop = 0.75,
         string device = "gpu",
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool retryInference = false)
     {
         var jsonOut = Path.Combine(Path.GetTempPath(), $"ccp-detect-{Guid.NewGuid():N}.json");
         try
@@ -176,6 +181,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
                 ["crop"] = crop,
                 ["policy"] = string.Equals(device, "cpu", StringComparison.OrdinalIgnoreCase) ? "cpu" : Policy,
                 ["handshake_out"] = jsonOut,
+                ["retry_inference"] = retryInference,
             }, TimeSpan.FromMinutes(5), cancellationToken).ConfigureAwait(false);
 
             var ok = result.TryGetProperty("ok", out var okEl) && okEl.ValueKind != JsonValueKind.False && okEl.GetBoolean();
@@ -275,6 +281,8 @@ public sealed class SpeedyWorker : IAsyncDisposable
             StandardErrorEncoding = Encoding.UTF8,
         };
         psi.Environment["CCP_NEW_UI_ROOT"] = _repoRoot;
+        if (!psi.Environment.ContainsKey("CCP_INFERENCE_COMPONENTS") && InstalledSetup.ComponentAllowlist() is { } selectedComponents)
+            psi.Environment["CCP_INFERENCE_COMPONENTS"] = selectedComponents;
         var extras = new List<string>();
         var engineDir = Path.GetDirectoryName(_exePath);
         if (!string.IsNullOrWhiteSpace(engineDir))
@@ -352,6 +360,11 @@ public sealed class SpeedyWorker : IAsyncDisposable
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(LastError) ? "worker ready failed" : LastError);
         }
 
+        if (Policy == "cpu-inference" && !Capabilities.Contains("cpu_inference_v1"))
+        {
+            await StopLockedAsync().ConfigureAwait(false);
+            throw new NotSupportedException("This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine.");
+        }
         await TryWarmupLockedAsync(cancellationToken).ConfigureAwait(false);
     }
 

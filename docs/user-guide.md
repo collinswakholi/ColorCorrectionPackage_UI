@@ -5,6 +5,9 @@ Escape closes it and returns focus to its trigger. The guide is bundled into the
 application, so it does not depend on a browser or internet connection. Choose
 **Original research** to open the article in your browser.
 
+This guide follows the current source. The CPU detection and setup controls below
+are additions since the published 0.2.1 packages.
+
 ## Your first correction
 
 ![Illustrated calibration and application workflow](images/workflow.svg)
@@ -93,6 +96,27 @@ SGD with momentum, or RMSProp; optionally enable batch normalization and set
 dropout from 0 to 0.8. Zero disables dropout. Record these choices with the
 training settings, and compare held-out error. A best training checkpoint does
 not establish generalization to another camera or lighting setup.
+
+## Processing and setup
+
+Open **Processing settings** to choose **Auto**, **CPU** or **GPU** for image
+correction. Leave Auto selected to start. Under **Advanced**, **Chart detection
+engine** independently selects Auto, CPU or an available GPU engine. Auto tries
+eligible GPUs and recovers to CPU when needed; a forced GPU engine reports its
+failure instead of switching inference engines. Choose **Apply engine change**
+after changing the detection engine.
+
+Under **Device details**, choose **Check setup** to rescan prerequisites and
+exercise the selected inference and correction engines. **Recommended** selects
+appropriate support, **CPU only** selects the complete CPU workflow, and **Custom**
+lets you choose optional acceleration components. **Install optional support**
+opens setup for review before changes. After setup completes, choose **Check setup**
+and **Apply engine change** again. **Use CPU** selects CPU detection and correction.
+
+Keep system graphics drivers managed by your operating system or GPU vendor.
+Setup supplies application libraries and explains missing prerequisites; it does
+not replace a system graphics driver. See [installation details](../installer/README.md)
+for portable setup, Linux package-manager requirements, and experimental WSL GPU use.
 
 ## Navigation and outputs
 

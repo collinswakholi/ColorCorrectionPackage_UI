@@ -158,7 +158,7 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <TextBlock Text="Chart and white-plane detection use the GPU." Classes="caption"
+                                        <TextBlock Text="Auto uses a compatible GPU, with CPU recovery when needed. CPU runs detection without a GPU." Classes="caption"
                                                    TextWrapping="Wrap" LineHeight="17" Margin="0,8,0,12"/>
                                         <Button Content="Apply engine change" Theme="{StaticResource SecondaryButton}"
                                                 Command="{Binding ForceCpuRestartCommand}" HorizontalAlignment="Stretch"
@@ -176,6 +176,21 @@
                                                   Theme="{StaticResource ProcessingDisclosure}">
                                             <StackPanel Margin="0,4,0,0">
                                                 <TextBlock Text="{Binding AccelHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                <Button Content="Check setup" Command="{Binding CheckSetupCommand}" Theme="{StaticResource SecondaryButton}"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,6" AutomationProperties.Name="Check setup and devices"/>
+                                                <ComboBox ItemsSource="{Binding SetupModes}" SelectedItem="{Binding SelectedSetupMode}" Classes="config"
+                                                          Margin="0,0,0,6" AutomationProperties.Name="Setup mode">
+                                                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:NamedValue"><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <StackPanel IsVisible="{Binding IsCustomSetup}" Margin="0,0,0,6">
+                                                    <CheckBox Content="WebGPU" IsChecked="{Binding SetupWebGpu}"/>
+                                                    <CheckBox Content="DirectML" IsChecked="{Binding SetupDirectMl}" IsVisible="{Binding IsWindowsSetup}"/>
+                                                </StackPanel>
+                                                <Button Content="Install optional support" Command="{Binding InstallSupportCommand}" Theme="{StaticResource SecondaryButton}"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,6" AutomationProperties.Name="Install optional acceleration support"/>
+                                                <Button Content="Use CPU" Command="{Binding UseCpuCommand}" Theme="{StaticResource SecondaryButton}"
+                                                        HorizontalAlignment="Stretch" Margin="0,0,0,8" AutomationProperties.Name="Use CPU for detection and correction"/>
+                                                <TextBlock Text="{Binding SetupSummary}" IsVisible="{Binding HasSetupSummary}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"/>
                                                 <ItemsControl ItemsSource="{Binding AccelRows}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="vm:AccelRow">
@@ -619,7 +634,7 @@
                             <Border Classes="controlSection">
                                 <StackPanel>
                                     <DockPanel Classes="sidebarHeader" LastChildFill="True">
-                                        <Button x:Name="DetectBtn" DockPanel.Dock="Right" Content="Detect"
+                                        <Button x:Name="DetectBtn" DockPanel.Dock="Right" Content="{Binding DetectActionLabel}"
                                                 Theme="{StaticResource TinyButton}" Classes="sourceAction"
                                                 Command="{Binding DetectCommand}"
                                                 IsVisible="{Binding ShowChartSection}"
@@ -868,7 +883,7 @@
                             <Grid x:Name="ApplyRow" ColumnDefinitions="*,8,Auto">
                                 <Button x:Name="RunButton" Theme="{StaticResource RunButton}"
                                         Command="{Binding ApplyCommand}" MinWidth="0"
-                                        ToolTip.Tip="Run the active workflow (F5)"
+                                        ToolTip.Tip="{Binding RunActionHint}"
                                         AutomationProperties.AcceleratorKey="F5"
                                         AutomationProperties.Name="{Binding ApplyLabel}">
                                     <Grid>
@@ -1608,20 +1623,24 @@
                             Command="{Binding BatchFitCommand}" Click="CloseBatchMenu"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             Margin="0,0,0,6" Padding="10,8"
+                            ToolTip.Tip="{Binding BatchFitHint}"
                             AutomationProperties.Name="Batch fit from chart">
                         <StackPanel>
                             <TextBlock Text="Fit from chart" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
+                    <TextBlock Text="{Binding BatchFitHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,8"/>
                     <Button x:Name="BatchFromModel" Theme="{StaticResource SecondaryButton}"
                             Command="{Binding BatchApplyCommand}" Click="CloseBatchMenu"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             Margin="0,0,0,0" Padding="10,8"
+                            ToolTip.Tip="{Binding BatchApplyHint}"
                             AutomationProperties.Name="Batch apply current model">
                         <StackPanel>
                             <TextBlock Text="Apply current model" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
+                    <TextBlock Text="{Binding BatchApplyHint}" Classes="caption" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -1649,6 +1668,8 @@
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             AutomationProperties.LiveSetting="Polite">
                     <TextBlock Text="{Binding StatusStateLabel}" Classes="caption" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding DetectionStatus}" Classes="caption" MaxWidth="260" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding AccelHint}"/>
                     <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                ToolTip.Tip="{Binding ErrorMessage}"

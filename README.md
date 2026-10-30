@@ -16,8 +16,7 @@ saved model to photographs captured under the same conditions.
 Prefer a still image? Open the screenshot gallery above.
 
 The desktop app runs locally and includes its runtime, models and graphics
-libraries. Python is optional. Chart and plane detection require a
-compatible GPU and driver; CPU correction can apply a previously fitted model.
+libraries. Python is optional.
 
 ## Download and install
 
@@ -25,6 +24,11 @@ compatible GPU and driver; CPU correction can apply a previously fitted model.
 for x64 and ARM64. ARM64 graphics and desktop workflows remain experimental.
 Apple-silicon macOS is available from source only. See the
 [platform notes](docs/compatibility.md) for requirements and limitations.
+
+The current source adds CPU detection, automatic GPU-to-CPU inference recovery,
+and device-aware setup. These additions are not in the linked **0.2.1** downloads,
+which require a compatible GPU for chart and plane detection. [Build from source](docs/building.md)
+to use the new setup and CPU workflow.
 
 | Platform | Installer | Portable application |
 | --- | --- | --- |
@@ -65,9 +69,10 @@ See [installation details](installer/README.md) for prerequisites, verification,
 portable use, and the optional experimental WSL GPU setup.
 
 **WSL GPU use is experimental.** Official 0.2.1 Linux downloads do not include the
-optional Mesa Dozen add-on needed for chart detection in the current WSL setup.
-Without it, use CPU correction with a saved model. Native Ubuntu uses its OS/vendor
-GPU driver. The current
+optional Mesa Dozen add-on needed for GPU chart detection in the current WSL setup.
+With those downloads, use CPU correction with a saved model if the add-on is absent.
+The current source also supports CPU detection without the add-on. Native Ubuntu
+uses its OS/vendor GPU driver. The current
 [WSL setup instructions](installer/README.md#experimental-wsl-gpu-setup) require a
 source build; there is no separately published add-on installer.
 
@@ -112,10 +117,11 @@ export a full-resolution image; use **Save** to choose its destination.
 combined **65³ GC/WB/CC LUT** by default. Auto selects CPU for small images and GPU
 for larger ones; GPU correction retains CPU recovery. Spatial FFC remains separate.
 
-Neural chart and plane detection use GPU inference. Windows Auto prefers
-**DirectML**; other routes use **WebGPU/Vulkan**. CPU selection applies to image
-correction, not neural inference. Actual availability depends on the driver,
-adapter, and platform. [Backend behavior and measured limits](docs/compute/README.md)
+In the current source, chart and plane detection use Auto: an eligible GPU first,
+then CPU inference when GPU execution is unavailable or fails. Windows prefers **DirectML**; other
+GPU routes use **WebGPU**. Advanced settings also offer explicit CPU detection.
+Image correction retains independent Auto/CPU/GPU controls and CPU recovery.
+[Processing options and setup](docs/compute/README.md)
 
 For the full FFC/GC/WB pipeline, start with encoded **sRGB/D65** input. Embedded ICC
 profiles and EXIF orientation are honored for that input path. Explicit other
@@ -147,7 +153,7 @@ with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStu
     calibration.export_lut("correction.cube")
 ```
 
-The desktop application is **0.2.1**.
+The published desktop application is **0.2.1**.
 The independently versioned SDK is **2.2.1**. Its wheel does not include the native
 worker or models. For custom references, typed
 options, model reload, and partial batch failures, see the [API guide](api/README.md)

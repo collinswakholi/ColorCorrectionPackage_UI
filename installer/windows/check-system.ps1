@@ -26,7 +26,7 @@ if (-not $ready) {
     Write-Host 'To install the included prerequisite, run: powershell -NoProfile -File .\check-system.ps1 -InstallPrerequisites'
     exit 1
 }
-foreach ($name in 'ccp-engine.exe','onnxruntime.dll','onnxruntime_providers_webgpu.dll','DirectML.dll','app/ColorCorrect.App.exe') {
+foreach ($name in 'ccp-engine.exe','onnxruntime.dll','DirectML.dll','app/ColorCorrect.App.exe') {
     if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $name) -PathType Leaf)) { throw "Incomplete app package: $name" }
 }
-Write-Host 'Application prerequisites are present. GPU availability is checked separately by the worker.'
+Write-Host 'Application prerequisites are present. Run setup.ps1 -Diagnose -Verify to check CPU and optional GPU engines.'

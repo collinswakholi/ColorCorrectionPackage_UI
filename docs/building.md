@@ -1,6 +1,6 @@
 # Building and installing from source
 
-Use .NET SDK **10.0.402**, Rust **1.95.0**, and Python **3.10+** for the build helpers and optional SDK. The version pins are in `global.json` and `rust-toolchain.toml`. Windows also needs the Visual Studio C++ tools and Windows SDK. Chart detection requires a compatible GPU driver; CPU correction can apply an existing model.
+Use .NET SDK **10.0.402**, Rust **1.95.0**, and Python **3.10+** for the build helpers and optional SDK. The version pins are in `global.json` and `rust-toolchain.toml`. Windows also needs the Visual Studio C++ tools and Windows SDK. Auto chart/plane detection can use CPU inference without a GPU; compatible graphics drivers enable optional GPU acceleration.
 
 ## Windows
 
@@ -86,9 +86,9 @@ with Client(root=build) as client:
 PY
 ```
 
-Use an absolute `Client(root=...)` path when starting Python from another directory. The private runtime stays beside its selected worker; an incomplete build rejects borrowing an unrelated runtime. Calibration requires available GPU inference; selecting CPU correction still requires GPU chart detection.
+Use an absolute `Client(root=...)` path when starting Python from another directory. The private runtime stays beside its selected worker; an incomplete build rejects borrowing an unrelated runtime. Auto calibration can fall back to CPU inference; `Client(root=build, backend="cpu-inference")` selects CPU detection explicitly.
 
-If a build fails, check native toolchain architecture and the versions above first. A missing `.dylib` indicates an incomplete runtime download or wrong build root; use a fresh output directory and inspect `dist/local-macos/gpu-runtime-manifest.json`. A runtime checksum failure must be investigated rather than bypassed. If no hardware adapter initializes, chart and plane detection are unavailable. Review the graphics diagnostics; CPU correction can still apply a saved model. After moving the local build directory, rebuild into a new output directory so the generated launch script captures the correct paths. Do not disable Gatekeeper globally to work around a launch error.
+If a build fails, check native toolchain architecture and the versions above first. A missing `.dylib` indicates an incomplete runtime download or wrong build root; use a fresh output directory and inspect `dist/local-macos/gpu-runtime-manifest.json`. A runtime checksum failure must be investigated rather than bypassed. If no hardware adapter initializes, Auto uses CPU chart and plane inference. Review graphics diagnostics or select CPU detection explicitly; forced GPU engines report their initialization errors. After moving the local build directory, rebuild into a new output directory so the generated launch script captures the correct paths. Do not disable Gatekeeper globally to work around a launch error.
 
 To remove the local SDK, run `python -m pip uninstall colorcorrect-studio` while its virtual environment is active, then `deactivate`. After closing the app, remove only your chosen `dist/local-macos` and `.venv-macos` folders in Finder; preserve exported models, image outputs and sessions that you want to keep. Shared Xcode, .NET, Rust and Python installations are managed separately and are not removed by this procedure.
 

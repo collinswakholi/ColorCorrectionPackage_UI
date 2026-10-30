@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BackendKind { OrtDirectMl, OrtWebGpu }
+pub enum BackendKind { OrtDirectMl, OrtWebGpu, OrtCpu }
 impl BackendKind {
-    pub fn as_str(self) -> &'static str { match self { Self::OrtDirectMl => "OrtDirectMl", Self::OrtWebGpu => "OrtWebGpu" } }
-    pub fn short(self) -> &'static str { match self { Self::OrtDirectMl => "DirectML", Self::OrtWebGpu => "WebGPU" } }
+    pub fn as_str(self) -> &'static str { match self { Self::OrtDirectMl => "OrtDirectMl", Self::OrtWebGpu => "OrtWebGpu", Self::OrtCpu => "OrtCpu" } }
+    pub fn short(self) -> &'static str { match self { Self::OrtDirectMl => "DirectML", Self::OrtWebGpu => "WebGPU", Self::OrtCpu => "CPU" } }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,13 +62,13 @@ pub struct ComputeAssignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DevicePolicy { Auto, Cpu, DirectMl, WebGpu, Vulkan }
+pub enum DevicePolicy { Auto, Cpu, CpuInference, DirectMl, WebGpu, Vulkan }
 impl DevicePolicy {
     pub fn parse(s: &str) -> Self { match s.trim().to_ascii_lowercase().as_str() {
-        "cpu" => Self::Cpu, "directml" | "dml" => Self::DirectMl,
+        "cpu" => Self::Cpu, "cpu-inference" => Self::CpuInference, "directml" | "dml" => Self::DirectMl,
         "webgpu" => Self::WebGpu, "vulkan" => Self::Vulkan, _ => Self::Auto,
     } }
-    pub fn as_str(self) -> &'static str { match self { Self::Auto => "auto", Self::Cpu => "cpu", Self::DirectMl => "directml", Self::WebGpu => "webgpu", Self::Vulkan => "vulkan" } }
+    pub fn as_str(self) -> &'static str { match self { Self::Auto => "auto", Self::Cpu => "cpu", Self::CpuInference => "cpu-inference", Self::DirectMl => "directml", Self::WebGpu => "webgpu", Self::Vulkan => "vulkan" } }
 }
 
 impl Default for ComputeAssignment {
@@ -365,7 +365,7 @@ mod dxgi {
                         .position(|&c| c == 0)
                         .unwrap_or(desc.description.len());
                     let name = String::from_utf16_lossy(&desc.description[..end]);
-                    if !name.contains("Microsoft Basic Render") {
+                    if !super::software_renderer(&name, false, false) {
                         out.push(GpuInfo {
                             vendor: vendor_from_pci(desc.vendor_id).to_string(),
                             name,
@@ -439,36 +439,92 @@ fn nvidia_smi_gpus() -> Vec<GpuInfo> {
     gpus
 }
 
+/// Per-user setup is shared by the desktop app and installed SDK workers.
+pub fn selected_components() -> String {
+    if let Ok(value)=std::env::var("CCP_INFERENCE_COMPONENTS") {return value;}
+    let user=if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(|p|std::path::PathBuf::from(p).join("ColorCorrectStudio/setup-state.json"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from)
+            .or_else(||std::env::var_os("HOME").map(|p|std::path::PathBuf::from(p).join(".config")))
+            .map(|p|p.join("colorcorrect/setup-state.json"))
+    };
+    let portable=std::env::current_exe().ok().and_then(|exe|exe.parent().map(|p|p.join("setup-state.json")));
+    for path in [user,portable].into_iter().flatten() {
+        if let Some(value)=std::fs::read_to_string(path).ok().and_then(|text|serde_json::from_str::<serde_json::Value>(&text).ok()) {
+            if let Some(items)=value.get("components").and_then(|c|c.as_array()) {
+                return items.iter().filter_map(|item|item.as_str()).collect::<Vec<_>>().join(",");
+            }
+        }
+    }
+    "cpu,directml,webgpu".into()
+}
+pub fn gpu_correction_enabled() -> bool {
+    selected_components().split(',').any(|part|matches!(part.trim(),"webgpu"|"directml"))
+}
+
+/// Shared software-renderer rejection. Hardware-backed virtual adapters remain eligible.
+pub fn software_renderer(name: &str, cpu_device: bool, dxgi_software: bool) -> bool {
+    let name = name.to_ascii_lowercase();
+    cpu_device || dxgi_software || ["llvmpipe", "lavapipe", "swiftshader", "microsoft basic render"]
+        .iter().any(|software| name.contains(software))
+}
+
+#[cfg(any(feature="ort-plane",feature="wgpu-lut"))]
+pub(crate) fn eligible_wgpu_adapter(info: &wgpu::AdapterInfo) -> bool {
+    !software_renderer(&info.name, info.device_type == wgpu::DeviceType::Cpu, false)
+        && matches!(info.device_type, wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::VirtualGpu)
+}
+
 /// GPU provider selection is a plan, not proof of model execution.
 pub fn probe_accelerators(policy: &str) -> AcceleratorReport {
     let policy = DevicePolicy::parse(policy);
     let cpu = cpu_info();
-    let gpus = enumerate_gpus();
+    let gpus = if policy==DevicePolicy::CpuInference || !gpu_correction_enabled() {Vec::new()} else {enumerate_gpus()};
     let detect = match policy {
+        DevicePolicy::CpuInference => "cpu",
         DevicePolicy::DirectMl => "directml",
         DevicePolicy::WebGpu => "webgpu",
         DevicePolicy::Vulkan => "vulkan",
+        _ if !gpu_correction_enabled() => "cpu",
         _ if cfg!(windows) => "directml",
         _ => "webgpu",
     };
     let assignment = ComputeAssignment {
         detect: detect.into(), plane: detect.into(),
-        apply: if policy == DevicePolicy::Cpu || !cfg!(feature = "wgpu-lut") { "cpu".into() } else { "wgpu".into() },
-        threads: apply_thread_count(&cpu),
+        apply: if policy == DevicePolicy::Cpu || !gpu_correction_enabled() || !cfg!(feature = "wgpu-lut") { "cpu".into() } else { "wgpu".into() },
+        threads: cpu.cores_physical.max(1).min(cpu.cores_logical.max(1)).min(8),
     };
-    let active = if detect == "directml" { BackendKind::OrtDirectMl } else { BackendKind::OrtWebGpu };
-    let backends = [BackendKind::OrtDirectMl, BackendKind::OrtWebGpu].into_iter().map(|kind| BackendInfo {
+    let active = if detect == "cpu" { BackendKind::OrtCpu } else if detect == "directml" { BackendKind::OrtDirectMl } else { BackendKind::OrtWebGpu };
+    let backends = [BackendKind::OrtDirectMl, BackendKind::OrtWebGpu, BackendKind::OrtCpu].into_iter().map(|kind| BackendInfo {
         kind, status: if kind == BackendKind::OrtDirectMl && !cfg!(windows) { "unavailable" }
             else if kind == active { "planned" } else { "not tested" }.into(),
-        device_index: 0, used_for: if kind == active { "detect,plane" } else { "unused" }.into(), fail_reason: None,
+        device_index: -1, used_for: if kind == active { "detect,plane" } else { "unused" }.into(), fail_reason: None,
     }).collect();
     AcceleratorReport { cpu, gpus, backends, active, policy: policy.as_str().into(),
-        recommended: format!("{} inference · {} LUT", active.short(), assignment.apply), assignment }
+        recommended: format!("{} inference (not checked) · {} LUT", if matches!(policy,DevicePolicy::Auto|DevicePolicy::Cpu) {"Auto"} else {active.short()}, assignment.apply), assignment }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn software_renderer_filter_does_not_reject_vendors_or_virtual_hardware() {
+        for name in ["Microsoft Basic Render Driver","llvmpipe LLVM","lavapipe","Google SwiftShader"] {
+            assert!(software_renderer(name,false,false));
+        }
+        for name in ["Microsoft Direct3D12 (NVIDIA)","Mesa Intel Graphics","Apple Paravirtual GPU","AMD Radeon","Adreno","Mali"] {
+            assert!(!software_renderer(name,false,false));
+        }
+        assert!(software_renderer("Intel",false,true));
+        assert!(software_renderer("Unknown",true,false));
+    }
+    #[test]
+    fn explicit_cpu_inference_is_distinct_from_legacy_cpu_correction() {
+        let report=probe_accelerators("cpu-inference");
+        assert_eq!(report.assignment.detect,"cpu");assert_eq!(report.assignment.plane,"cpu");
+        assert_eq!(report.policy,"cpu-inference");
+    }
     #[test]
     fn cpu_policy_only_controls_lut() {
         let report = probe_accelerators("cpu");

@@ -13,6 +13,11 @@ The wheel does **not** contain the native worker, models, or inference libraries
 Keep the installed/extracted application intact and set `root` to that folder.
 The native application and SDK are versioned independently; this SDK is 2.2.1.
 
+This guide follows the current source. CPU inference recovery and
+`backend="cpu-inference"` require a matching newly built native engine. The
+published 0.2.1 engine uses GPU inference; installing this wheel alone does not
+add CPU detection to that engine.
+
 ## Fit, then predict
 
 ```python
@@ -124,16 +129,23 @@ mapping/import formats, partial batch failures, results, and errors.
 
 ## Processing and compatibility
 
-Automatic GPU inference and Fast correction are the defaults. The combined 65³
+Automatic inference and Fast correction are the defaults. The combined 65³
 GC/WB/CC LUT approximates the fitted transform; FFC remains separate.
 `fast_mode=False` uses separate stages and a 33³ CC LUT. This does not change the
 fitted coefficients. Both CPU application and GPU recovery use the selected LUT.
 
-`backend="cpu"` selects CPU **image correction**, while chart/plane detection
-still requires GPU inference. Inference routes are Auto, DirectML (Windows),
-WebGPU, and Vulkan; unavailable adapters produce actionable errors without CPU
-inference fallback. Fitting, image decoding/encoding, and spatial FFC may use CPU.
-Inspect reported execution diagnostics rather than inferring GPU use from a setting.
+`backend="auto"` tries an eligible GPU for chart/white-plane detection and
+recovers to explicit ONNX Runtime CPU inference if initialization or execution
+fails. `backend="cpu-inference"` runs detection on CPU without initializing a
+GPU; it requires a worker advertising `cpu_inference_v1`. Explicit `directml`
+(Windows), `webgpu`, and `vulkan` selections report an error if that inference
+engine cannot execute. GPU image correction retains CPU recovery independently.
+
+The legacy `backend="cpu"` selects CPU **image correction** and Auto detection.
+Fitting, image decoding/encoding, and spatial FFC may also use CPU. Inspect
+`result.backends.actual` and `result.backends.diagnostics["inference"]` when
+present; a requested setting is not evidence of actual GPU execution. Setup's
+selected runtime components are honored by SDK worker subprocesses.
 
 The run/predict naming resembles
 [ColorCorrectionPipeline](https://pypi.org/project/ColorCorrectionPipeline/).

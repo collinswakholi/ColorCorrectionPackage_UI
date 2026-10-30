@@ -1,0 +1,98 @@
+#!/bin/sh
+# Native setup/repair: POSIX shell and standard distribution tools, no Python/.NET.
+set -eu
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
+mode=recommended; install=0; verify=0; diagnose=0; components=''; timeout_seconds=120
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --mode) mode=${2:?missing mode}; shift ;;
+        --components) components=${2:?missing component list}; shift ;;
+        --install) install=1 ;;
+        --verify) verify=1 ;;
+        --diagnose) diagnose=1 ;;
+        *) echo 'Usage: setup [--mode recommended|cpu|custom] [--components webgpu] [--diagnose] [--verify] [--install]' >&2; exit 64 ;;
+    esac
+    shift
+done
+case "$mode" in recommended|cpu|custom) ;; *) echo 'Unknown setup mode.' >&2; exit 64 ;; esac
+case "$components" in ''|webgpu) ;; *) echo 'Linux supports the optional webgpu component only.' >&2; exit 64 ;; esac
+case "$(uname -m)" in x86_64) actual=x64 ;; aarch64) actual=arm64 ;; *) echo 'A native x64 or ARM64 Linux package is required.' >&2; exit 1 ;; esac
+expected=$(cat "$APP_DIR/package-architecture")
+[ "$actual" = "$expected" ] || { echo "This package requires $expected; this system is $actual." >&2; exit 1; }
+json_string() { printf '%s' "$1" | awk 'BEGIN {printf "\""} {if (NR>1) printf "\\n"; gsub(/\\/,"\\\\");gsub(/"/,"\\\"");gsub(/\r/,"\\r");gsub(/\t/,"\\t");printf "%s",$0} END {printf "\""}'; }
+os_name=unknown; os_version=unknown
+if [ -r /etc/os-release ]; then . /etc/os-release; os_name=${ID:-unknown}; os_version=${VERSION_ID:-unknown}; fi
+wsl=false; [ ! -e /dev/dxg ] || wsl=true
+adapters=''; observed=not_checked
+for path in /sys/class/drm/card*/device; do
+    [ -d "$path" ] || continue
+    vendor=$(cat "$path/vendor" 2>/dev/null || printf unknown)
+    device=$(cat "$path/device" 2>/dev/null || printf unknown)
+    driver=$(readlink -f "$path/driver" 2>/dev/null || printf unknown)
+    [ -z "$adapters" ] || adapters="$adapters,"
+    adapters="$adapters{\"path\":$(json_string "$path"),\"vendor\":$(json_string "$vendor"),\"device\":$(json_string "$device"),\"driver\":$(json_string "$driver"),\"classification\":\"unverified\"}"
+    observed=observed
+done
+# /dev/dxg is a hardware integration hint, never proof of a working backend.
+[ "$wsl" = false ] || observed=observed
+selected='"cpu"'
+if [ "$mode" = custom ] && [ "$components" = webgpu ]; then selected="$selected,\"webgpu\""; fi
+if [ "$mode" = recommended ] && { [ -n "$adapters" ] || [ "$wsl" = true ] || [ "$observed" = not_checked ]; }; then selected="$selected,\"webgpu\""; fi
+free_bytes=$(df -Pk "$APP_DIR" | awk 'END {printf "%.0f",$4*1024}')
+probes=''; config="${XDG_CONFIG_HOME:-$HOME/.config}/colorcorrect"
+if [ "$install" = 1 ]; then
+    printf 'Setup selection: %s. Components: %s. CPU support is always included.\n' "$mode" "$selected" >&2
+    "$APP_DIR/install-dependencies" --mode "$mode" >&2
+    printf 'Type INSTALL to apply this selection (administrator access may be needed): ' >&2
+    read -r confirmation
+    [ "$confirmation" = INSTALL ] || { echo 'No setup changes were made.' >&2; exit 0; }
+    "$APP_DIR/install-dependencies" --install --mode "$mode"
+    # Validate the component checksums created from the reviewed payload.
+    (cd "$APP_DIR" && sha256sum --check --strict --quiet setup-required.sha256)
+    case "$selected" in *webgpu*)
+        plugin=libonnxruntime_providers_webgpu.so
+        if [ ! -f "$APP_DIR/$plugin" ] && [ -f "$APP_DIR/optional-payloads/webgpu/$plugin" ]; then
+            expected_hash=$(awk 'NR==1 {print $1}' "$APP_DIR/setup-webgpu.sha256")
+            actual_hash=$(sha256sum "$APP_DIR/optional-payloads/webgpu/$plugin" | awk '{print $1}')
+            if [ "$expected_hash" = "$actual_hash" ]; then
+                cp -- "$APP_DIR/optional-payloads/webgpu/$plugin" "$APP_DIR/$plugin" 2>/dev/null ||
+                    echo 'Optional GPU repair needs permission to write the application folder. CPU remains available.' >&2
+            fi
+        fi
+        if ! (cd "$APP_DIR" && sha256sum --check --strict --quiet setup-webgpu.sha256); then
+            echo 'Optional WebGPU support is incomplete. CPU remains available; repair using the matching package.' >&2
+            selected='"cpu"'
+        fi
+        ;; esac
+    mkdir -p "$config"
+    if [ "$mode" = cpu ]; then detection=cpu-inference; correction=cpu; else detection=auto; correction=auto; fi
+    temporary=$(mktemp "$config/setup-state.XXXXXX")
+    trap 'rm -f -- "$temporary"' EXIT HUP INT TERM
+    chmod 600 "$temporary"
+    printf '{"schema":1,"mode":"%s","components":[%s],"detection_policy":"%s","correction_policy":"%s"}\n' "$mode" "$selected" "$detection" "$correction" > "$temporary"
+    mv -f -- "$temporary" "$config/setup-state.json"
+    trap - EXIT HUP INT TERM
+fi
+if [ "$verify" = 1 ]; then
+    command -v timeout >/dev/null || { echo 'The coreutils timeout command is required for bounded verification.' >&2; exit 1; }
+    probe_dir=$(mktemp -d)
+    trap 'rm -rf -- "$probe_dir"' EXIT HUP INT TERM
+    policies=cpu-inference
+    case "$selected" in *webgpu*) policies="$policies webgpu" ;; esac
+    for policy in $policies; do
+        status=failed
+        if printf '{"cmd":"setup_probe","policy":"%s","force_cpu":%s}\n{"cmd":"quit"}\n' "$policy" "$(if [ "$policy" = cpu-inference ]; then printf true; else printf false; fi)" |
+           CCP_INFERENCE_COMPONENTS=$(printf '%s' "$selected" | tr -d '"') timeout --kill-after=5s "$timeout_seconds" "$APP_DIR/ccp-engine-launch" > "$probe_dir/output" 2> "$probe_dir/error"; then
+            if grep -Eq '"setup_verified"[[:space:]]*:[[:space:]]*true' "$probe_dir/output"; then status=verified; fi
+        fi
+        [ -z "$probes" ] || probes="$probes,"
+        probes="$probes{\"policy\":\"$policy\",\"status\":\"$status\",\"output\":$(json_string "$(cat "$probe_dir/output")"),\"diagnostics\":$(json_string "$(cat "$probe_dir/error")") }"
+    done
+    rm -rf -- "$probe_dir"
+    trap - EXIT HUP INT TERM
+fi
+printf '{"schema":1,"architecture":"%s","mode":"%s","os":%s,"os_version":%s,"inventory_status":"%s","adapters":[%s],"wsl":%s,"selected_components":[%s],"free_bytes":%s,"administrator":%s,"network":"not_checked; runtime payloads are bundled","driver_installation":"official OS/vendor guidance only","correction_verification":"recorded independently in each probe output","probes":[%s]}\n' "$actual" "$mode" "$(json_string "$os_name")" "$(json_string "$os_version")" "$observed" "$adapters" "$wsl" "$selected" "$free_bytes" "$(if [ "$(id -u)" = 0 ]; then printf true; else printf false; fi)" "$probes"
+if [ "$diagnose" = 0 ] && [ "$verify" = 0 ] && [ "$install" = 0 ]; then
+    echo 'Preview only. Use --install to apply the selected prerequisites and preferences; --verify runs bounded worker checks.' >&2
+    "$APP_DIR/install-dependencies" --mode "$mode" >&2
+fi

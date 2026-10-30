@@ -530,7 +530,7 @@ def _backends(reply: dict, policy: str) -> BackendInfo:
     if reply.get("device"):
         actual["detect"] = str(reply["device"])
     return BackendInfo(policy, actual, {key: copy.deepcopy(reply[key]) for key in
-                       ("device", "runtime", "assignment", "accelerators", "fallback", "backend", "cached", "execution", "completed_stages", "frames_processed") if key in reply})
+                       ("device", "runtime", "assignment", "accelerators", "fallback", "inference", "provider", "backend", "cached", "execution", "completed_stages", "frames_processed") if key in reply})
 
 
 def _warnings(reply: dict) -> tuple[str, ...]:
@@ -652,7 +652,7 @@ class Client:
                  backend: str = "auto", timeout: float = 600,
                  progress: Callable[[str], None] | None = None):
         from colorcorrect import Engine
-        _choice(backend, ("cpu", "auto", "directml", "webgpu", "vulkan"), "backend")
+        _choice(backend, ("cpu", "cpu-inference", "auto", "directml", "webgpu", "vulkan"), "backend")
         _finite(timeout, "timeout", 1e-12)
         if root is not None:
             try:

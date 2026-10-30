@@ -14,6 +14,31 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private readonly Dictionary<string, string> _detectionFailures = new(PathIdentity.Comparer);
+    private bool _autoDetectPending;
+    private int _engineGeneration;
+
+    private string DetectionFailureKey(SessionItemViewModel item) =>
+        $"{AssetIdentity.Capture(item.Path).Sha256}:{Crop:R}:{SelectedAccelPolicy.Value}:{_engineGeneration}";
+
+    private async Task AutoDetectIfNeededAsync(SessionItemViewModel item)
+    {
+        if (_autoDetectPending) return;
+        _autoDetectPending = true;
+        try
+        {
+            if (_detectionFailures.TryGetValue(item.Path, out var failed))
+            {
+                var key = await Task.Run(() => DetectionFailureKey(item));
+                if (_disposed || item != Active || !CanDetect() || item.Handshake is not null) return;
+                if (failed == key) return;
+            }
+            await DetectItemAsync(item, retryInference: false);
+        }
+        catch (IOException) { /* Missing input is shown by session recovery. */ }
+        catch (UnauthorizedAccessException) { /* Explicit Detect reports access errors. */ }
+        finally { _autoDetectPending = false; }
+    }
     private sealed record BatchFitSnapshot(HandshakeDocument? Handshake, CorrectionOptions? Options,
         int FaceChoice, bool UseAllFaces, int ApplyGeneration, string? Error);
 
@@ -42,7 +67,7 @@ public partial class MainWindowViewModel
         return DetectItemAsync(item);
     }
 
-    private async Task DetectItemAsync(SessionItemViewModel item)
+    private async Task DetectItemAsync(SessionItemViewModel item, bool retryInference = true)
     {
         await _run.WaitAsync().ConfigureAwait(false);
         var seq = ++item.DetectGeneration;
@@ -58,7 +83,8 @@ public partial class MainWindowViewModel
         }).ConfigureAwait(false);
         try
         {
-            var result = await _worker.DetectAsync(item.Path, Crop, cancellationToken: cancel).ConfigureAwait(false);
+            var requestKey = await Task.Run(() => DetectionFailureKey(item), cancel).ConfigureAwait(false);
+            var result = await _worker.DetectAsync(item.Path, Crop, cancellationToken: cancel, retryInference: retryInference).ConfigureAwait(false);
             if (item.DetectGeneration != seq)
             {
                 return;
@@ -66,6 +92,8 @@ public partial class MainWindowViewModel
 
             await OnUi(() =>
             {
+                if (result.Ok) _detectionFailures.Remove(item.Path);
+                else _detectionFailures[item.Path] = requestKey;
                 ApplyDetect(item, result);
                 if (result.Ok) Log("Time", $"Detection {elapsed.Elapsed.TotalSeconds:0.00} s");
             }).ConfigureAwait(false);
@@ -80,8 +108,12 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
+            string? failedKey = null;
+            try { failedKey = await Task.Run(() => DetectionFailureKey(item)).ConfigureAwait(false); }
+            catch (Exception capture) when (capture is IOException or UnauthorizedAccessException) { }
             await OnUi(() =>
             {
+                if (failedKey is not null) _detectionFailures[item.Path] = failedKey;
                 if (!Session.Contains(item)) return;
                 if (item == Active) OnPropertyChanged(nameof(ReferenceSummary));
                 RefreshDetectSummary();
@@ -510,6 +542,12 @@ public partial class MainWindowViewModel
         {
             var handshake = new HandshakeDocument(result.HandshakeJson);
             item.ApplyHandshake(handshake);
+            _detectFallback = "";
+            if (handshake.Inference is { ValueKind: System.Text.Json.JsonValueKind.Object } inference
+                && inference.TryGetProperty("detect", out var detection) && detection.ValueKind == System.Text.Json.JsonValueKind.Object
+                && detection.TryGetProperty("fallback", out var fallback) && fallback.ValueKind == System.Text.Json.JsonValueKind.Object
+                && fallback.TryGetProperty("reason", out var reason) && reason.ValueKind == System.Text.Json.JsonValueKind.String)
+                _detectFallback = ConciseProcessingError(reason.GetString() ?? "");
             RememberJobAccel(null, null, handshake.Device);
             var charts = Math.Max(1, result.ChartCount > 0 ? result.ChartCount : handshake.ChartCount);
             var summary = $"{item.DetectLabel} · {charts} chart(s)";
@@ -696,7 +734,7 @@ public partial class MainWindowViewModel
             ToastService.ShowSuccess(Status);
         }
 
-        RememberJobAccel(outcome.PlaneBackend, outcome.ApplyBackend);
+        RememberJobAccel(outcome.PlaneBackend, outcome.ApplyBackend, outcome.DetectBackend);
         var extra = new List<string>();
         extra.AddRange(DeltaEDetails(item.Report));
         if (File.Exists(outcome.OutputPath))

@@ -51,6 +51,7 @@ fn with_accel(mut value: Value) -> Value {
         }
         if let Some(plane) = last_plane_ep() {
             obj.insert("plane_backend".into(), json!(plane));
+            obj.insert("inference".into(),json!({"plane":ccp_detect::plane::last_plane_inference()}));
         }
     }
     value
@@ -141,6 +142,10 @@ fn identify_detection_handshake(mut handshake: Value) -> Value {
 }
 
 fn ready_title(warmed: bool, policy: &str) -> String {
+    #[cfg(feature="ort-plane")]
+    if warmed {
+        if let Some(actual)=ccp_detect::last_detect_ep() {return format!("Warmed · {actual} inference");}
+    }
     let report = probe_accelerators(policy);
     let warm = if warmed { "Warmed" } else { "Ready" };
     format!("{warm} · {}", report.recommended)
@@ -154,7 +159,7 @@ fn emit_ready(state: &ServeState) {
         "warmed": state.warmed,
         "title": ready_title(state.warmed, &state.policy),
         "protocol_version": 2,
-        "capabilities": ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1"],
+        "capabilities": ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1", "cpu_inference_v1"],
         "portable_lut": cfg!(feature = "wgpu-lut"),
     });
     emit_json(&ready);
@@ -167,6 +172,13 @@ fn cmd_devices(state: &ServeState, req: &Value) -> Value {
     let mut v = serde_json::to_value(&report).unwrap_or_else(|_| json!({}));
     if let Some(obj) = v.as_object_mut() {
         obj.insert("ok".into(), json!(true));
+        #[cfg(feature="ort-plane")]
+        if state.warmed {
+            let inference=ccp_detect::infer_ort::inference_records(false);
+            if inference.pointer("/detect/requested_policy").and_then(Value::as_str)==Some(policy.as_str()) {
+                obj.insert("verified_inference".into(),inference);
+            }
+        }
     }
     v
 }
@@ -189,6 +201,8 @@ fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
             "warmed": true,
             "device": state.device,
             "title": ready_title(true, &state.policy),
+            "detect_backend":result.device,
+            "inference": result.inference,
         })
     } else {
         json!({
@@ -198,6 +212,25 @@ fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
             "error": result.error,
         })
     }
+}
+
+fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
+    let inference=cmd_warmup(state,req);
+    let mut lut=Vec::new();
+    for b in 0..2 {for g in 0..2 {for r in 0..2 {lut.extend_from_slice(&[r as f32,g as f32,b as f32]);}}}
+    let mut pixels=vec![0.25,0.5,0.75];
+    let cpu=json_bool(req,&["force_cpu"],false);
+    let correction=if cpu {
+        ccp_detect::lut_chunks::apply_chunks(&mut pixels,&lut,2,1,|_|Err("CPU requested".into()))
+            .map(|_|json!({"status":"verified","backend":"cpu","fallback":null}))
+    } else {
+        ccp_detect::lut_wgpu::apply(&mut pixels,&lut,2)
+            .map(|actual|json!({"status":"verified","backend":actual.backend,"fallback":actual.chunks.fallback_reason}))
+    };
+    let correction=correction.unwrap_or_else(|reason|json!({"status":"failed","error":reason}));
+    json!({"ok":inference["ok"]==true && correction["status"]=="verified",
+        "setup_verified":inference["ok"]==true && correction["status"]=="verified",
+        "inference":inference,"correction":correction})
 }
 
 fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
@@ -214,6 +247,11 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     state.policy = policy_from_req(req, &state.policy);
     sync_runtime(state, req);
     let settings = detect_settings(state, req);
+    if json_bool(req, &["retry_inference"], false) {
+        #[cfg(feature="ort-plane")]
+        ccp_detect::reset_inference_sessions();
+        state.detect_cache.clear();
+    }
     let key = detect_cache_key(&image, &settings);
     let bypass_cache = json_bool(req, &["bypass_cache"], false);
     if let Some(cached) = state.detect_cache.get(&key).filter(|_| !bypass_cache) {
@@ -239,6 +277,11 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
                             "handshake": returned,
                             "n_charts": hs.get("n_charts").cloned().unwrap_or(json!(1)),
                             "chart_type": hs.get("chart_type").cloned().unwrap_or(json!("")),
+                            "device": hs.get("device"),
+                            "detect_backend": hs.get("device"),
+                            "provider": hs.pointer("/inference/detect/provider"),
+                            "fallback": hs.pointer("/inference/detect/fallback"),
+                            "inference": hs.get("inference"),
                             "cached": true,
                         });
                     }
@@ -253,6 +296,9 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         return json!({
             "ok": false,
             "error": result.error,
+            "device":result.device,
+            "detect_backend":result.device,
+            "inference":result.inference,
             "n_charts": result.n_charts,
             "chart_type": result.chart_type,
         });
@@ -313,6 +359,10 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         "n_charts": result.n_charts,
         "chart_type": result.chart_type,
         "device": result.device,
+        "detect_backend":result.device,
+        "provider":result.inference.pointer("/detect/provider"),
+        "fallback":result.inference.pointer("/detect/fallback"),
+        "inference":result.inference,
         "recall_source": result.recall_source,
         "cached": false,
     })
@@ -629,6 +679,7 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
     }
     match cmd.as_str() {
         "devices" => (cmd_devices(state, req), false),
+        "setup_probe" => (cmd_setup_probe(state, req), false),
         "warmup" => (cmd_warmup(state, req), false),
         "detect" => (cmd_detect(state, req), false),
         "run" => (cmd_run(state, req), false),

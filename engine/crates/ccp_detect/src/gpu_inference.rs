@@ -1,7 +1,7 @@
-//! One GPU-only session contract for chart and plane networks.
+//! Explicit inference sessions and bounded Auto recovery for chart and plane networks.
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use ort::{environment::Environment, ep::ExecutionProvider, memory::DeviceType, session::Session};
+use ort::{environment::Environment, memory::DeviceType, session::Session};
 use crate::probe::{runtime_assignment, runtime_policy, DevicePolicy};
 
 struct RegisteredLibrary {
@@ -24,9 +24,9 @@ pub fn shutdown() -> Result<(), String> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum GpuEp { DirectMl, WebGpu, Vulkan }
+pub enum GpuEp { DirectMl, WebGpu, Vulkan, Cpu }
 impl GpuEp {
-    pub fn key(self) -> &'static str { match self { Self::DirectMl => "directml", Self::WebGpu => "webgpu", Self::Vulkan => "vulkan" } }
+    pub fn key(self) -> &'static str { match self { Self::DirectMl => "directml", Self::WebGpu => "webgpu", Self::Vulkan => "vulkan", Self::Cpu => "cpu" } }
 }
 
 fn dawn_backend(ep: GpuEp) -> &'static str {
@@ -46,13 +46,203 @@ fn claim_backend(current: &mut Option<&'static str>, requested: &'static str) ->
 }
 
 pub fn provider_order() -> Vec<GpuEp> {
-    match runtime_policy() {
+    let policy=runtime_policy();
+    let mut order=provider_order_for(policy);
+    if matches!(policy,DevicePolicy::Auto|DevicePolicy::Cpu) {order.retain(|ep|component_enabled(*ep));}
+    order
+}
+
+/// Installed selection controls activation, never the mandatory CPU provider.
+pub fn component_policy_identity() -> String {crate::probe::selected_components()}
+
+fn component_enabled(ep: GpuEp) -> bool {
+    ep==GpuEp::Cpu || component_policy_identity().split(',').any(|item|item.trim()==match ep {
+        GpuEp::DirectMl=>"directml",GpuEp::Vulkan|GpuEp::WebGpu=>"webgpu",GpuEp::Cpu=>"cpu"
+    })
+}
+
+fn provider_order_for(policy: DevicePolicy) -> Vec<GpuEp> {
+    match policy {
+        DevicePolicy::CpuInference => vec![GpuEp::Cpu],
         DevicePolicy::DirectMl => vec![GpuEp::DirectMl],
         DevicePolicy::WebGpu => vec![GpuEp::WebGpu],
         DevicePolicy::Vulkan => vec![GpuEp::Vulkan],
-        _ if cfg!(windows) => vec![GpuEp::DirectMl, GpuEp::WebGpu],
-        _ => vec![GpuEp::WebGpu],
+        _ if cfg!(windows) => vec![GpuEp::DirectMl, GpuEp::WebGpu, GpuEp::Cpu],
+        _ => vec![GpuEp::WebGpu, GpuEp::Cpu],
     }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Attempt { pub backend: String, pub reason: String }
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionRecord {
+    pub requested_policy: String,
+    pub backend: String,
+    pub provider: String,
+    pub adapter: Option<serde_json::Value>,
+    pub threads: Option<u32>,
+    pub cached: bool,
+    pub fallback: Option<serde_json::Value>,
+    pub attempts: Vec<Attempt>,
+}
+
+pub struct CachedInference {
+    model_identity: String,
+    policy: String,
+    ep: GpuEp,
+    session: InferenceSession,
+    pub record: ExecutionRecord,
+}
+
+/// Error origin, rather than OS wording, determines whether Auto may retry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FailureKind { Provider, Asset, Input, Cancelled }
+#[derive(Debug)]
+struct InferenceFailure { kind: FailureKind, reason: String }
+impl InferenceFailure {
+    fn provider(reason: impl Into<String>) -> Self { Self {kind:FailureKind::Provider,reason:reason.into()} }
+    fn asset(reason: impl Into<String>) -> Self { Self {kind:FailureKind::Asset,reason:reason.into()} }
+    fn execution(reason: String) -> Self {
+        let lower=reason.to_ascii_lowercase();
+        let kind=if lower.contains("cancelled") || lower.contains("canceled") {FailureKind::Cancelled}
+            else if lower.contains("invalid input") || lower.contains("invalid inference input") {FailureKind::Input}
+            else {FailureKind::Provider};
+        Self{kind,reason}
+    }
+    fn model_session(error: ort::Error, ep: GpuEp) -> Self {
+        let kind=Self::model_category(error.code(),error.message());
+        Self{kind,reason:format!("{} inference unavailable: {error}",ep.key())}
+    }
+    fn model_category(code:ort::ErrorCode,message:&str)->FailureKind {
+        let lower=message.to_ascii_lowercase();
+        if matches!(code,ort::ErrorCode::NoSuchFile|ort::ErrorCode::NoModel|ort::ErrorCode::InvalidProtobuf|ort::ErrorCode::InvalidGraph)
+            || ["protobuf parsing failed","unsupported model ir version","external data"].iter().any(|hint|lower.contains(hint)) {
+            FailureKind::Asset
+        } else {FailureKind::Provider}
+    }
+}
+impl From<String> for InferenceFailure {fn from(reason:String)->Self {Self::provider(reason)}}
+impl From<&str> for InferenceFailure {fn from(reason:&str)->Self {Self::provider(reason)}}
+impl std::fmt::Display for InferenceFailure {
+    fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {f.write_str(&self.reason)}
+}
+fn preflight_model(path: &Path) -> Result<(),InferenceFailure> {
+    let file=std::fs::File::open(path).map_err(|e|InferenceFailure::asset(format!("Cannot read inference model {}: {e}",path.display())))?;
+    if !file.metadata().map_err(|e|InferenceFailure::asset(e.to_string()))?.is_file() {
+        return Err(InferenceFailure::asset(format!("Inference model is not a regular file: {}",path.display())));
+    }
+    Ok(())
+}
+
+static QUARANTINE: OnceLock<Mutex<Vec<(String, GpuEp, String)>>> = OnceLock::new();
+pub fn reset_failures() {
+    if let Some(lock)=QUARANTINE.get() {if let Ok(mut failures)=lock.lock() {failures.clear();}}
+}
+fn device_failure(reason: &str) -> bool {
+    let reason=reason.to_ascii_lowercase();
+    ["no hardware", "no compatible hardware", "software renderer", "adapter", "device lost", "device removed",
+        "missing native webgpu", "system vulkan loader", "graphics driver", "webgpu library changed"]
+        .iter().any(|hint|reason.contains(hint))
+}
+fn quarantine(policy: &str, ep: GpuEp, reason: &str) {
+    if ep!=GpuEp::Cpu && device_failure(reason) {
+        if let Ok(mut failures)=QUARANTINE.get_or_init(||Mutex::new(Vec::new())).lock() {
+            if !failures.iter().any(|(p,e,_)|p==policy && *e==ep) {failures.push((policy.into(),ep,reason.into()));}
+        }
+    }
+}
+
+/// Shared bounded attempt loop, independently tested without any graphics runtime.
+fn try_candidates<T>(candidates: Vec<GpuEp>, mut failures: Vec<Attempt>,
+    mut run: impl FnMut(GpuEp)->Result<T,InferenceFailure>) -> Result<(GpuEp,T,Vec<Attempt>),String> {
+    let mut tried=Vec::new();
+    for ep in candidates {
+        if tried.contains(&ep) {continue;}
+        tried.push(ep);
+        match run(ep) {
+            Ok(value)=>return Ok((ep,value,failures)),
+            Err(failure)=>{
+                if failure.kind!=FailureKind::Provider {return Err(failure.reason);}
+                failures.push(Attempt{backend:ep.key().into(),reason:failure.reason});
+            }
+        }
+    }
+    Err(format!("Inference unavailable: {}",failures.iter().map(|a|format!("{}: {}",a.backend,a.reason)).collect::<Vec<_>>().join("; ")))
+}
+
+fn make_record(ep: GpuEp, session: &InferenceSession, attempts: Vec<Attempt>) -> ExecutionRecord {
+    let backend = session.backend(ep);
+    let provider = if backend.contains(":wgpu:") { "RustWgpu" } else { match ep {
+        GpuEp::Cpu => "CPUExecutionProvider", GpuEp::DirectMl => "DmlExecutionProvider",
+        _ => "WebGpuExecutionProvider",
+    }};
+    let adapter = if ep == GpuEp::DirectMl {
+        let all = crate::probe::enumerate_gpus();
+        let selected = std::env::var_os("CCP_ORT_DEVICE_ID").and_then(|_| crate::cache_key::ort_device_id().ok());
+        all.iter().filter(|gpu| selected.is_none_or(|index|gpu.index as i32 == index)).max_by_key(|gpu|gpu.vram_mb)
+            .map(|gpu|serde_json::json!({"name":gpu.name,"index":gpu.index,"backend":"dxgi","identity_confidence":"selected_index"}))
+    } else if ep == GpuEp::Cpu { None } else {
+        // The native prerequisite enumeration does not prove the plugin's physical selection.
+        Some(serde_json::json!({"backend":backend,"identity_confidence":"provider_only"}))
+    };
+    let fallback = attempts.first().map(|first|serde_json::json!({"from":first.backend,
+        "reason":attempts.iter().map(|a|format!("{}: {}",a.backend,a.reason)).collect::<Vec<_>>().join("; ")}));
+    ExecutionRecord { requested_policy: runtime_policy().as_str().into(), backend, provider:provider.into(),
+        adapter, threads:if ep==GpuEp::Cpu {Some(runtime_assignment().threads.clamp(1,8))} else {None},
+        cached:false, fallback, attempts }
+}
+
+/// Retry only this inference invocation. Input ownership stays with the caller,
+/// and cached plugin libraries outlive failed sessions. No cross-cache locks.
+pub fn execute<T>(cache: &mut Option<CachedInference>, path: &Path,
+    mut run: impl FnMut(&mut InferenceSession, &str) -> Result<T,String>) -> Result<T,String> {
+    preflight_model(path).map_err(|failure|failure.reason)?;
+    let identity = crate::cache_key::model_cache_identity(path);
+    let policy = crate::cache_key::runtime_cache_identity();
+    if cache.as_ref().is_some_and(|c|c.model_identity != identity || c.policy != policy) { *cache=None; }
+    let mut attempted = Vec::new();
+    let mut failures = Vec::new();
+    if let Some(active) = cache.as_mut() {
+        attempted.push(active.ep);
+        match run(&mut active.session, &active.record.backend) {
+            Ok(result) => { active.record.cached=true; return Ok(result); }
+            Err(reason) => {
+                let failure=InferenceFailure::execution(reason);
+                if failure.kind!=FailureKind::Provider {return Err(failure.reason);}
+                let reason=failure.reason;
+                quarantine(&policy,active.ep,&reason);
+                failures = active.record.attempts.clone();
+                failures.push(Attempt{backend:active.ep.key().into(),reason});
+                // Previous initialization failures are already accounted for.
+                for ep in provider_order() {
+                    if failures.iter().any(|failure|failure.backend==ep.key()) { attempted.push(ep); }
+                }
+            }
+        }
+        *cache=None;
+    }
+    if let Some(lock)=QUARANTINE.get() {
+        if let Ok(quarantined)=lock.lock() {
+            for (p,ep,reason) in quarantined.iter().filter(|(p,_,_)|p==&policy) {
+                let _=p;
+                if !attempted.contains(ep) {attempted.push(*ep);failures.push(Attempt{backend:ep.key().into(),reason:reason.clone()});}
+            }
+        }
+    }
+    let candidates=provider_order().into_iter().filter(|ep|!attempted.contains(ep)).collect();
+    let (ep,(session,result),failures)=try_candidates(candidates,failures,|ep| {
+        let result = commit_inference_session_classified(path,ep).and_then(|mut session| {
+            let backend=session.backend(ep);
+            let result=run(&mut session,&backend).map_err(InferenceFailure::execution)?;
+            Ok((session,result))
+        });
+        if let Err(failure)=&result {if failure.kind==FailureKind::Provider {quarantine(&policy,ep,&failure.reason);}}
+        result
+    })?;
+    let record=make_record(ep,&session,failures);
+    *cache=Some(CachedInference{model_identity:identity,policy,ep,session,record});
+    Ok(result)
 }
 
 /// Shared model boundary: both runtimes return owned tensors to the same
@@ -86,14 +276,19 @@ impl InferenceSession {
 }
 
 pub fn commit_inference_session(path: &Path, ep: GpuEp) -> Result<InferenceSession,String> {
+    commit_inference_session_classified(path,ep).map_err(|failure|failure.reason)
+}
+fn commit_inference_session_classified(path: &Path, ep: GpuEp) -> Result<InferenceSession,InferenceFailure> {
+    preflight_model(path)?;
+    if !component_enabled(ep) {return Err(format!("{} inference is disabled by installation choices. Open Check setup to enable it, or select CPU.",ep.key()).into());}
     #[cfg(all(target_os="linux",feature="rust-inference"))]
-    if ep != GpuEp::DirectMl && Path::new("/dev/dxg").exists() {
+    if matches!(ep, GpuEp::WebGpu | GpuEp::Vulkan) && Path::new("/dev/dxg").exists() {
         // WSL's Dozen lacks fullDrawIndexUint32. Dawn requires this drawing
         // feature even for ONNX compute; Rust/wgpu needs only actual compute
         // capabilities. Native Linux keeps the established ONNX provider.
-        return ccp_wgpu_infer::Session::new(path).map(InferenceSession::Rust);
+        return ccp_wgpu_infer::Session::new(path).map(InferenceSession::Rust).map_err(InferenceFailure::provider);
     }
-    commit_session(path,ep).map(InferenceSession::Ort)
+    commit_session_classified(path,ep).map(InferenceSession::Ort)
 }
 
 fn plugin_path() -> Result<PathBuf, String> {
@@ -109,31 +304,58 @@ fn plugin_path() -> Result<PathBuf, String> {
 }
 
 pub fn commit_session(path: &Path, ep: GpuEp) -> Result<Session, String> {
+    preflight_model(path).map_err(|failure|failure.reason)?;
+    commit_session_classified(path,ep).map_err(|failure|failure.reason)
+}
+fn commit_session_classified(path: &Path, ep: GpuEp) -> Result<Session, InferenceFailure> {
     #[cfg(windows)]
     if ep == GpuEp::Vulkan { preload_system_vulkan()?; }
-    if ep != GpuEp::DirectMl {
+    if matches!(ep, GpuEp::WebGpu | GpuEp::Vulkan) {
         require_hardware_backend(ep)?;
     }
     let mut builder = Session::builder().map_err(|e| e.to_string())?
-        .with_intra_threads(runtime_assignment().threads.max(1) as usize).map_err(|e| e.to_string())?
-        .with_disable_cpu_fallback().map_err(|e| e.to_string())?;
+        .with_intra_threads(runtime_assignment().threads.clamp(1,8) as usize).map_err(|e| e.to_string())?
+        .with_parallel_execution(false).map_err(|e| e.to_string())?
+        .with_intra_op_spinning(false).map_err(|e| e.to_string())?
+        .with_inter_op_spinning(false).map_err(|e| e.to_string())?;
+    if ep != GpuEp::Cpu {
+        builder = builder.with_disable_cpu_fallback().map_err(|e| e.to_string())?;
+    }
     if let Some(profile) = std::env::var_os("CCP_INFERENCE_PROFILE") {
         builder = builder.with_profiling(PathBuf::from(profile)).map_err(|e| e.to_string())?;
     }
     match ep {
+        GpuEp::Cpu => {
+            // rc.13's CPU registration only changes arena settings. Append the
+            // actual CPU device too, which overrides the default MaxEfficiency
+            // selection even when a failed GPU plugin remains registered.
+            builder = builder.with_no_environment_execution_providers().map_err(|e|e.to_string())?
+                .with_execution_providers([ort::ep::CPU::default().build().error_on_failure()])
+                .map_err(|e| e.to_string())?;
+            let environment=Environment::current().map_err(|e|e.to_string())?;
+            let devices=environment.devices().filter(|device|device.ep().ok()==Some("CPUExecutionProvider")
+                && device.hardware_device().ty()==DeviceType::CPU).collect::<Vec<_>>();
+            if devices.is_empty() {return Err("The installed ONNX Runtime has no CPU inference device. Repair the application package.".into());}
+            builder=builder.with_devices(devices,None).map_err(|e|e.to_string())?;
+        }
         GpuEp::DirectMl => {
             if !cfg!(windows) { return Err("DirectML requires Windows; choose WebGPU/Vulkan.".into()); }
             builder = builder.with_memory_pattern(false).map_err(|e| e.to_string())?
                 .with_parallel_execution(false).map_err(|e| e.to_string())?;
+            let adapters = crate::probe::enumerate_gpus();
             let adapter = if std::env::var_os("CCP_ORT_DEVICE_ID").is_some() {
-                crate::cache_key::ort_device_id()?
+                let requested = crate::cache_key::ort_device_id().map_err(|reason|InferenceFailure{kind:FailureKind::Input,reason})?;
+                if !adapters.iter().any(|gpu| gpu.index as i32 == requested) {
+                    return Err(format!("DirectML adapter {requested} is unavailable or is a software renderer.").into());
+                }
+                requested
             } else {
-                crate::probe::enumerate_gpus().into_iter().max_by_key(|g| g.vram_mb)
-                    .map(|g| g.index as i32).unwrap_or(0)
+                adapters.iter().max_by_key(|g| g.vram_mb).map(|g| g.index as i32)
+                    .ok_or("DirectML unavailable: no hardware DXGI adapter; software renderers are excluded.")?
             };
             eprintln!("ccp_detect: DirectML DXGI adapter index {adapter}");
-            ort::ep::DirectML::default().with_device_id(adapter)
-                .register(&mut builder).map_err(|e| e.to_string())?;
+            builder = builder.with_execution_providers([ort::ep::DirectML::default().with_device_id(adapter).build().error_on_failure()])
+                .map_err(|e|e.to_string())?;
         }
         GpuEp::WebGpu | GpuEp::Vulkan => {
             // The ORT environment owns registrations. Do not unregister a library
@@ -151,8 +373,8 @@ pub fn commit_session(path: &Path, ep: GpuEp) -> Result<Session, String> {
             claim_backend(&mut registration.as_mut().unwrap().backend, backend)?;
             let device = env.devices().filter(|d| d.ep().ok() == Some("WebGpuExecutionProvider")
                 && d.hardware_device().ty() == DeviceType::GPU)
-                .nth(crate::cache_key::ort_device_id()? as usize)
-                .ok_or_else(|| "No compatible hardware WebGPU adapter. GPU inference cannot fall back to CPU.".to_string())?;
+                .nth(crate::cache_key::ort_device_id().map_err(|reason|InferenceFailure{kind:FailureKind::Input,reason})? as usize)
+                .ok_or_else(|| "No compatible WebGPU device was exposed by the inference runtime.".to_string())?;
             eprintln!("ccp_detect: WebGPU vendor {}, device {}", device.hardware_device().vendor().unwrap_or("unknown"), device.hardware_device().id());
             let options = vec![
                 ("WebGpuExecutionProvider.enableGraphCapture".into(), "0".into()),
@@ -165,10 +387,10 @@ pub fn commit_session(path: &Path, ep: GpuEp) -> Result<Session, String> {
             builder = builder.with_devices([device], Some(&options)).map_err(|e| e.to_string())?;
             // Serialize initialization as well as registration; chart and
             // plane sessions share ORT's default native WebGPU context.
-            return builder.commit_from_file(path).map_err(|e| format!("{} GPU-only inference unavailable: {e}", ep.key()));
+            return builder.commit_from_file(path).map_err(|error|InferenceFailure::model_session(error,ep));
         }
     }
-    builder.commit_from_file(path).map_err(|e| format!("{} GPU-only inference unavailable: {e}", ep.key()))
+    builder.commit_from_file(path).map_err(|error|InferenceFailure::model_session(error,ep))
 }
 
 /// Dawn's native plugin can call LoadLibraryEx with DLL_LOAD_DIR and a bare
@@ -221,9 +443,9 @@ fn require_hardware_backend(ep: GpuEp) -> Result<(), String> {
         }
     };
     let hardware:Vec<_>=adapters.into_iter().map(|adapter|adapter.get_info())
-        .filter(|info|matches!(info.device_type,wgpu::DeviceType::DiscreteGpu|wgpu::DeviceType::IntegratedGpu)).collect();
+        .filter(|info|crate::probe::eligible_wgpu_adapter(info)).collect();
     if hardware.is_empty() {
-        return Err(format!("No hardware {backend:?} adapter available for {} inference. Software graphics drivers and CPU inference fallback are disabled.",ep.key()));
+        return Err(format!("No hardware {backend:?} adapter available for {} inference. Software renderers cannot provide GPU inference; choose Auto or CPU.",ep.key()));
     }
     eprintln!("ccp_detect: hardware graphics prerequisite: {}",hardware.iter().map(|info|info.name.as_str()).collect::<Vec<_>>().join(", "));
     Ok(())
@@ -233,7 +455,62 @@ fn require_hardware_backend(ep: GpuEp) -> Result<(), String> {
 mod tests {
     use super::*;
     #[test]
-    fn every_allowed_provider_is_gpu_only() {
+    fn cpu_is_explicit_and_legacy_cpu_keeps_auto_inference() {
+        assert_eq!(provider_order_for(DevicePolicy::CpuInference),vec![GpuEp::Cpu]);
+        assert_eq!(provider_order_for(DevicePolicy::Cpu),provider_order_for(DevicePolicy::Auto));
+        assert_eq!(provider_order_for(DevicePolicy::Auto).last(),Some(&GpuEp::Cpu));
+        assert_eq!(provider_order_for(DevicePolicy::DirectMl),vec![GpuEp::DirectMl]);
+    }
+    #[test]
+    fn execution_failure_and_malformed_output_retry_once_then_cpu() {
+        let mut called=Vec::new();
+        let (ep,value,failures)=try_candidates(vec![GpuEp::DirectMl,GpuEp::DirectMl,GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+            called.push(ep);
+            match ep {GpuEp::DirectMl=>Err("device lost during execution".into()),
+                GpuEp::WebGpu=>Err("malformed detector output".into()),_=>Ok(vec![1.0f32])}
+        }).unwrap();
+        assert_eq!(called,vec![GpuEp::DirectMl,GpuEp::WebGpu,GpuEp::Cpu]);
+        assert_eq!(ep,GpuEp::Cpu);assert_eq!(value,vec![1.0]);assert_eq!(failures.len(),2);
+    }
+    #[test]
+    fn forced_engine_does_not_retry_and_asset_errors_are_fatal() {
+        let mut called=Vec::new();
+        assert!(try_candidates::<()>(vec![GpuEp::WebGpu],Vec::new(),|ep|{called.push(ep);Err("device lost".into())}).is_err());
+        assert_eq!(called,vec![GpuEp::WebGpu]);
+        called.clear();
+        assert!(try_candidates::<()>(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep|{called.push(ep);Err(InferenceFailure::asset("Failed to load model: external data missing"))}).is_err());
+        assert_eq!(called,vec![GpuEp::WebGpu]);
+        assert_eq!(InferenceFailure::execution("cancelled".into()).kind,FailureKind::Cancelled);
+    }
+    #[test]
+    fn missing_or_denied_gpu_dependencies_fall_back_but_assets_do_not() {
+        for message in ["GPU library: No such file or directory", "Vulkan driver: Permission denied"] {
+            let mut called=Vec::new();
+            let (ep,_,attempts)=try_candidates(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+                called.push(ep);
+                if ep==GpuEp::WebGpu {Err(InferenceFailure::provider(message))} else {Ok(())}
+            }).unwrap();
+            assert_eq!(ep,GpuEp::Cpu);assert_eq!(called,vec![GpuEp::WebGpu,GpuEp::Cpu]);
+            assert_eq!(attempts[0].reason,message);
+        }
+        let mut called=Vec::new();
+        assert!(try_candidates::<()>(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+            called.push(ep);Err(InferenceFailure::asset("Model data: Permission denied"))
+        }).is_err());
+        assert_eq!(called,vec![GpuEp::WebGpu]);
+    }
+    #[test]
+    fn missing_model_is_rejected_before_any_provider_is_initialized() {
+        let path=std::env::temp_dir().join(format!("ccp-no-such-model-{}.onnx",std::process::id()));
+        let mut cache=None;let mut executions=0;
+        let error=execute(&mut cache,&path,|_,_|{executions+=1;Ok(())}).unwrap_err();
+        assert!(error.contains("Cannot read inference model"));assert_eq!(executions,0);assert!(cache.is_none());
+        for code in [ort::ErrorCode::InvalidProtobuf,ort::ErrorCode::InvalidGraph,ort::ErrorCode::NoSuchFile] {
+            assert_eq!(InferenceFailure::model_category(code,"Model asset invalid"),FailureKind::Asset);
+        }
+    }
+    #[test]
+    fn gpu_provider_names_remain_compatible() {
         for ep in [GpuEp::DirectMl, GpuEp::WebGpu, GpuEp::Vulkan] {
             assert!(matches!(ep.key(), "directml" | "webgpu" | "vulkan"));
         }

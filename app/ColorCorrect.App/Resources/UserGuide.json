@@ -78,7 +78,7 @@
       "No chart found: check focus, exposure, framing, and patch visibility, then press Detect again. Verify the detected chart type and overlay. Do not use Blank.JPG as the chart. Try a clear chart-bearing image from the same setup.",
       "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
       "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
-      "Worker or native-library error: open Processing settings, inspect the error, and restart the worker. Chart and plane inference require DirectML or WebGPU; there is no CPU inference fallback. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
+      "Worker or native-library error: open Processing settings, inspect the error, and restart the worker. Auto chart and plane detection use a compatible GPU and recover to CPU when needed. Select CPU for detection without a GPU; a forced GPU engine reports an error if unavailable. Use Check setup under Device details to inspect prerequisites and repair optional support. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
     ]
   },
   {

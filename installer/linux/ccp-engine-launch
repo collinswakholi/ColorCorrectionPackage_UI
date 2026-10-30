@@ -1,7 +1,7 @@
 #!/bin/sh
 # This process becomes the worker. No GPU environment reaches the desktop process.
 set -eu
-APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
 export CCP_NEW_UI_ROOT="$APP_DIR"
 : "${ORT_DYLIB_PATH:=$APP_DIR/libonnxruntime.so}"
 export ORT_DYLIB_PATH

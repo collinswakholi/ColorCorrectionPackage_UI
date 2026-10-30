@@ -245,6 +245,26 @@ class SDKTests(unittest.TestCase):
     def fit(self, **options):
         return self.client.calibrate(self.folder / "chart.jpg", output_dir=self.folder / "results", **options)
 
+    def test_explicit_cpu_inference_is_negotiated_before_work(self):
+        with Client(sys.executable, root=ROOT, backend="cpu-inference", timeout=5) as client:
+            detected = client.detect(self.folder / "chart.jpg")
+            self.assertEqual(detected.backends.actual["detect"], "cpu")
+            record = detected.backends.diagnostics["inference"]["detect"]
+            self.assertEqual(record["provider"], "CPUExecutionProvider")
+            self.assertEqual(record["requested_policy"], "cpu-inference")
+            client.engine.ready["capabilities"] = []
+            with self.assertRaisesRegex(UnsupportedCapabilityError, "CPU inference"):
+                client.detect(self.folder / "chart.jpg")
+            reply = client.engine.request("devices", check=False)
+            self.assertEqual(reply["code"], "unsupported_capability")
+
+    def test_legacy_cpu_policy_keeps_its_original_shape(self):
+        with Client(sys.executable, root=ROOT, backend="cpu", timeout=5) as client:
+            client.engine._start()
+            client.engine.ready["capabilities"] = []
+            reply = client.engine.request("devices")
+            self.assertEqual(reply["echo"]["policy"], "cpu")
+
     def test_fast_mode_defaults_on_and_requires_worker_support(self):
         self.assertTrue(ApplyOptions().to_dict()["fast_mode"])
         self.assertTrue(CalibrationOptions().to_dict()["fast_mode"])

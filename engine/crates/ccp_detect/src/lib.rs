@@ -16,6 +16,12 @@ pub mod paths;
 pub mod plane;
 pub mod probe;
 
+/// Explicit retry drops sessions without unregistering native plugins still owned by ORT.
+pub fn reset_inference_sessions() {
+    #[cfg(feature="ort-plane")]
+    {infer_ort::clear_sessions(); plane::clear_session(); gpu_inference::reset_failures();}
+}
+
 /// Release native sessions and GPU plugin resources before process teardown.
 pub fn shutdown_inference() -> Result<(), String> {
     #[cfg(feature = "ort-plane")]
@@ -100,6 +106,8 @@ pub struct DetectResult {
     pub backend: String,
     pub runtime: String,
     pub device: String,
+    #[serde(default)]
+    pub inference: serde_json::Value,
     pub n_dets: i32,
     pub n_charts: i32,
 }
@@ -119,6 +127,7 @@ impl Default for DetectResult {
             backend: "onnx".into(),
             runtime: "ort".into(),
             device: String::new(),
+            inference: serde_json::Value::Null,
             n_dets: 0,
             n_charts: 0,
         }

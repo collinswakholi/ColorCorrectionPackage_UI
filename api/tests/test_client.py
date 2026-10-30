@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from colorcorrect import Engine, EngineError
+from colorcorrect import Engine, EngineError, Client, MissingRuntimeError
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE = Path(__file__).with_name("fake_worker.py")
@@ -16,6 +16,40 @@ POPEN = subprocess.Popen
 
 
 class DiscoveryTests(unittest.TestCase):
+    def test_missing_native_core_runtime_fails_before_launch_and_does_not_borrow_ambient_runtime(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "refs").mkdir(); (root / "refs/neutrals.json").write_text("{}")
+            worker = root / ("ccp-engine.exe" if os.name == "nt" else "ccp-engine")
+            worker.touch()
+            runtime_name = "onnxruntime.dll" if os.name == "nt" else ("libonnxruntime.dylib" if sys.platform == "darwin" else "libonnxruntime.so")
+            missing = root / runtime_name
+            ambient = root / "developer-runtime"
+            ambient.touch()
+            with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect.subprocess.Popen") as launch:
+                with self.assertRaisesRegex(FileNotFoundError, "Required ONNX Runtime library is missing") as error:
+                    Engine(root=root).devices()
+                self.assertIn(str(missing), str(error.exception))
+                with self.assertRaisesRegex(MissingRuntimeError, "Required ONNX Runtime library is missing"):
+                    with Client(root=root):
+                        self.fail("Missing native runtime must be reported before entering the client context")
+            launch.assert_not_called()
+
+    def test_optional_gpu_plugin_is_not_a_cpu_launch_prerequisite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "refs").mkdir(); (root / "refs/neutrals.json").write_text("{}")
+            worker = root / ("ccp-engine.exe" if os.name == "nt" else "ccp-engine")
+            worker.touch()
+            runtime_name = "onnxruntime.dll" if os.name == "nt" else ("libonnxruntime.dylib" if sys.platform == "darwin" else "libonnxruntime.so")
+            (root / runtime_name).touch()
+            def launch(args, **options):
+                return POPEN([sys.executable, str(FAKE)], **options)
+            with patch("colorcorrect.subprocess.Popen", side_effect=launch):
+                with Client(root=root) as client:
+                    self.assertTrue(client.engine.devices()["ok"])
+            self.assertFalse(any(root.glob("*providers_webgpu*")))
+
     def test_explicit_package_root_ignores_ambient_worker_and_runtime(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -175,6 +209,84 @@ class ClientTests(unittest.TestCase):
                 engine.request("deferred", path=marker)
                 self.assertFalse(marker.exists())
             self.assertEqual(marker.read_text(encoding="utf-8"), "complete")
+
+    def test_shutdown_acknowledgement_allows_native_cleanup_before_exit(self):
+        with tempfile.TemporaryDirectory(prefix="colorcorrect-cleanup-") as directory:
+            for command in ("close", "shutdown", "quit"):
+                with self.subTest(command=command):
+                    marker = Path(directory) / f"{command}.txt"
+                    self.engine.request("deferred_after_ack", path=marker)
+                    process = self.engine._process
+                    if command == "close":
+                        self.engine.close()
+                    else:
+                        self.engine.request(command)
+                    self.assertEqual(process.returncode, 0)
+                    self.assertEqual(marker.read_text(encoding="utf-8"), "complete")
+                    self.assertIsNone(self.engine._process)
+
+    def test_unresponsive_cleanup_after_acknowledgement_is_still_terminated(self):
+        with tempfile.TemporaryDirectory(prefix="colorcorrect-hung-cleanup-") as directory:
+            marker = Path(directory) / "unfinished.txt"
+            self.engine.request("deferred_after_ack", path=marker, delay=60)
+            process = self.engine._process
+            self.engine.timeout = .1
+            self.engine.close()
+            self.assertIsNotNone(process.poll())
+            self.assertNotEqual(process.returncode, 0)
+            self.assertFalse(marker.exists())
+
+    def test_explicit_shutdown_reports_nonzero_native_cleanup_exit(self):
+        with tempfile.TemporaryDirectory(prefix="colorcorrect-failed-cleanup-") as directory:
+            self.engine.request("deferred_after_ack", path=Path(directory) / "partial.txt", exit_code=3)
+            with self.assertRaisesRegex(EngineError, "cleanup failed") as caught:
+                self.engine.request("shutdown")
+            self.assertEqual(caught.exception.reply["exit_code"], 3)
+            self.assertIsNone(self.engine._process)
+
+    def test_context_cleanup_does_not_mask_body_error(self):
+        with tempfile.TemporaryDirectory(prefix="colorcorrect-body-error-") as directory:
+            with self.assertRaisesRegex(ValueError, "original error"):
+                with self.engine:
+                    self.engine.request("deferred_after_ack", path=Path(directory) / "partial.txt", exit_code=3)
+                    raise ValueError("original error")
+            self.assertIsNone(self.engine._process)
+
+    def test_keyboard_interrupt_during_request_still_stops_worker(self):
+        def interrupt(_):
+            raise KeyboardInterrupt()
+        self.engine.progress = interrupt
+        with self.assertRaises(KeyboardInterrupt):
+            self.engine.devices()
+        self.assertIsNone(self.engine._process)
+        self.engine.progress = None
+        self.assertTrue(self.engine.devices()["ok"])
+
+    def test_interrupt_after_shutdown_acknowledgement_still_reaps_owned_worker(self):
+        with tempfile.TemporaryDirectory(prefix="colorcorrect-interrupted-cleanup-") as directory:
+            for command in ("close", "shutdown", "quit"):
+                with self.subTest(command=command):
+                    marker = Path(directory) / f"{command}.txt"
+                    self.engine.request("deferred_after_ack", path=marker, delay=60)
+                    process = self.engine._process
+                    wait = process.wait
+                    interrupted = False
+                    def interrupt_first_wait(*args, **kwargs):
+                        nonlocal interrupted
+                        if not interrupted:
+                            interrupted = True
+                            raise KeyboardInterrupt()
+                        return wait(*args, **kwargs)
+                    with patch.object(process, "wait", side_effect=interrupt_first_wait):
+                        with self.assertRaises(KeyboardInterrupt):
+                            if command == "close":
+                                self.engine.close()
+                            else:
+                                self.engine.request(command)
+                    self.assertTrue(interrupted)
+                    self.assertIsNotNone(process.poll())
+                    self.assertFalse(marker.exists())
+                    self.assertIsNone(self.engine._process)
 
 
 if __name__ == "__main__":

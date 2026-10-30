@@ -23,7 +23,7 @@ def main():
     if not module.is_relative_to(Path(sys.prefix).resolve()):
         raise RuntimeError("SDK was imported from outside the clean virtual environment")
     report = {"sdk_version": importlib.metadata.version("colorcorrect-studio"), "sdk_module": str(module),
-              "scope": "installed SDK/worker smoke only", "full_workflow": "pending hardware GPU acceptance"}
+              "scope": "installed SDK/worker smoke only", "full_workflow": "checked separately by acceptance_cpu_workflow.py"}
     with Engine(root=package, policy="cpu") as engine:
         if not engine.executable.resolve().is_relative_to(package):
             raise RuntimeError("Worker escaped the installed package")

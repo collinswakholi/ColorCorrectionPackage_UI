@@ -20,9 +20,14 @@ read-only repository permissions and do not publish releases.
 
 ## Publish a preview version
 
+These steps require a maintainer-approved release. The next planned native
+version is **0.2.2**; do not reuse or replace published 0.2.1 assets.
+
 1. Update the native version coherently in the application, shared .NET properties,
    internal Rust packages, and Cargo lockfile. The SDK has its own version and
-   does not need a version bump unless it changes. Update the changelog and README
+   needs a new version when its contents change. The pending CPU inference and
+   shutdown fixes change the SDK, so use **2.2.2** for its next release rather than
+   distributing different wheel bytes as 2.2.1. Update the changelog and README
    download links. Source/version tests check consistency.
 2. Merge the reviewed revision into `main`. Keep essential regressions, notices,
    public fixtures and source provenance; omit private sessions and build caches.
@@ -31,8 +36,8 @@ read-only repository permissions and do not publish releases.
    ```sh
    git switch main
    git pull --ff-only
-   git tag -a v0.2.0 -m "ColorCorrect Studio 0.2.0 preview"
-   git push origin v0.2.0
+   git tag -a v0.2.2 -m "ColorCorrect Studio 0.2.2 preview"
+   git push origin v0.2.2
    ```
 
 4. The tag push runs the five native jobs again. Only after every job succeeds
@@ -58,11 +63,9 @@ releases are verified and left unchanged on a successful retry.
 
 ## Validation and release status
 
-The maintainer authorized **0.2.1 as the current unsigned release**. After the
-version-tag workflow has verified and uploaded all seventeen assets, review the
-release notes, confirm the asset digests and source identities, and mark that
-release as a full release and Latest. Keep the original 0.2.0 assets unchanged.
-This one-time promotion does not change the workflow's default prerelease policy.
+**0.2.1 is the current unsigned full release.** Its authorized promotion is
+complete. Keep its assets and the original 0.2.0 assets unchanged. That promotion
+does not change the workflow's default prerelease policy for a new version.
 
 Signing is planned for **0.2.2**, subject to the maintainer supplying credentials
 and authorizing that release. Do not sign or replace 0.2.1 assets later; signed
@@ -70,8 +73,8 @@ artifacts require the new version and their own verification. macOS remains
 source only.
 
 A release designation does not imply native GPU, driver, interactive UI, high-DPI, clipboard,
-or full workflow certification on every target. Hosted runners test installation
-and CPU application without claiming GPU inference. Preserve explicit skips,
+or full workflow certification on every target. Hosted runners check installation
+and CPU workflows without establishing hardware GPU execution. Preserve explicit skips,
 failures and hardware gaps in the evidence. Windows Sandbox and WSL GPU/UI checks
 retain their own package hashes; they do not certify ARM hardware or macOS GPUs.
 

@@ -36,6 +36,7 @@ struct HandshakeJson {
     backend: String,
     runtime: String,
     device: String,
+    inference: serde_json::Value,
     chart_type: String,
     cli_chart: String,
     score: f64,
@@ -130,6 +131,7 @@ pub fn make_handshake(
         backend: result.backend.clone(),
         runtime: result.runtime.clone(),
         device: result.device.clone(),
+        inference: result.inference.clone(),
         chart_type: detection.chart_type.clone(),
         cli_chart: if result.cli_chart.is_empty() {
             cli_chart_from_detector(&detection.chart_type).to_string()

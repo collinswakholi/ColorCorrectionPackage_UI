@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
 "$APP_DIR/check-system" >&2
 export CCP_NEW_UI_ROOT="$APP_DIR" CCP_ENGINE_EXE="$APP_DIR/ccp-engine-launch"
 export ORT_DYLIB_PATH="$APP_DIR/libonnxruntime.so"
