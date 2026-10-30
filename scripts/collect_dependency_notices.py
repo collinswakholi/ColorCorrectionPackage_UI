@@ -9,10 +9,13 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from package_native import TARGETS
@@ -23,6 +26,66 @@ LEGAL = re.compile(r"^(?:licen[cs]e|copying|copyright|notice|third.?party.?notic
 # license file. Retain declarations/authors and supply the declared standard text.
 STANDARD_TEXT = {("buildid", "1.0.5"): "MPL-2.0", ("utf8-chars", "3.0.7"): "Apache-2.0"}
 SPDX_COMMIT = "d46e94e2c78ceede1cfc63cfa0396472d2798d4c"
+
+
+class NoticeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        target = urllib.parse.urlsplit(new_url)
+        if target.scheme != "https":
+            raise ValueError("Dependency notice redirects must use HTTPS")
+        redirected = super().redirect_request(request, response, code, message, headers, new_url)
+        if redirected is not None and (target.hostname != "api.github.com" or target.port not in (None, 443)):
+            redirected.remove_header("Authorization")
+        return redirected
+
+
+def fetch_notice_bytes(url: str, token: str | None = None) -> bytes:
+    """Bounded public-notice fetch; authorization is restricted to GitHub's API."""
+    target = urllib.parse.urlsplit(url)
+    if target.scheme != "https":
+        raise ValueError("Dependency notices must use HTTPS")
+    headers = {"User-Agent": "ColorCorrect-notice-collector/1"}
+    if token and target.hostname == "api.github.com" and target.port in (None, 443):
+        headers["Authorization"] = "Bearer " + token
+    opener = urllib.request.build_opener(NoticeRedirectHandler())
+    for attempt in range(3):
+        try:
+            with opener.open(urllib.request.Request(url, headers=headers), timeout=45) as response:
+                declared = (getattr(response, "headers", None) or {}).get("Content-Length")
+                expected = int(declared) if declared is not None else None
+                if expected is not None and (expected < 0 or expected > 8 * 1024 * 1024):
+                    raise ValueError("Invalid dependency notice Content-Length: " + url)
+                data = response.read(8 * 1024 * 1024 + 1)
+                if expected is not None and len(data) != expected:
+                    raise ValueError("Incomplete dependency notice Content-Length: " + url)
+            if len(data) > 8 * 1024 * 1024:
+                raise ValueError("Dependency notice exceeds the 8 MiB limit: " + url)
+            return data
+        except urllib.error.HTTPError as error:
+            rate_limited = error.code == 429 or (error.code == 403 and (
+                error.headers.get("X-RateLimit-Remaining") == "0"
+                or bool(error.headers.get("Retry-After"))
+                or "rate limit" in str(error.reason).lower()))
+            if attempt == 2 or not (rate_limited or error.code in (429, 500, 502, 503, 504)):
+                raise
+            # GitHub requires at least a minute for an unhinted secondary
+            # limit. Fail instead of sleeping past this fetcher's bound.
+            delay = 60.0 if rate_limited else float(2 ** attempt)
+            try:
+                if error.headers.get("Retry-After"):
+                    delay = max(float(2 ** attempt), float(error.headers["Retry-After"]))
+                elif rate_limited and error.headers.get("X-RateLimit-Reset"):
+                    delay = max(float(2 ** attempt), float(error.headers["X-RateLimit-Reset"]) - time.time())
+            except ValueError:
+                pass
+            if delay > 10:
+                raise RuntimeError("Dependency notice service is rate limited; retry after its reset. No notice was omitted.") from None
+            time.sleep(delay)
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
+    raise AssertionError("Unreachable notice retry state")
 
 
 def github(repository: str | None) -> str | None:
@@ -179,9 +242,7 @@ def collect(root: Path, rid: str, published: Path, output: Path, cache: Path,
             return location.read_bytes()
         if not fetch:
             raise ValueError("Upstream notice is not cached; run collector with --fetch-upstream: " + url)
-        request = urllib.request.Request(url, headers={"User-Agent": "ColorCorrect-notice-collector/1"})
-        with urllib.request.urlopen(request, timeout=45) as response:
-            data = response.read(8 * 1024 * 1024)
+        data = fetch_notice_bytes(url, os.environ.get("CCP_NOTICE_GITHUB_TOKEN"))
         location.write_bytes(data)
         return data
 

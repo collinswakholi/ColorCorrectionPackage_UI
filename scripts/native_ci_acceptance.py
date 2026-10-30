@@ -105,6 +105,9 @@ def main():
     parser.add_argument("--inno-compiler", type=Path)
     parser.add_argument("--install-package", action="store_true", help="explicitly install the candidate on this disposable native test host")
     args = parser.parse_args()
+    # The read-only token belongs only to notice collection in the packager.
+    # Do not pass it to installed applications, workers or acceptance harnesses.
+    notice_token = os.environ.pop("CCP_NOTICE_GITHUB_TOKEN", None)
     if args.mode == "hardware" and os.environ.get("CCP_GPU_ACCEPTANCE_ENABLED") != "1":
         parser.error("Hardware acceptance requires an explicitly provisioned runner and CCP_GPU_ACCEPTANCE_ENABLED=1")
     root = Path(__file__).resolve().parents[1]
@@ -168,7 +171,10 @@ def main():
                 command += ["--vc-redist", fetch_vc_redist(args.rid, work / "prerequisites")]
             else:
                 command += ["--deb"]
-            run(command)
+            package_environment = dict(os.environ)
+            if notice_token:
+                package_environment["CCP_NOTICE_GITHUB_TOKEN"] = notice_token
+            run(command, env=package_environment)
             if os.name == "nt":
                 compiler = args.inno_compiler or Path(os.environ.get("CCP_INNO_COMPILER", "C:/Program Files (x86)/Inno Setup 6/ISCC.exe"))
                 if not compiler.is_file():

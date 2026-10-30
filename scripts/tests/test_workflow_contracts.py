@@ -29,6 +29,17 @@ def load(name):
 
 
 class WorkflowContracts(unittest.TestCase):
+    def test_notice_token_is_readonly_and_scoped_to_native_packaging_step(self):
+        workflow = load("native-builds.yml")
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        found = []
+        for name, job in workflow["jobs"].items():
+            for step in job["steps"]:
+                if "CCP_NOTICE_GITHUB_TOKEN" in step.get("env", {}):
+                    found.append((name, step["name"]))
+                    self.assertEqual(step["env"]["CCP_NOTICE_GITHUB_TOKEN"], "${{ github.token }}")
+        self.assertEqual(found, [("packages", "Native package and installed SDK smoke (GPU gate remains separate)")])
+
     def test_concurrency_separates_main_pull_request_dispatch_and_version_tag(self):
         concurrency = load("native-builds.yml")["concurrency"]
 

@@ -125,6 +125,7 @@ class ReleaseContracts(unittest.TestCase):
 
     def test_clean_guest_environment_does_not_inherit_development_or_gpu_paths(self):
         unsafe = {"CCP_ENGINE_EXE": "dev.exe", "CCP_NEW_UI_ROOT": "source", "PYTHONPATH": "source/api",
+                  "CCP_NOTICE_GITHUB_TOKEN": "test-readonly-token",
                   "LD_LIBRARY_PATH": "dev/torch", "VK_DRIVER_FILES": "dev/icd", "WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER": "1",
                   "ORT_DYLIB_PATH": "dev/runtime", "PATH": "developer/toolchain", "HOME": "/home/guest",
                   "LD_PRELOAD": "dev/libhook.so", "LD_AUDIT": "dev/libaudit.so", "DOTNET_STARTUP_HOOKS": "dev/hook.dll",
@@ -135,6 +136,7 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(result["CCP_ENGINE_EXE"], str(Path("/installed") / "ccp-engine-launch"))
         self.assertEqual(result["CCP_WSL_GPU_ADDON"], "0")
         for key in ("PYTHONPATH", "VK_DRIVER_FILES", "WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER", "LD_PRELOAD", "LD_AUDIT",
+                    "CCP_NOTICE_GITHUB_TOKEN",
                     "DOTNET_STARTUP_HOOKS", "DOTNET_ADDITIONAL_DEPS", "DOTNET_SHARED_STORE", "COMPlus_GCStress"):
             self.assertNotIn(key, result)
         self.assertNotIn("developer", result["PATH"])
