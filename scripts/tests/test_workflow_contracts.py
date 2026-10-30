@@ -165,6 +165,12 @@ class WorkflowContracts(unittest.TestCase):
                 self.assertTrue(paths)
                 self.assertTrue(all(path.startswith("artifacts/native-ci/osx-arm64/evidence/")
                                     and path.endswith((".json", ".log", ".txt", ".trx")) for path in paths))
+                self.assertFalse(any("**" in path for path in paths))
+                self.assertTrue({
+                    "artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/result.json",
+                    "artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/cpu-inference-profile*.json",
+                    "artifacts/native-ci/osx-arm64/evidence/sdk-full-auto/result.json",
+                }.issubset(paths))
         hardware = load("hardware-gpu-acceptance.yml")
         self.assertEqual(set(hardware["on"]), {"workflow_dispatch"})
         self.assertEqual(hardware["on"]["workflow_dispatch"]["inputs"]["enable_hardware_run"]["default"], "false")

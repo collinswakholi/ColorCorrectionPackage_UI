@@ -817,19 +817,23 @@ mod tests {
     #[test]
     fn devices_ok() {
         let mut state = ServeState::default();
+        let auto = probe_accelerators("auto");
         let (reply, stop) = dispatch(&mut state, &json!({"cmd":"devices","policy":"cpu"}));
         assert!(!stop);
         assert_eq!(reply["ok"], true);
         assert!(reply.get("cpu").is_some());
         assert!(reply.get("backends").is_some());
         assert!(reply.get("assignment").is_some());
-        assert_ne!(reply["assignment"]["detect"], "cpu");
-        assert_ne!(reply["assignment"]["plane"], "cpu");
+        // Legacy cpu selects correction; detection keeps Auto's plan, which
+        // can legitimately be CPU in a CPU-only installation.
+        assert_eq!(reply["assignment"]["detect"], auto.assignment.detect);
+        assert_eq!(reply["assignment"]["plane"], auto.assignment.plane);
         assert_eq!(reply["assignment"]["apply"], "cpu");
     }
 
     #[test]
     fn fresh_detect_honors_policy_without_devices_or_warmup() {
+        let auto = probe_accelerators("auto");
         let mut prior = probe_accelerators("cpu");
         prior.policy = "webgpu".into();
         prior.assignment.detect = "webgpu".into();
@@ -858,7 +862,8 @@ mod tests {
         assert_eq!(reply["ok"], false);
         assert_eq!(state.policy, "cpu");
         assert_eq!(ccp_detect::runtime_policy().as_str(), "cpu");
-        assert_ne!(ccp_detect::runtime_assignment().detect, "cpu");
+        assert_eq!(ccp_detect::runtime_assignment().detect, auto.assignment.detect);
+        assert_eq!(ccp_detect::runtime_assignment().plane, auto.assignment.plane);
         assert_eq!(ccp_detect::runtime_assignment().apply, "cpu");
     }
 

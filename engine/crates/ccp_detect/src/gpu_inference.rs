@@ -30,9 +30,36 @@ impl GpuEp {
 }
 
 fn dawn_backend(ep: GpuEp) -> &'static str {
-    if ep == GpuEp::Vulkan || cfg!(target_os = "linux") { "Vulkan" }
-    else if cfg!(target_os = "macos") { "Metal" }
+    dawn_backend_for(ep, std::env::consts::OS)
+}
+
+fn dawn_backend_for(ep: GpuEp, target_os: &str) -> &'static str {
+    if ep == GpuEp::Vulkan || target_os == "linux" { "Vulkan" }
+    else if target_os == "macos" { "Metal" }
     else { "D3D12" }
+}
+
+fn webgpu_options(backend: &str) -> Result<Vec<(String, String)>, String> {
+    // ORT 1.24.4 ParseWebGpuContextConfig accepts only D3D12/Vulkan overrides.
+    // Metal is selected by Dawn's platform default; passing "Metal" can abort
+    // the native plugin instead of returning an error across the C API.
+    let explicit_backend = match backend {
+        "D3D12" => Some("D3D12"),
+        "Vulkan" => Some("Vulkan"),
+        "Metal" => None,
+        other => return Err(format!("Unsupported WebGPU graphics backend: {other}. Choose Auto or a supported detection engine.")),
+    };
+    let mut options = vec![
+        ("WebGpuExecutionProvider.enableGraphCapture".into(), "0".into()),
+        ("WebGpuExecutionProvider.powerPreference".into(), "high-performance".into()),
+        // This is an ORT context ID, not a physical adapter index.
+        // Nonzero IDs require an externally supplied WGPUDevice.
+        ("WebGpuExecutionProvider.deviceId".into(), "0".into()),
+    ];
+    if let Some(value) = explicit_backend {
+        options.push(("WebGpuExecutionProvider.dawnBackendType".into(), value.into()));
+    }
+    Ok(options)
 }
 
 fn claim_backend(current: &mut Option<&'static str>, requested: &'static str) -> Result<(), String> {
@@ -370,20 +397,13 @@ fn commit_session_classified(path: &Path, ep: GpuEp) -> Result<Session, Inferenc
                 *registration = Some(RegisteredLibrary { path: library, library: handle, backend: None });
             }
             let backend = dawn_backend(ep);
+            let options = webgpu_options(backend)?;
             claim_backend(&mut registration.as_mut().unwrap().backend, backend)?;
             let device = env.devices().filter(|d| d.ep().ok() == Some("WebGpuExecutionProvider")
                 && d.hardware_device().ty() == DeviceType::GPU)
                 .nth(crate::cache_key::ort_device_id().map_err(|reason|InferenceFailure{kind:FailureKind::Input,reason})? as usize)
                 .ok_or_else(|| "No compatible WebGPU device was exposed by the inference runtime.".to_string())?;
             eprintln!("ccp_detect: WebGPU vendor {}, device {}", device.hardware_device().vendor().unwrap_or("unknown"), device.hardware_device().id());
-            let options = vec![
-                ("WebGpuExecutionProvider.enableGraphCapture".into(), "0".into()),
-                ("WebGpuExecutionProvider.powerPreference".into(), "high-performance".into()),
-                // This is an ORT context ID, not a physical adapter index.
-                // Nonzero IDs require an externally supplied WGPUDevice.
-                ("WebGpuExecutionProvider.deviceId".into(), "0".into()),
-                ("WebGpuExecutionProvider.dawnBackendType".into(), backend.into()),
-            ];
             builder = builder.with_devices([device], Some(&options)).map_err(|e| e.to_string())?;
             // Serialize initialization as well as registration; chart and
             // plane sessions share ORT's default native WebGPU context.
@@ -522,6 +542,50 @@ mod tests {
         claim_backend(&mut backend, "Vulkan").unwrap();
         assert!(claim_backend(&mut backend, "D3D12").unwrap_err().contains("restart"));
         assert_eq!(backend, Some("Vulkan"));
+    }
+    #[test]
+    fn macos_webgpu_uses_dawn_default_without_an_invalid_metal_override() {
+        let backend=dawn_backend_for(GpuEp::WebGpu,"macos");
+        assert_eq!(backend,"Metal");
+        let options=webgpu_options(backend).unwrap();
+        assert!(!options.iter().any(|(key,_)|key.ends_with("dawnBackendType")));
+        assert!(options.iter().any(|(key,value)|key.ends_with("powerPreference") && value=="high-performance"));
+        assert!(options.iter().any(|(key,value)|key.ends_with("enableGraphCapture") && value=="0"));
+        // Context ownership still distinguishes the default Metal context.
+        let mut claimed=None;
+        claim_backend(&mut claimed,backend).unwrap();
+        assert!(claim_backend(&mut claimed,"Vulkan").is_err());
+    }
+    #[test]
+    fn explicit_dawn_overrides_keep_the_pinned_runtime_spelling_on_all_platforms() {
+        for (platform,ep,expected) in [
+            ("windows",GpuEp::WebGpu,"D3D12"),
+            ("windows",GpuEp::Vulkan,"Vulkan"),
+            ("linux",GpuEp::WebGpu,"Vulkan"),
+            ("linux",GpuEp::Vulkan,"Vulkan"),
+            ("macos",GpuEp::Vulkan,"Vulkan"),
+        ] {
+            let options=webgpu_options(dawn_backend_for(ep,platform)).unwrap();
+            assert_eq!(options.iter().find(|(key,_)|key.ends_with("dawnBackendType")).map(|(_,value)|value.as_str()),Some(expected));
+        }
+    }
+    #[test]
+    fn invalid_native_backend_options_fail_before_the_provider_and_auto_can_retry_cpu() {
+        for backend in ["metal","d3d12","vulkan","OpenGL"] {
+            let mut calls=Vec::new();
+            let result=try_candidates(vec![GpuEp::WebGpu,GpuEp::Cpu],Vec::new(),|ep| {
+                calls.push(ep);
+                if ep==GpuEp::WebGpu {webgpu_options(backend).map_err(InferenceFailure::provider)?;}
+                Ok(())
+            }).unwrap();
+            assert_eq!(result.0,GpuEp::Cpu);
+            assert_eq!(calls,vec![GpuEp::WebGpu,GpuEp::Cpu]);
+            assert!(result.2[0].reason.contains("Unsupported WebGPU graphics backend"));
+            let error=try_candidates(vec![GpuEp::WebGpu],Vec::new(),|_| {
+                webgpu_options(backend).map_err(InferenceFailure::provider)
+            }).unwrap_err();
+            assert!(error.contains("Unsupported WebGPU graphics backend"));
+        }
     }
     #[test]
     fn explicit_vulkan_never_uses_a_platform_default_backend() {

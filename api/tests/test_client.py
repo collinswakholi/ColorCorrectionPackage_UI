@@ -29,7 +29,8 @@ class DiscoveryTests(unittest.TestCase):
             with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect.subprocess.Popen") as launch:
                 with self.assertRaisesRegex(FileNotFoundError, "Required ONNX Runtime library is missing") as error:
                     Engine(root=root).devices()
-                self.assertIn(str(missing), str(error.exception))
+                # Worker discovery canonicalizes Windows short-name/temp aliases.
+                self.assertIn(str(missing.resolve()), str(error.exception))
                 with self.assertRaisesRegex(MissingRuntimeError, "Required ONNX Runtime library is missing"):
                     with Client(root=root):
                         self.fail("Missing native runtime must be reported before entering the client context")

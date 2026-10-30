@@ -527,9 +527,11 @@ mod tests {
     }
     #[test]
     fn cpu_policy_only_controls_lut() {
+        let auto = probe_accelerators("auto");
         let report = probe_accelerators("cpu");
         assert_eq!(report.assignment.apply, "cpu");
-        assert_ne!(report.assignment.detect, "cpu");
-        assert_ne!(report.assignment.plane, "cpu");
+        assert_eq!(report.policy, "cpu");
+        assert_eq!(report.assignment.detect, auto.assignment.detect);
+        assert_eq!(report.assignment.plane, auto.assignment.plane);
     }
 }

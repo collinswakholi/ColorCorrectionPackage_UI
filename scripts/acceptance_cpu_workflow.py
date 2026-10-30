@@ -85,7 +85,12 @@ def main():
         with ColorCorrection(Config(save_path=output / "reloaded"), root=package, backend=args.backend) as cc:
             cc.load_model(ffc.path)
             assert cc.predict_image(fixtures / "sample.jpg").outputs[0].is_file()
+            reloaded_worker_process = cc.client.engine._process
             record("FFC model reload and application in a new worker")
+        report["reload_worker_exit_code"] = reloaded_worker_process.poll()
+        assert report["reload_worker_exit_code"] is not None, "Model-reload client left its worker running"
+        assert report["reload_worker_exit_code"] == 0, f"Model-reload worker did not exit cleanly: {report['reload_worker_exit_code']}"
+        record("Model-reload worker exits cleanly")
         if args.backend == "cpu-inference":
             profiles = list(output.glob("cpu-inference-profile*.json"))
             providers = {event.get("args", {}).get("provider") for path in profiles

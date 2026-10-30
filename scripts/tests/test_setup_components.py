@@ -140,9 +140,30 @@ class Worker { static int Main() {
                     if interrupted:
                         self.assertIn('Injected input failure',reply['reason'])
                         self.assertTrue(pidfile.is_file())
-                        probe_pid=pidfile.read_text().strip()
-                        alive=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command', 'if(Get-Process -Id '+probe_pid+' -ErrorAction SilentlyContinue){exit 1}'],capture_output=True,timeout=10)
-                        self.assertEqual(alive.returncode,0,'Interrupted probe worker survived cleanup')
+                        # Query the native process directly. Starting another
+                        # PowerShell can incur emulation/startup delays on ARM64
+                        # unrelated to whether the probe was already reaped.
+                        import ctypes
+                        from ctypes import wintypes
+                        kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+                        kernel.OpenProcess.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.DWORD]
+                        kernel.OpenProcess.restype=wintypes.HANDLE
+                        kernel.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+                        kernel.WaitForSingleObject.restype=wintypes.DWORD
+                        kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+                        kernel.CloseHandle.restype=wintypes.BOOL
+                        probe_pid=int(pidfile.read_text().strip())
+                        self.assertGreater(probe_pid,0)
+                        handle=kernel.OpenProcess(0x00100000,False,probe_pid) # SYNCHRONIZE
+                        if not handle:
+                            self.assertEqual(ctypes.get_last_error(),87,
+                                'Could not verify probe exit (expected an absent process)')
+                        else:
+                            try:
+                                self.assertEqual(kernel.WaitForSingleObject(handle,0),0,
+                                    'Interrupted probe worker survived cleanup')
+                            finally:
+                                kernel.CloseHandle(handle)
 
     def test_linux_symlink_launcher_resolves_target_and_optional_gpu_is_not_launch_requirement(self):
         launcher=(ROOT/'installer/linux/ColorCorrect-Studio').read_text()

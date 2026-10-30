@@ -175,6 +175,9 @@ jobs:
             artifacts/native-ci/osx-arm64/evidence/*.txt
             artifacts/native-ci/osx-arm64/evidence/*.trx
             artifacts/native-ci/osx-arm64/evidence/sdk-smoke/result.json
+            artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/result.json
+            artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/cpu-inference-profile*.json
+            artifacts/native-ci/osx-arm64/evidence/sdk-full-auto/result.json
           if-no-files-found: error
   validation:
     name: Validation result
