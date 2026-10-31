@@ -2,13 +2,15 @@
 
 The Python API uses the same local native engine as the desktop app. Python 3.10+
 is required; the SDK has no runtime dependencies on Python ML or GUI packages.
-In the current source, automatic DirectML/WebGPU inference is the default, with
+Automatic DirectML/WebGPU inference is the default, with
 explicit CPU recovery when GPU execution is unavailable or fails. LUT application
 uses wgpu with CPU recovery. `backend="cpu"` retains CPU correction with Auto
 detection; `backend="cpu-inference"` explicitly selects CPU detection.
 
-CPU inference requires the newly built native engine. Published 0.2.1 packages
-use GPU inference; updating the Python wheel does not replace that engine.
+CPU inference requires the 0.2.2 native engine or another worker declaring
+`cpu_inference_v1`. Older 0.2.1 packages use GPU inference; updating the wheel
+does not replace that engine. On macOS, the native SDK root is
+`/Applications/ColorCorrect Studio.app/Contents/MacOS`.
 
 Prefer the familiar `ColorCorrection(Config(save_path=...))` workflow if you used
 the original Python package: `run(Image=...)` calibrates, and `predict_image()` /
@@ -200,7 +202,7 @@ FFC's NN is a separate surface fit; `NeuralNetworkOptions` configures **CC**, no
 
 For `linear`, `pls`, and `nn`, choose an integer `degree` from **1 through 7**.
 The native worker clamps their polynomial-feature degree to that range. The
-legacy SDK 2.2.1 validator accepts 1–12 for `linear` and forwards `degree` for
+SDK validator accepts 1–12 for `linear` and forwards `degree` for
 PLS/NN without that same strict degree validation; out-of-range values can
 therefore be normalized by the worker rather than rejected. Do not rely on that
 normalization. These documented examples use degrees inside the effective range.

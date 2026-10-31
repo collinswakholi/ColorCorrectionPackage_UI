@@ -28,13 +28,14 @@ dotnet build app/ColorCorrect.sln -c Release
 
 Use `linux-arm64` on native ARM64. See the [installer guide](../installer/README.md) for portable archives, Debian packages and system dependencies. ARM64 graphics and desktop workflows remain experimental; see the [platform notes](compatibility.md).
 
-## Apple-silicon macOS: source only
+<a id="apple-silicon-macos-source-only"></a>
 
-Use macOS 14 or later on Apple silicon. Build and run the application locally;
-no macOS installer, application binary or runtime archive is distributed.
-Graphics and desktop compatibility are not yet confirmed on representative Mac
-hardware. See the [platform notes](compatibility.md) before relying on a Mac
-build for production work.
+## Apple-silicon macOS: source build
+
+Use macOS 14 or later on Apple silicon. For the downloadable application, follow
+the [Mac installation guide](macos-install.md); no build toolchain is needed to use
+that package. The steps below build from source locally. Mac graphics and desktop
+workflows remain experimental; see the [platform notes](compatibility.md).
 
 Install [Apple's command-line tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/), the **Arm64 .NET SDK 10.0.402** using [Microsoft's macOS instructions](https://learn.microsoft.com/en-us/dotnet/core/install/macos), [Rust through rustup](https://rust-lang.github.io/rustup/installation/), and a native Python 3.10+ interpreter from [Python's macOS downloads](https://www.python.org/downloads/macos/). The Python universal2 distribution can run natively on Apple silicon. Open a native Terminal rather than a Rosetta shell. From the source checkout, verify:
 
@@ -59,7 +60,7 @@ bash scripts/build_macos.sh "$PWD/dist/local-macos"
 "$PWD/dist/local-macos/launch"
 ```
 
-The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. Mac graphics and desktop workflows remain experimental. Intel macOS is outside scope. No signing or notarization is performed.
+The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. Mac graphics and desktop workflows remain experimental. Intel macOS is outside scope. This local build does not apply Developer ID signing or notarization.
 
 Install the Python API in a local virtual environment and point it at that local build:
 
@@ -101,9 +102,10 @@ server or Python ML packages. See the [API guide](../api/README.md) for examples
 
 ## Distribution and development
 
-Windows and Linux have installers and portable packages. Release assets include
-checksums and package manifests. Packages remain unsigned; Apple-silicon macOS
-remains source only. See [installation details](../installer/README.md) for
+Windows and Linux have installers and portable packages. Apple-silicon macOS has
+a relocatable app bundle in ZIP and tar archives. Release assets include checksums
+and package manifests. Windows/Linux packages lack publisher signatures; Mac
+bundles are ad-hoc signed and are not Developer ID signed or notarized. See [installation details](../installer/README.md) for
 prerequisites and [release procedures](releasing.md) for maintainers.
 
 The [developer guide](development/README.md) covers automated builds, component

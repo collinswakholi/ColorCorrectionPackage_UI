@@ -1,8 +1,7 @@
 # Processing and graphics
 
-This guide describes the current source. CPU detection, Auto inference recovery,
-and device-aware setup are additions since the published 0.2.1 packages, which
-require a compatible GPU for chart and plane detection.
+Version 0.2.2 includes CPU detection, Auto inference recovery and device-aware
+setup. Older 0.2.1 engines require a compatible GPU for chart and plane detection.
 
 Choose **Auto**, **CPU** or **GPU** for image correction. The default Fast mode
 combines the enabled GC, WB and CC transforms in one **65³ LUT**. Spatial flat-field
@@ -50,7 +49,8 @@ WSL GPU use is experimental and requires the separately built Mesa Dozen add-on
 in the current setup. Official Linux downloads do not include that add-on.
 See [WSL setup](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md#experimental-wsl-gpu-setup). Native Ubuntu
 uses its OS/vendor driver. ARM64 graphics and Apple-silicon desktop workflows
-remain experimental; macOS is source only.
+remain experimental. Apple-silicon macOS has an [application bundle](../macos-install.md)
+as well as source-build instructions.
 
 For numerical comparisons and hardware-specific results, see the
 [developer measurements](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/development/README.md#historical-compute-measurements).

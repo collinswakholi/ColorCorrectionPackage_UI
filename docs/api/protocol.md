@@ -7,7 +7,7 @@ models, references, and native libraries together. A desktop window does not
 need to be open for processing.
 
 This reference follows the current source. The `cpu_inference_v1` capability and
-CPU inference recovery are additions since the published 0.2.1 engine. Check the
+CPU inference recovery are available in the 0.2.2 engine. Check the
 worker's capabilities before requesting new functionality; a newer SDK does not
 upgrade a separately installed worker.
 

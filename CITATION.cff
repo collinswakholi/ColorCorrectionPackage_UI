@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "Please cite this software and the related research when using it in scientific work."
 type: software
 title: ColorCorrect Studio
-version: 0.2.1
+version: 0.2.2
 license: MIT
 repository-code: "https://github.com/collinswakholi/ColorCorrectionPackage_UI"
 authors:

@@ -47,26 +47,34 @@ public partial class MainWindowViewModel
         if (e.PropertyName == nameof(SessionItemViewModel.IncludeInBatch)) NotifyRunCommands();
     }
 
-    private void ApplyInstallationDefaults()
+    private void ApplyInstallationDefaults(string? statePath = null, bool applyAuto = false)
     {
         try
         {
-            using var json = JsonDocument.Parse(File.ReadAllText(ColorCorrect.Engine.InstalledSetup.StatePath));
+            using var json = JsonDocument.Parse(File.ReadAllText(statePath ?? ColorCorrect.Engine.InstalledSetup.StatePath));
             if (json.RootElement.ValueKind != JsonValueKind.Object) return;
-            if (json.RootElement.TryGetProperty("detection_policy", out var detection)
-                && detection.GetString() == "cpu-inference") SelectedAccelPolicy = Pick(AccelPolicies, "cpu-inference");
-            if (json.RootElement.TryGetProperty("correction_policy", out var correction)
-                && correction.GetString() == "cpu") SelectedProcessingDevice = ProcessingDevices[1];
+            if (json.RootElement.TryGetProperty("detection_policy", out var detection))
+            {
+                var policy = detection.GetString();
+                if (policy == "cpu-inference" || (applyAuto && policy == "auto"))
+                    SelectedAccelPolicy = Pick(AccelPolicies, policy);
+            }
+            if (json.RootElement.TryGetProperty("correction_policy", out var correction))
+            {
+                var policy = correction.GetString();
+                if (policy == "cpu" || (applyAuto && policy == "auto"))
+                    SelectedProcessingDevice = Pick(ProcessingDevices, policy);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         { /* Absent or incomplete setup preferences use the application's defaults. */ }
     }
 
-    private void LoadSetupSelection()
+    private void LoadSetupSelection(string? statePath = null)
     {
         try
         {
-            using var json = JsonDocument.Parse(File.ReadAllText(ColorCorrect.Engine.InstalledSetup.StatePath));
+            using var json = JsonDocument.Parse(File.ReadAllText(statePath ?? ColorCorrect.Engine.InstalledSetup.StatePath));
             if (json.RootElement.ValueKind != JsonValueKind.Object) return;
             if (json.RootElement.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String)
                 SelectedSetupMode = Pick(SetupModes, mode.GetString() ?? "recommended");
@@ -81,15 +89,18 @@ public partial class MainWindowViewModel
     }
 
     private void AddSetupSelection(ProcessStartInfo start)
+        => AppendSetupSelection(start, SelectedSetupMode.Value, SetupWebGpu, SetupDirectMl, OperatingSystem.IsWindows());
+
+    private static void AppendSetupSelection(ProcessStartInfo start, string mode, bool webGpu, bool directMl, bool windows)
     {
-        start.ArgumentList.Add(OperatingSystem.IsWindows() ? "-Mode" : "--mode");
-        start.ArgumentList.Add(SelectedSetupMode.Value);
-        if (!IsCustomSetup) return;
+        start.ArgumentList.Add(windows ? "-Mode" : "--mode");
+        start.ArgumentList.Add(mode);
+        if (mode != "custom") return;
         var components = new List<string>();
-        if (SetupWebGpu) components.Add("webgpu");
-        if (OperatingSystem.IsWindows() && SetupDirectMl) components.Add("directml");
+        if (webGpu) components.Add("webgpu");
+        if (windows && directMl) components.Add("directml");
         if (components.Count == 0) return;
-        start.ArgumentList.Add(OperatingSystem.IsWindows() ? "-Components" : "--components");
+        start.ArgumentList.Add(windows ? "-Components" : "--components");
         start.ArgumentList.Add(string.Join(",", components));
     }
 
@@ -98,6 +109,26 @@ public partial class MainWindowViewModel
 
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
     private async Task CheckSetupAsync()
+        => await RunSetupCheckAsync(install: false);
+
+    internal ProcessStartInfo CreateSetupCheckStartInfo(string helper, bool install, bool windows, bool macos = false)
+    {
+        var start = new ProcessStartInfo(windows ? "powershell.exe" : macos ? helper : "/bin/sh")
+        {
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = Path.GetDirectoryName(helper)!,
+        };
+        var args = windows
+            ? new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper, "-Diagnose", "-Verify" }
+            : macos ? new[] { "--diagnose", "--verify" } : new[] { helper, "--diagnose", "--verify" };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        if (install) start.ArgumentList.Add(windows ? "-Install" : "--install");
+        AppendSetupSelection(start, SelectedSetupMode.Value, SetupWebGpu, SetupDirectMl, windows);
+        return start;
+    }
+
+    private async Task RunSetupCheckAsync(bool install)
     {
         var helper = SetupHelperPath;
         if (!File.Exists(helper))
@@ -107,20 +138,10 @@ public partial class MainWindowViewModel
         }
         var cancel = BeginJob();
         Busy = true;
-        Status = "Checking setup and devices…";
+        Status = install ? "Saving setup preferences and checking devices…" : "Checking setup and devices…";
         try
         {
-            var start = new ProcessStartInfo(OperatingSystem.IsWindows() ? "powershell.exe" : "/bin/sh")
-            {
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true,
-                WorkingDirectory = Path.GetDirectoryName(helper)!,
-            };
-            if (OperatingSystem.IsWindows())
-                foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper, "-Diagnose", "-Verify" }) start.ArgumentList.Add(arg);
-            else
-                foreach (var arg in new[] { helper, "--diagnose", "--verify" }) start.ArgumentList.Add(arg);
-            AddSetupSelection(start);
+            var start = CreateSetupCheckStartInfo(helper, install, OperatingSystem.IsWindows(), OperatingSystem.IsMacOS());
             using var process = Process.Start(start) ?? throw new IOException("Setup check could not start.");
             var output = process.StandardOutput.ReadToEndAsync();
             var errors = process.StandardError.ReadToEndAsync();
@@ -131,10 +152,16 @@ public partial class MainWindowViewModel
             if (process.ExitCode != 0) throw new IOException(string.IsNullOrWhiteSpace(stderr) ? "Setup check failed. Repair using the original package." : stderr);
             using var report = JsonDocument.Parse(raw);
             SetupSummary = FormatSetupReport(report.RootElement);
+            if (install) SetupSummary += "\nApply engine change to use the saved setup preferences.";
+            if (install && OperatingSystem.IsMacOS())
+            {
+                ApplyInstallationDefaults(applyAuto: true);
+                LoadSetupSelection();
+            }
             _detectionFailures.Clear();
             _engineGeneration++;
             await RefreshAccelAsync();
-            Status = "Setup check complete.";
+            Status = install ? "Setup preferences saved." : "Setup check complete.";
         }
         catch (OperationCanceledException) { Status = "Setup check cancelled."; }
         catch (Exception ex) { SetupSummary = ConciseProcessingError(ex.Message); Status = "Setup needs attention."; }
@@ -189,8 +216,15 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
-    private void InstallSupport()
+    private async Task InstallSupportAsync()
     {
+        // The Mac bundle already includes its private runtimes. Its native helper
+        // saves optional component choices without a terminal or administrator prompt.
+        if (OperatingSystem.IsMacOS())
+        {
+            await RunSetupCheckAsync(install: true);
+            return;
+        }
         var helper = SetupHelperPath;
         if (!File.Exists(helper)) { SetupSummary = "Setup tools are missing. Repair using the original package."; return; }
         try

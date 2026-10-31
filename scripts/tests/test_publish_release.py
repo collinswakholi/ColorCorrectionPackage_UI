@@ -21,6 +21,9 @@ def candidate(path, rid="win-x64", *, manifest_change=None, corrupt=False, extra
     payload = {name: ("contents:" + name).encode() for name in release.distribution_names("0.2.0", rid)}
     manifest = {"rid": rid, "version": "0.2.0", "source": {"git_commit": SHA, "working_tree_dirty": False},
                 "media_scope": "still images", "worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference"]}
+    if rid == release.MAC_RID:
+        manifest.update(distribution_policy="application", architecture="arm64", minimum_os="macOS 14.0",
+                        signing={"kind": "ad-hoc", "notarized": False})
     if manifest_change:
         manifest.update(manifest_change)
     checksums = "".join(hashlib.sha256(data).hexdigest() + "  " + name + "\n" for name, data in sorted(payload.items()))
@@ -46,7 +49,8 @@ class FakeGitHub:
         return iter(self.assets if resource.endswith("/assets") else ([] if self.previous is None else [self.previous]))
 
     def request(self, path, *, method="GET", data=None, upload=None):
-        self.writes.append((path, method, data, None if upload is None else upload.name))
+        if method != "GET":
+            self.writes.append((path, method, data, None if upload is None else upload.name))
         if upload:
             asset = {"name": upload.name, "size": upload.stat().st_size, "state": "uploaded", "digest": "sha256:" + release.digest(upload)}
             self.assets.append(asset)
@@ -60,12 +64,12 @@ class FakeGitHub:
 
 class PublishReleaseTests(unittest.TestCase):
     @staticmethod
-    def artifact_api(root):
+    def artifact_api(root, include_macos_arm64=False):
         class ArtifactAPI:
             def __init__(self):
                 self.artifacts = []
                 self.archives = {}
-                for number, rid in enumerate(release.RIDS, 1):
+                for number, rid in enumerate(release.release_rids(include_macos_arm64), 1):
                     archive = root / (rid + ".zip")
                     candidate(archive, rid)
                     self.archives[number] = archive
@@ -76,6 +80,20 @@ class PublishReleaseTests(unittest.TestCase):
             def download(self, artifact_id, destination):
                 shutil.copy2(self.archives[artifact_id], destination)
         return ArtifactAPI()
+
+    def staged_files(self, root, include_macos_arm64=False):
+        return release.stage_run(self.artifact_api(root, include_macos_arm64), 123, SHA, "0.2.0", root / "out",
+                                 include_macos_arm64=include_macos_arm64)
+
+    @staticmethod
+    def asset(file):
+        return {"name": file.name, "size": file.stat().st_size, "state": "uploaded", "digest": "sha256:" + release.digest(file)}
+
+    @staticmethod
+    def previous(*, draft, stable=False, include_macos_arm64=False):
+        return {"id": 9, "tag_name": TAG, "body": f"<!-- colorcorrect-source:{SHA} -->\n"
+                + release.policy_marker(stable, include_macos_arm64), "target_commitish": SHA,
+                "draft": draft, "prerelease": not stable}
 
     def test_complete_run_stages_seventeen_assets_with_combined_checksums(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -124,15 +142,18 @@ class PublishReleaseTests(unittest.TestCase):
         class SourceAPI:
             prefix = "/repos/owner/repo"
             def __init__(self):
-                self.values = {"/actions/runs/123": {"head_sha": SHA, "event": "push", "path": ".github/workflows/native-builds.yml",
+                self.values = {"/actions/runs/123": {"head_sha": SHA, "head_branch": TAG, "event": "push", "path": ".github/workflows/native-builds.yml",
                                                      "repository": {"full_name": "owner/repo"}},
                                "/git/ref/tags/" + TAG: {"object": {"type": "commit", "sha": SHA}},
                                "/compare/" + SHA + "...main": {"behind_by": 0, "merge_base_commit": {"sha": SHA}}}
             def request(self, path):
                 return self.values[path.removeprefix(self.prefix)]
+            def pages(self, resource, key):
+                return iter([{"name":"Validation result","status":"completed","conclusion":"success"}])
         api = SourceAPI()
         release.verify_source(api, 123, SHA, TAG)
         for endpoint, field, value in (("/actions/runs/123", "head_sha", "b" * 40),
+                                       ("/actions/runs/123", "head_branch", "main"),
                                        ("/git/ref/tags/" + TAG, "object", {"type": "commit", "sha": "b" * 40}),
                                        ("/compare/" + SHA + "...main", "behind_by", 1)):
             with self.subTest(endpoint=endpoint):
@@ -140,6 +161,11 @@ class PublishReleaseTests(unittest.TestCase):
                 broken.values[endpoint][field] = value
                 with self.assertRaises(ValueError):
                     release.verify_source(broken, 123, SHA, TAG)
+        for rows in ([],[{"name":"Validation result","status":"completed","conclusion":"failure"}],
+                     [{"name":"Validation result","status":"in_progress","conclusion":None}]):
+            with self.subTest(gates=rows), patch.object(api,"pages",return_value=iter(rows)):
+                with self.assertRaisesRegex(ValueError,"aggregate validation"):
+                    release.verify_source(api,123,SHA,TAG)
 
     def test_all_four_candidate_layouts_have_unique_named_metadata(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -163,6 +189,9 @@ class PublishReleaseTests(unittest.TestCase):
                  {"manifest_change": {"worker_features_declared": ["torch"]}},
                  {"manifest_change": {"worker_features_declared": []}},
                  {"manifest_change": {"worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference", "unknown"]}},
+                 {"manifest_change": {"worker_features_declared": None}},
+                 {"manifest_change": {"worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference", "rust-inference"]}},
+                 {"manifest_change": {"source": None}},
                  {"extra": "app.dmg"}, {"extra": "../escape.exe"}]
         for options in cases:
             with self.subTest(options=options), tempfile.TemporaryDirectory() as temporary:
@@ -176,11 +205,10 @@ class PublishReleaseTests(unittest.TestCase):
     @patch("publish_release.verify_source")
     def test_publication_uploads_verified_draft_before_publishing_never_latest(self, source):
         with tempfile.TemporaryDirectory() as temporary:
-            file = Path(temporary) / "candidate.zip"
-            file.write_bytes(b"complete distribution")
+            files = self.staged_files(Path(temporary))
             api = FakeGitHub()
-            result = release.publish(api, 123, SHA, TAG, [file])
-            self.assertEqual([operation[1] for operation in api.writes], ["POST", "POST", "PATCH"])
+            result = release.publish(api, 123, SHA, TAG, files)
+            self.assertEqual([operation[1] for operation in api.writes], ["POST"] * 18 + ["PATCH"])
             self.assertTrue(api.writes[0][2]["draft"])
             self.assertTrue(api.writes[0][2]["prerelease"])
             self.assertEqual(api.writes[0][2]["make_latest"], "false")
@@ -191,33 +219,179 @@ class PublishReleaseTests(unittest.TestCase):
     @patch("publish_release.verify_source")
     def test_published_assets_are_never_replaced_or_added(self, source):
         with tempfile.TemporaryDirectory() as temporary:
-            file = Path(temporary) / "candidate.zip"
-            file.write_bytes(b"complete distribution")
-            previous = {"id": 9, "tag_name": TAG, "body": f"<!-- colorcorrect-source:{SHA} -->", "target_commitish": SHA,
-                        "draft": False, "prerelease": True}
-            asset = {"name": file.name, "size": file.stat().st_size, "state": "uploaded", "digest": "sha256:" + release.digest(file)}
-            api = FakeGitHub(previous, [asset])
-            release.publish(api, 123, SHA, TAG, [file])
+            files = self.staged_files(Path(temporary))
+            previous = self.previous(draft=False)
+            assets = [self.asset(file) for file in files]
+            api = FakeGitHub(previous, assets)
+            release.publish(api, 123, SHA, TAG, files)
             self.assertEqual(api.writes, [])
-            for assets in ([], [dict(asset, digest="sha256:" + "0" * 64)], [dict(asset, name="unexpected.dmg")]):
-                api = FakeGitHub(previous, assets)
+            for broken in ([], [dict(assets[0], digest="sha256:" + "0" * 64)] + assets[1:],
+                           [dict(assets[0], name="unexpected.dmg")] + assets[1:]):
+                api = FakeGitHub(previous, broken)
                 with self.assertRaises(ValueError):
-                    release.publish(api, 123, SHA, TAG, [file])
+                    release.publish(api, 123, SHA, TAG, files)
                 self.assertEqual(api.writes, [])
 
     @patch("publish_release.verify_source")
     def test_resume_own_draft_reuses_only_identical_existing_assets(self, source):
         with tempfile.TemporaryDirectory() as temporary:
-            files = [Path(temporary) / name for name in ("one.zip", "two.zip")]
-            for file in files:
-                file.write_bytes(file.name.encode())
-            previous = {"id": 9, "tag_name": TAG, "body": f"<!-- colorcorrect-source:{SHA} -->", "target_commitish": SHA,
-                        "draft": True, "prerelease": True}
-            asset = {"name": files[0].name, "size": files[0].stat().st_size, "state": "uploaded", "digest": "sha256:" + release.digest(files[0])}
+            files = self.staged_files(Path(temporary))
+            previous = self.previous(draft=True)
+            asset = self.asset(files[0])
             api = FakeGitHub(previous, [asset])
             release.publish(api, 123, SHA, TAG, files)
-            self.assertEqual([operation[3] for operation in api.writes if operation[1] == "POST"], ["two.zip"])
+            self.assertEqual([operation[3] for operation in api.writes if operation[1] == "POST"], [file.name for file in files[1:]])
             self.assertEqual(api.writes[-1][1], "PATCH")
+
+    def test_mac_binary_requires_explicit_opt_in_and_binary_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "mac.zip"
+            candidate(archive, release.MAC_RID)
+            output = root / "out"; output.mkdir()
+            with self.assertRaisesRegex(ValueError, "explicit opt-in"):
+                release.stage_candidate(archive, output, "0.2.0", release.MAC_RID, SHA)
+            files = release.stage_candidate(archive, output, "0.2.0", release.MAC_RID, SHA, include_macos_arm64=True)
+            self.assertEqual(len(files), 4)
+        for change in ({"distribution_policy": "source only"}, {"architecture": "x64"},
+                       {"minimum_os": "macOS 11.0"}, {"signing": {"kind": "none", "notarized": False}},
+                       {"signing": {"kind": "ad-hoc", "notarized": 0}}):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); output = root / "out"; output.mkdir()
+                archive = root / "mac.zip"; candidate(archive, release.MAC_RID, manifest_change=change)
+                with self.assertRaises(ValueError):
+                    release.stage_candidate(archive, output, "0.2.0", release.MAC_RID, SHA, include_macos_arm64=True)
+        for rid in ("osx-x64", "macos", "linux-unknown"):
+            with self.subTest(rid=rid), self.assertRaisesRegex(ValueError, "Unsupported"):
+                release.distribution_names("0.2.0", rid)
+
+    def test_mac_enabled_run_requires_both_archives_and_all_twenty_one_assets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            api = self.artifact_api(root, True)
+            with self.assertRaisesRegex(ValueError, "distribution policy"):
+                release.stage_run(api, 123, SHA, "0.2.0", root / "source-only")
+            files = release.stage_run(api, 123, SHA, "0.2.0", root / "binary", include_macos_arm64=True)
+            self.assertEqual(len(files), 21)
+            self.assertEqual({f.name for f in files}, release.release_asset_names("0.2.0", True))
+            release.verify_local_assets(files, "0.2.0", SHA, True)
+            for dropped in (files[0], next(f for f in files if f.name.endswith("osx-arm64.tar.gz"))):
+                with self.assertRaisesRegex(ValueError, "complete allowlisted"):
+                    release.verify_local_assets([f for f in files if f != dropped], "0.2.0", SHA, True)
+            with self.assertRaisesRegex(ValueError, "complete allowlisted"):
+                release.verify_local_assets(files, "0.2.0", SHA, False)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); archive = root / "mac.zip"; output = root / "out"; output.mkdir()
+            candidate(archive, release.MAC_RID)
+            with zipfile.ZipFile(archive) as z:
+                members = {n: z.read(n) for n in z.namelist() if not n.endswith(".tar.gz")}
+            with zipfile.ZipFile(archive, "w") as z:
+                for n, data in members.items():z.writestr(n, data)
+            with self.assertRaisesRegex(ValueError, "missing"):
+                release.stage_candidate(archive, output, "0.2.0", release.MAC_RID, SHA, include_macos_arm64=True)
+
+    @patch("publish_release.verify_source")
+    def test_explicit_stable_mac_release_publishes_full_latest_only_when_complete(self, source):
+        with tempfile.TemporaryDirectory() as temporary:
+            files = self.staged_files(Path(temporary), True)
+            api = FakeGitHub()
+            result = release.publish(api, 123, SHA, TAG, files, stable=True, include_macos_arm64=True)
+            self.assertTrue(api.writes[0][2]["draft"])
+            self.assertFalse(api.writes[0][2]["prerelease"])
+            self.assertEqual(api.writes[0][2]["make_latest"], "false")
+            self.assertNotIn("preview", api.writes[0][2]["name"])
+            self.assertIn("ad-hoc signed, not notarized", api.writes[0][2]["body"])
+            self.assertEqual(api.writes[-1][2], {"draft": False, "prerelease": False, "make_latest": "true"})
+            self.assertFalse(result["draft"]);self.assertFalse(result["prerelease"])
+            self.assertEqual(len(api.assets),21)
+            self.assertEqual(source.call_count,2)
+
+    @patch("publish_release.verify_source")
+    def test_draft_rejects_all_bad_existing_assets_before_uploading_any_missing(self, source):
+        with tempfile.TemporaryDirectory() as temporary:
+            files = self.staged_files(Path(temporary), True)
+            good = self.asset(files[-1])
+            for assets in ([dict(good,digest="sha256:"+"0"*64)], [dict(good,state="starter")],
+                           [good,good], [dict(good,name="unexpected.dmg")], [{"name":None}]):
+                with self.subTest(assets=assets):
+                    api=FakeGitHub(self.previous(draft=True,stable=True,include_macos_arm64=True),assets)
+                    with self.assertRaises(ValueError):
+                        release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+                    self.assertEqual(api.writes,[])
+
+    @patch("publish_release.verify_source")
+    def test_draft_rejects_changed_policy_or_malformed_identity_without_mutation(self, source):
+        with tempfile.TemporaryDirectory() as temporary:
+            files=self.staged_files(Path(temporary),True)
+            previous=self.previous(draft=True,stable=True,include_macos_arm64=True)
+            cases=[dict(previous,prerelease=True),dict(previous,draft=None),dict(previous,id=True),dict(previous,body=[]),
+                   dict(previous,target_commitish="main"),dict(previous,body=previous['body']+f"<!-- colorcorrect-source:{SHA} -->"),
+                   dict(previous,body=f"<!-- colorcorrect-source:{SHA} -->"+release.policy_marker(True,False))]
+            for item in cases:
+                api=FakeGitHub(item)
+                with self.assertRaises(ValueError):release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+                self.assertEqual(api.writes,[])
+
+    @patch("publish_release.verify_source")
+    def test_partial_stable_upload_recovery_reuses_verified_bytes_and_never_replaces(self, source):
+        class Interrupted(FakeGitHub):
+            def request(self,path,**kwargs):
+                if kwargs.get('upload') is not None and len(self.assets)==2:raise RuntimeError('upload interrupted')
+                return super().request(path,**kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            files=self.staged_files(Path(temporary),True)
+            api=Interrupted()
+            with self.assertRaisesRegex(RuntimeError,'interrupted'):
+                release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertTrue(api.previous['draft']);self.assertEqual(len(api.assets),2)
+            self.assertFalse(any(operation[1]=='PATCH' for operation in api.writes))
+            existing={asset['name'] for asset in api.assets}
+            recovered=FakeGitHub(api.previous,api.assets)
+            release.publish(recovered,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertFalse(existing & {op[3] for op in recovered.writes if op[1]=='POST'})
+            self.assertEqual(len(recovered.assets),21);self.assertFalse(recovered.previous['draft'])
+
+    @patch("publish_release.verify_source")
+    def test_uploaded_assets_are_relisted_before_publication(self, source):
+        class Corrupted(FakeGitHub):
+            def pages(self,resource,key=None):
+                if resource.endswith('/assets') and len(self.assets)==21:
+                    self.assets[-1]=dict(self.assets[-1],digest='sha256:'+'0'*64)
+                return super().pages(resource,key)
+        with tempfile.TemporaryDirectory() as temporary:
+            files=self.staged_files(Path(temporary),True);api=Corrupted()
+            with self.assertRaisesRegex(ValueError,'not identical'):
+                release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertTrue(api.previous['draft']);self.assertFalse(any(op[1]=='PATCH' for op in api.writes))
+
+    @patch("publish_release.verify_source")
+    def test_published_stable_is_read_only_and_latest_is_confirmed(self, source):
+        with tempfile.TemporaryDirectory() as temporary:
+            files=self.staged_files(Path(temporary),True)
+            previous=self.previous(draft=False,stable=True,include_macos_arm64=True)
+            api=FakeGitHub(previous,[self.asset(f) for f in files])
+            release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertEqual(api.writes,[])
+            # A published preview may never be promoted or overwritten implicitly.
+            api=FakeGitHub(dict(previous,prerelease=True),api.assets)
+            with self.assertRaises(ValueError):release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertEqual(api.writes,[])
+
+    @patch("publish_release.time.sleep")
+    @patch("publish_release.verify_source")
+    def test_latest_confirmation_does_not_promote_an_older_already_published_release(self, source, sleep):
+        class NotLatest(FakeGitHub):
+            def request(self,path,**kwargs):
+                if path.endswith('/releases/latest'):return {'id':18,'tag_name':'v9.0.0'}
+                return super().request(path,**kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            files=self.staged_files(Path(temporary),True)
+            previous=self.previous(draft=False,stable=True,include_macos_arm64=True)
+            api=NotLatest(previous,[self.asset(f) for f in files])
+            with self.assertRaisesRegex(ValueError,'as latest'):
+                release.publish(api,123,SHA,TAG,files,stable=True,include_macos_arm64=True)
+            self.assertEqual(api.writes,[])
+            self.assertEqual(sleep.call_count,2)
 
 
 if __name__ == "__main__":

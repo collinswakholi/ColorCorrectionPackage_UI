@@ -1,17 +1,17 @@
 # Install ColorCorrect Studio
 
-Windows and Ubuntu downloads include the application runtime, engine, detector
-models and matching inference libraries. Python is optional. The installers do
+Windows, Ubuntu and Apple-silicon macOS downloads include the application
+runtime, engine, detector models and matching inference libraries. Python is optional. The installers do
 not replace system graphics drivers.
 
 Choose the package for your operating system and architecture. The downloads are
-**unsigned builds**; ARM64 and WSL graphics workflows remain experimental.
+not publisher-signed; Mac bundles use ad-hoc signing and are not notarized.
+ARM64 and WSL graphics workflows remain experimental.
 See [compatibility](../docs/compatibility.md) for platform requirements.
 
-The setup choices and CPU inference fallback below describe the **current,
-unreleased source**. Published **0.2.1** downloads remain unchanged and do not
-include these additions. Local candidates use their source manifest and checksums
-to distinguish them from the published release.
+Version **0.2.2** includes explicit CPU detection, Auto inference recovery and
+device-aware setup. Previous release assets remain unchanged. Use the SDK wheel
+from your chosen application package to keep its worker and API together.
 
 ## Windows
 
@@ -39,7 +39,7 @@ Rerun the matching installer with Custom to add omitted acceleration components.
 Install the Debian package using its actual downloaded filename:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.2.1_amd64.deb
+sudo apt install ./colorcorrect-studio_0.2.2_amd64.deb
 colorcorrect-studio
 ```
 
@@ -57,8 +57,9 @@ explicit action. Neither installation route changes graphics drivers.
 
 ## Python SDK
 
-The optional wheel is in the application's `python/` folder. Install it into your
-Python environment, then select the application folder with `root=...`. The wheel
+The optional wheel is in the application's `python/` folder. On macOS this folder
+is inside `ColorCorrect Studio.app/Contents/MacOS`. Install it into your Python
+environment, then select that native root with `root=...`. The wheel
 contains neither the native engine nor its models. See the [Python guide](../api/README.md)
 for installation and examples.
 
@@ -79,9 +80,14 @@ For source preparation, see the [developer packaging instructions](../docs/devel
 
 ## Apple-silicon macOS
 
-macOS is available from source only, with no downloadable application or installer.
-Follow the [Apple-silicon build and installation instructions](../docs/building.md#apple-silicon-macos-source-only).
-Intel macOS is outside scope.
+Download the `osx-arm64` ZIP or tar archive, extract **ColorCorrect Studio.app**,
+and move the bundle to Applications. macOS 14+ and Apple silicon are required.
+The app includes its private dependencies and does not require Python or a .NET SDK.
+
+Bundles use ad-hoc signing and are not Developer ID signed or notarized. Follow
+the [Mac installation guide](../docs/macos-install.md) for checksums, first-launch
+security prompts and optional SDK installation. [Source build instructions](../docs/building.md#apple-silicon-macos-source-build)
+remain available. Intel macOS is outside scope.
 
 ## Checksums and notices
 

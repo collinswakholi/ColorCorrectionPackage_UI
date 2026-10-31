@@ -4,7 +4,7 @@ Developer reference: this page records versioned builds, hardware coverage and
 historical results. For installation requirements and platform limitations, use
 [Compatibility](compatibility.md).
 
-Windows/Linux x64 and ARM64 are packaging targets. Apple-silicon macOS has source/build instructions only; Intel macOS is excluded. A target is supported only when its native acceptance evidence is recorded.
+Windows/Linux x64 and ARM64 and Apple-silicon macOS are packaging targets. Intel macOS is excluded. Native build/install results, hardware GPU execution and interactive desktop acceptance are recorded separately.
 
 ## Where checks run
 
@@ -14,9 +14,9 @@ Windows/Linux x64 and ARM64 are packaging targets. Apple-silicon macOS has sourc
 | Windows Sandbox | Extracted/installed final app, native UI, clean Python wheel and end-to-end workflows |
 | WSL with GPU passthrough | Final Linux app/API and WSLg interactions, real adapter/backend evidence |
 | GitHub Actions Windows/Linux x64/ARM64 | Native architecture builds, package/install checks, unit/headless tests; usable hardware GPU coverage is separate |
-| Apple-silicon macOS CI | Source build/tests only; no installer/archive or support certification |
+| Apple-silicon macOS CI | Native application packaging, architecture/runtime and CPU workflow checks; hardware GPU and interactive desktop acceptance remain separate |
 
-Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available. The current local implementation also adds visible, recorded CPU inference recovery under Auto; forced GPU inference still fails clearly. Historical results below retain their original policies.
+Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available. Version 0.2.2 adds visible, recorded CPU inference recovery under Auto; forced GPU inference still fails clearly. Historical results below retain their original policies.
 
 ## Public 0.2.0 download qualification
 

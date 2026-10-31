@@ -1,21 +1,20 @@
 # Compatibility
 
-ColorCorrect Studio is available as an **unsigned release** for Windows and
-Ubuntu. Keep the complete application folder together; its runtime, models and
-libraries are included. Python is optional.
+ColorCorrect Studio 0.2.2 includes Windows and Ubuntu packages and an
+Apple-silicon macOS app bundle. Keep the complete application folder or bundle
+together; its runtime, models and libraries are included. Python is optional.
 
-Published **0.2.1** packages require a compatible GPU for chart and plane detection.
-The current source adds CPU detection and Auto inference recovery, with
-device-aware setup. Build from source to use those additions; installing a new
-Python wheel alone does not update the native engine.
+Auto chart/plane inference tries compatible GPU execution and recovers to CPU.
+Explicit CPU inference and CPU correction support the complete workflow without
+a GPU. Installing a different Python wheel does not replace the native engine.
 
 | Platform | Availability | Graphics and desktop status |
 | --- | --- | --- |
-| Windows 11 x64 | Installer and portable ZIP | Published 0.2.1 uses GPU detection; the current source also supports CPU detection and recovery. |
+| Windows 11 x64 | Installer and portable ZIP | CPU inference and correction, with optional DirectML/WebGPU acceleration. |
 | Ubuntu 24.04 x64 | Debian package and portable archive | Native desktop and GPU compatibility remain experimental; WSL experience does not establish compatibility with every Ubuntu desktop. |
 | Windows 11 ARM64 | Installer and portable ZIP | Experimental; graphics and desktop workflows are not yet confirmed on representative ARM64 hardware. |
 | Ubuntu 24.04 ARM64 | Debian package and portable archive | Experimental; graphics and desktop workflows are not yet confirmed on representative ARM64 hardware. |
-| Apple-silicon macOS 14+ | Source build only | Experimental; no downloadable application or installer, and hardware GPU/desktop compatibility remains unconfirmed. |
+| Apple-silicon macOS 14+ | Application bundle in ZIP and tar archives | Experimental; native packaging and CPU checks are separate from hardware GPU and interactive desktop acceptance. |
 
 Choose the architecture used by your operating system: **x64** for 64-bit
 Intel/AMD, **ARM64** for 64-bit Arm. There are no 32-bit x86 or Intel macOS builds.
@@ -24,7 +23,7 @@ or [build from source](https://github.com/collinswakholi/ColorCorrectionPackage_
 
 ## Graphics requirements
 
-In the current source, chart and plane detection use eligible GPU inference with
+Chart and plane detection use eligible GPU inference with
 explicit CPU recovery under Auto. Windows prefers DirectML; other routes use WebGPU/Vulkan or Metal. Install
 graphics drivers through your OS or GPU vendor. The application installer supplies
 its own libraries and never replaces system graphics drivers.
@@ -39,8 +38,7 @@ instead of changing inference engines. See [processing options](compute/README.m
 WSL GPU use is experimental. In the current WSL setup, GPU chart and plane detection
 require a separately built Mesa Dozen add-on and working Windows-host GPU support.
 Official Linux downloads do not include the add-on; enabling a setting alone
-cannot supply it. CPU inference in the current source works without the add-on.
-Published 0.2.1 can apply saved models using CPU correction without it.
+cannot supply it. CPU inference and correction work without the add-on.
 
 Follow the [WSL setup instructions](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md#experimental-wsl-gpu-setup).
 Use the Windows host's supported GPU driver; do not install a Linux kernel GPU
@@ -48,8 +46,10 @@ driver inside WSL.
 
 ## Other limits
 
-- Packages are unsigned. On Windows, confirm the download source and checksum
-  before allowing installation. Source-built macOS applications are not notarized.
+- Windows/Linux packages are not publisher-signed. Mac bundles use ad-hoc
+  signing and are not Developer ID signed or notarized. Confirm the release
+  source and checksums, then follow the [Mac installation guide](macos-install.md)
+  for the first-launch security prompt.
 - Some high-DPI layouts, graphics adapters and driver combinations remain
   unconfirmed. ARM64 and Mac graphics workflows remain experimental.
 - The app processes still images. Models should be reused only for matching

@@ -291,9 +291,10 @@ controls by photograph count, patch count, popup realization or menu item data.
 ## Remaining support limits
 
 Windows/Linux ARM64 GPU and interactive acceptance require appropriate native
-hardware; hosted build/install tests do not supply it. Apple-silicon macOS remains
-source-only with its existing source-validation instructions and no downloadable
-app. Native Linux desktop/GPU acceptance remains distinct from WSL/WSLg evidence.
+hardware; hosted build/install tests do not supply it. Apple-silicon macOS now has
+application-bundle packaging; hardware GPU and interactive desktop acceptance are
+separate from native build/CPU checks. Native Linux desktop/GPU acceptance remains
+distinct from WSL/WSLg evidence.
 These documentation and x64 UI checks alone do not promote a release to stable.
 
 <!-- CONTROL_INVENTORY -->

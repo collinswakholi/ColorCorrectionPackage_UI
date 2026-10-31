@@ -19,7 +19,7 @@ import zlib
 import yaml  # Pinned QA dependency; never an SDK/application runtime dependency.
 
 GUIDES = ("README.md", "api/README.md", "docs/api/README.md", "docs/api/protocol.md",
-          "docs/api/VERIFICATION.md", "docs/user-guide.md", "docs/building.md", "notebooks/README.md",
+          "docs/api/VERIFICATION.md", "docs/user-guide.md", "docs/building.md", "docs/macos-install.md", "notebooks/README.md",
           "docs/ui-validation.md", "docs/readiness.md", "CHANGELOG.md",
           "docs/compatibility.md", "docs/compute/README.md", "docs/implementation.md",
           "docs/development/README.md", "docs/development/demo.md", "installer/README.md")

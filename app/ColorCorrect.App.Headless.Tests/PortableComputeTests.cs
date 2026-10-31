@@ -40,6 +40,92 @@ public sealed class PortableComputeTests
     }
 
     [AvaloniaFact]
+    public void MacSupportSelectionUsesCapturedSetupWithoutAnInteractiveTerminal()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
+        vm.SetupWebGpu = true;
+        vm.SetupDirectMl = true; // This Windows-only component must not reach the Mac helper.
+        const string helper = "/Applications/ColorCorrect Studio.app/Contents/MacOS/setup";
+        var install = vm.CreateSetupCheckStartInfo(helper, install: true, windows: false, macos: true);
+        Assert.Equal(helper, install.FileName);
+        Assert.False(install.UseShellExecute);
+        Assert.True(install.CreateNoWindow);
+        Assert.True(install.RedirectStandardOutput);
+        Assert.True(install.RedirectStandardError);
+        Assert.Equal(Path.GetDirectoryName(helper), install.WorkingDirectory);
+        Assert.Equal(new[] { "--diagnose", "--verify", "--install", "--mode", "custom", "--components", "webgpu" }, install.ArgumentList);
+        Assert.IsAssignableFrom<CommunityToolkit.Mvvm.Input.IAsyncRelayCommand>(vm.InstallSupportCommand);
+
+        var check = vm.CreateSetupCheckStartInfo(helper, install: false, windows: false, macos: true);
+        Assert.Equal(helper, check.FileName);
+        Assert.DoesNotContain("--install", check.ArgumentList);
+        Assert.DoesNotContain("x-terminal-emulator", check.FileName);
+    }
+
+    [AvaloniaFact]
+    public void LinuxSetupCheckRetainsItsShellHelperInvocation()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        const string helper = "/opt/colorcorrect-studio/setup";
+        var check = vm.CreateSetupCheckStartInfo(helper, install: false, windows: false);
+        Assert.Equal("/bin/sh", check.FileName);
+        Assert.Equal(new[] { helper, "--diagnose", "--verify", "--mode", "cpu" }, check.ArgumentList);
+    }
+
+    [AvaloniaFact]
+    public void WindowsSetupCheckRetainsItsNoninteractivePowerShellArguments()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        const string helper = @"C:\ColorCorrect Studio\setup.ps1";
+        var check = vm.CreateSetupCheckStartInfo(helper, install: false, windows: true);
+        Assert.Equal("powershell.exe", check.FileName);
+        Assert.Equal(new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper,
+            "-Diagnose", "-Verify", "-Mode", "cpu" }, check.ArgumentList);
+        Assert.True(check.RedirectStandardOutput);
+        Assert.True(check.RedirectStandardError);
+    }
+
+    [AvaloniaFact]
+    public void MacSetupCanSwitchCpuOnlyToRecommendedWithoutChangingStartupDefaults()
+    {
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        try
+        {
+            File.WriteAllText(path, """{"mode":"cpu","components":["cpu"],"detection_policy":"cpu-inference","correction_policy":"cpu"}""");
+            var applyDefaults = typeof(MainWindowViewModel).GetMethod("ApplyInstallationDefaults", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var loadSelection = typeof(MainWindowViewModel).GetMethod("LoadSetupSelection", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            applyDefaults.Invoke(vm, [path, false]);
+            loadSelection.Invoke(vm, [path]);
+            Assert.Equal("cpu-inference", vm.SelectedAccelPolicy.Value);
+            Assert.Equal("cpu", vm.SelectedProcessingDevice.Value);
+            Assert.True(vm.ForceCpu);
+            Assert.Equal("cpu", vm.SelectedSetupMode.Value);
+            Assert.False(vm.SetupWebGpu);
+            Assert.False(vm.SetupDirectMl);
+
+            File.WriteAllText(path, """{"mode":"recommended","components":["cpu","webgpu"],"detection_policy":"auto","correction_policy":"auto"}""");
+            applyDefaults.Invoke(vm, [path, false]);
+            Assert.Equal("cpu-inference", vm.SelectedAccelPolicy.Value);
+            Assert.Equal("cpu", vm.SelectedProcessingDevice.Value);
+
+            // Only an explicit Mac setup action applies Auto; existing startup defaults stay unchanged.
+            applyDefaults.Invoke(vm, [path, true]);
+            loadSelection.Invoke(vm, [path]);
+            Assert.Equal("auto", vm.SelectedAccelPolicy.Value);
+            Assert.Equal("auto", vm.SelectedProcessingDevice.Value);
+            Assert.False(vm.ForceCpu);
+            Assert.Equal("recommended", vm.SelectedSetupMode.Value);
+            Assert.True(vm.SetupWebGpu);
+            Assert.False(vm.SetupDirectMl);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [AvaloniaFact]
     public void DetectionFailureKeysChangeWithContentCropAndBackend()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);

@@ -1,19 +1,23 @@
 """Native build/installed smoke; hardware GPU acceptance is a separate opt-in gate.
 
-macOS only builds source locally. It never calls the packager or exports binaries.
-No signing, release creation, publishing or driver installation is performed.
+macOS builds source locally by default. Explicit --macos-binary additionally
+packages and tests relocated Apple-silicon bundles. No release publication or
+system driver installation is performed.
 """
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import argparse
 import hashlib
 import json
 import os
 import platform
+import plistlib
 import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
+import zipfile
 from package_native import native_architecture, executable_architectures, TARGETS
 from fetch_gpu_runtime import fetch, fetch_vc_redist
 from package_support import native_version, source_identity
@@ -49,6 +53,15 @@ def rust_build_outputs(work: Path, rid: str) -> dict[str, Path]:
 
 def emitted_package_versions(package: Path, payload: Path, rid: str, version: str) -> dict:
     """Check emitted OS metadata rather than inferring versions from filenames."""
+    if rid == "osx-arm64":
+        with (payload.parent / "Info.plist").open("rb") as stream:
+            metadata = plistlib.load(stream)
+        for key in ("CFBundleShortVersionString", "CFBundleVersion"):
+            if metadata.get(key) != version:
+                raise RuntimeError(f"macOS {key} does not match native version {version}")
+        if metadata.get("LSMinimumSystemVersion") != "14.0":
+            raise RuntimeError("macOS minimum version must match the checked runtimes")
+        return {"application_bundle": metadata}
     if rid.startswith("win-"):
         result = {}
         installer = next(package.glob("*-Setup.exe"))
@@ -70,6 +83,74 @@ def emitted_package_versions(package: Path, payload: Path, rid: str, version: st
     if actual != version:
         raise RuntimeError(f"Debian package version {actual!r} does not match native version {version}")
     return {"debian": actual}
+
+
+def verify_macos_candidate(package: Path, work: Path, version: str, run) -> tuple[Path, dict]:
+    """Check both distributions, then run from a relocated, space-containing path."""
+    manifest = json.loads((package / "package-manifest.json").read_text())
+    if (manifest.get("rid") != "osx-arm64" or manifest.get("version") != version
+            or manifest.get("distribution_policy") != "application"
+            or manifest.get("payload_root") != "ColorCorrect Studio.app/Contents/MacOS"):
+        raise RuntimeError("macOS binary manifest has an incompatible delivery contract")
+    receipts = []
+    for kind in ("zip", "tar.gz"):
+        destination = work / ("Relocated Applications" if kind == "zip" else "Verified Tar Applications")
+        destination.mkdir(exist_ok=False)
+        archive = package / f"ColorCorrect-Studio-{version}-osx-arm64.{kind}"
+        if kind == "zip":
+            with zipfile.ZipFile(archive) as source:
+                for entry in source.infolist():
+                    path = PurePosixPath(entry.filename)
+                    if (path.is_absolute() or ".." in path.parts or "\\" in entry.filename
+                            or not path.parts or path.parts[0] != "ColorCorrect Studio.app"
+                            or (entry.external_attr >> 16) & 0o170000 == 0o120000):
+                        raise RuntimeError("Unsafe macOS ZIP member")
+            run(["ditto", "-x", "-k", archive, destination])
+        else:
+            with tarfile.open(archive) as source:
+                for entry in source.getmembers():
+                    path = PurePosixPath(entry.name)
+                    if (path.is_absolute() or ".." in path.parts or "\\" in entry.name
+                            or not path.parts or path.parts[0] != "ColorCorrect Studio.app"
+                            or not (entry.isfile() or entry.isdir())):
+                        raise RuntimeError("Unsafe macOS tar member")
+                source.extractall(destination, filter="data")
+        actual = {path.relative_to(destination).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                  for path in destination.rglob("*") if path.is_file()}
+        if actual != manifest.get("sha256"):
+            raise RuntimeError(f"Relocated {kind} bundle differs from the signed payload manifest")
+        bundle = destination / "ColorCorrect Studio.app"
+        run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", bundle])
+        receipts.append({"archive": archive.name, "verified_files": len(actual), "codesign": "ad-hoc integrity verified"})
+    return work / "Relocated Applications" / manifest["payload_root"], {"archives": receipts,
+        "status": "both archives extracted, payload hashes and ad-hoc signatures verified",
+        "signing": "ad-hoc only; not Developer ID signed or notarized"}
+
+
+def verify_macos_runtime(payload: Path, work: Path, evidence: Path, env: dict) -> dict:
+    """Execute shipped native helpers from the relocated bundle, without Python."""
+    outputs = {}
+    for name, command in (
+        ("package-location", [payload / "ColorCorrect-Studio", "--package-check"]),
+        ("cpu-setup", [payload / "setup", "--diagnose", "--verify", "--install", "--mode", "cpu"]),
+    ):
+        isolated = dict(env, XDG_CONFIG_HOME=str(work / "macos-setup-preferences"))
+        result = subprocess.run(list(map(str, command)), cwd=work, env=isolated,
+                                check=True, capture_output=True, text=True, timeout=180)
+        (evidence / f"macos-{name}.stdout.json").write_text(result.stdout, encoding="utf-8")
+        (evidence / f"macos-{name}.stderr.txt").write_text(result.stderr, encoding="utf-8")
+        outputs[name] = json.loads(result.stdout)
+    location = outputs["package-location"]
+    if Path(location.get("root", "")).resolve() != payload.resolve() or location.get("architecture") != "arm64":
+        raise RuntimeError("Relocated native macOS launcher selected the wrong private root")
+    probes = outputs["cpu-setup"].get("probes", [])
+    if len(probes) != 1 or probes[0].get("policy") != "cpu-inference" or probes[0].get("status") != "verified" or probes[0].get("exit_code") != 0:
+        raise RuntimeError("Bundled macOS setup helper did not verify complete CPU operation")
+    preferences = json.loads((work / "macos-setup-preferences/colorcorrect/setup-state.json").read_text())
+    if (preferences.get("mode") != "cpu" or preferences.get("components") != ["cpu"]
+            or preferences.get("detection_policy") != "cpu-inference" or preferences.get("correction_policy") != "cpu"):
+        raise RuntimeError("Bundled macOS CPU-only setup did not save CPU inference and correction")
+    return {"native_launcher": location, "cpu_probe": outputs["cpu-setup"], "preferences": preferences, "status": "passed"}
 
 
 def clean_environment(package: Path, rid: str, runtime: Path | None = None) -> dict[str, str]:
@@ -104,7 +185,10 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--inno-compiler", type=Path)
     parser.add_argument("--install-package", action="store_true", help="explicitly install the candidate on this disposable native test host")
+    parser.add_argument("--macos-binary", action="store_true", help="explicitly package and validate relocated Apple-silicon application archives")
     args = parser.parse_args()
+    if args.macos_binary and args.rid != "osx-arm64":
+        parser.error("--macos-binary is available only for osx-arm64")
     # The read-only token belongs only to notice collection in the packager.
     # Do not pass it to installed applications, workers or acceptance harnesses.
     notice_token = os.environ.pop("CCP_NOTICE_GITHUB_TOKEN", None)
@@ -118,7 +202,8 @@ def main():
         "version": native_version(root), "source": source_identity(root),
         "status": "running", "native_ui": "pending interactive clipboard/high-DPI/workflow acceptance",
         "hardware_gpu": "pending; no hardware inferred from hosted runner label", "release_supported": False,
-        "delivery": "source only; no binary artifact" if args.rid == "osx-arm64" else "unsigned release candidate"}
+        "delivery": ("ad-hoc signed application candidate; not notarized" if args.macos_binary else
+                     "source only; no binary artifact") if args.rid == "osx-arm64" else "unsigned release candidate"}
     report["free_disk_bytes_start"] = shutil.disk_usage(work).free
 
     def run(command, **kwargs):
@@ -158,6 +243,21 @@ def main():
             payload = work / "source-build"
             runtime = payload
             app = work / "source-build/app/ColorCorrect.App"
+            if args.macos_binary:
+                run([sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation",
+                     "--wheel-dir", work / "wheels", root / "api"])
+                wheel = next((work / "wheels").glob("*.whl"))
+                package_environment = dict(os.environ)
+                if notice_token:
+                    package_environment["CCP_NOTICE_GITHUB_TOKEN"] = notice_token
+                run(["bash", root / "scripts/package_macos.sh", "--binary", "--source-build", payload,
+                     "--output", work / "package", "--wheel", wheel, "--fetch-notices"], env=package_environment)
+                payload, report["macos_distribution"] = verify_macos_candidate(work / "package", work, report["version"], run)
+                runtime = payload
+                with (payload.parent / "Info.plist").open("rb") as stream:
+                    app = payload / plistlib.load(stream)["CFBundleExecutable"]
+                report["emitted_package_versions"] = emitted_package_versions(work / "package", payload, args.rid, report["version"])
+                shutil.copy2(work / "package/package-manifest.json", evidence / "package-manifest.json")
         else:
             runtime = work / "runtime"
             report["runtime"] = fetch(args.rid, runtime, work / "download-cache")
@@ -247,13 +347,15 @@ def main():
         report["visual_baselines"] = "pending native screenshot/clipboard/high-DPI baselines; headless structural checks do not certify rendering"
         run([sys.executable, "-m", "venv", work / "venv"])
         python = work / ("venv/Scripts/python.exe" if os.name == "nt" else "venv/bin/python")
-        if args.rid == "osx-arm64":
+        if args.rid == "osx-arm64" and not args.macos_binary:
             run([sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", work / "wheels", root / "api"])
             wheel = next((work / "wheels").glob("*.whl"))
         else:
             wheel = next((payload / "python").glob("*.whl"))
         run([python, "-m", "pip", "install", "--no-index", "--no-deps", wheel])
         env = clean_environment(payload, args.rid, runtime)
+        if args.macos_binary:
+            report["macos_native_helpers"] = verify_macos_runtime(payload, work, evidence, env)
         try:
             run([python, "-I", "-m", "unittest", "discover", "-s", root / "api/tests", "-p", "test*.py"], cwd=work, env=env)
             report["component_tests"]["python_api"] = "source API unit tests passed; installed-wheel behavior checked separately by isolated smoke"
@@ -275,7 +377,7 @@ def main():
         smoke = work / "acceptance_bootstrap.py"
         shutil.copy2(root / "scripts/acceptance_bootstrap.py", smoke)
         run([python, "-I", smoke, "--package", payload, "--fixtures", fixtures, "--output", evidence / "sdk-smoke"], cwd=work, env=env)
-        report["installed_sdk_smoke"] = "passed" if args.rid != "osx-arm64" else "installed SDK against local source build passed"
+        report["installed_sdk_smoke"] = "passed" if args.rid != "osx-arm64" or args.macos_binary else "installed SDK against local source build passed"
         # Full CPU workflows run on every native architecture, independently of
         # whether hosted graphics happen to be available. Auto must also work.
         cpu_workflow = work / "acceptance_cpu_workflow.py"

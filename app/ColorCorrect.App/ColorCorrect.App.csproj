@@ -2,8 +2,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <Version>0.2.1</Version>
-    <InformationalVersion>0.2.1</InformationalVersion>
+    <Version>0.2.2</Version>
+    <InformationalVersion>0.2.2</InformationalVersion>
     <Product>ColorCorrect Studio</Product>
     <AssemblyTitle>ColorCorrect Studio</AssemblyTitle>
     <Description>Professional chart-based color correction for still images.</Description>

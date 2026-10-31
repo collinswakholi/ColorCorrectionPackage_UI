@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.2
 
 - Add explicit CPU chart and white-plane detection. Auto tries available GPU engines and falls back to CPU when GPU inference cannot complete.
+- Add Apple-silicon macOS app bundles with private runtimes, native launchers and the optional Python SDK. Bundles use ad-hoc signing; Developer ID signing and notarization are not included.
 - Fix Apple-silicon WebGPU initialization by letting Dawn select its native Metal backend.
 - Keep CPU operation available when an enabled experimental WSL GPU add-on is missing or fails its checks, with repair details for failed GPU attempts.
 - Add Recommended, CPU-only and Custom setup choices, offline runtime repair and Check setup device diagnostics.
@@ -12,7 +13,7 @@
 - Show detection-engine initialization failures without discarding completed results, and keep CPU retry available.
 - Fix Python worker shutdown after normal completion, timeouts and interruption, and wait for native worker cleanup.
 - Isolate native build outputs so packaging cannot reuse a stale worker from another build.
-- Clarify source-build requirements, installation choices and the distinction between these changes and the published 0.2.1 packages.
+- Update installation and API guides for the 0.2.2 application and independently versioned 2.2.2 SDK. Keep previous release assets unchanged.
 
 ## 0.2.1 — 2026-10-29
 

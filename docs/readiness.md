@@ -5,13 +5,13 @@ They are not an installation guide or a current support guarantee. See
 [Compatibility](compatibility.md) for user-facing platform notes and the
 [developer guide](development/README.md#validation-records) for technical records.
 
-## Current local CPU inference work
+## 0.2.2 release scope
 
-The working implementation adds explicit CPU detection and Auto recovery while retaining GPU correction and CPU recovery. Installation setup distinguishes required libraries from optional acceleration. This is local source work; no new version or package has been published. Current evidence is recorded in the local handoff, separately from the historical snapshots below.
+Version 0.2.2 adds explicit CPU detection and Auto recovery while retaining GPU correction and CPU recovery. Installation setup distinguishes required libraries from optional acceleration. Apple-silicon macOS now has application-bundle packaging, with ad-hoc signatures and no Developer ID signing or notarization. Release-specific evidence is recorded with its source and package identities, separately from the historical snapshots below.
 
 Native Windows/Linux x64/ARM64 build and installation jobs ran successfully for published 0.2.1. Their hardware GPU and interactive UI coverage remains separate; the historical table's “prepared but not run” wording refers to its earlier snapshot.
 
-This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). The subsequent version-tag workflow publishes unsigned Windows/Linux preview packages after native checks pass. Apple-silicon macOS remains source-only, with no application binary distribution.
+This ledger distinguishes corrected source from validated packages. The local readiness run below preceded the authorized commits and native CI. CI results and fixes are recorded in [pull request #4](https://github.com/collinswakholi/ColorCorrectionPackage_UI/pull/4). The 0.2.2 version-tag workflow publishes Windows/Linux packages and Apple-silicon application archives after native checks pass. Historical source-only Mac statements below describe earlier versions.
 
 ## 0.2.1 local UI repair snapshot
 

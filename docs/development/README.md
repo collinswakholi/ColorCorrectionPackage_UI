@@ -38,8 +38,8 @@ cases require an available hardware adapter; an unavailable device is not a pass
 ## Automated builds and documentation edits
 
 Application, API, packaging and bundled-documentation changes on `main` and pull
-requests run native Windows/Linux x64 and ARM64 builds and Apple-silicon source
-validation. Manual runs and version tags retain the full native workflow.
+requests run native Windows/Linux x64 and ARM64 builds and Apple-silicon macOS
+application packaging. Manual runs and version tags retain the full native workflow.
 Main-branch and pull-request builds do not publish releases.
 
 Root `README.md` and dedicated demo-only changes run the lightweight documentation
@@ -51,7 +51,8 @@ request is not treated as a broken local documentation link.
 The aggregate result includes every applicable job. A later documentation-only
 push does not cancel an earlier native build. Publishing requires an exact version
 tag and successful native jobs; see the [release guide](../releasing.md).
-Apple-silicon CI uploads text reports only, never application or runtime binaries.
+Apple-silicon CI produces native app archives and accompanying evidence. Hardware
+GPU and interactive Mac desktop acceptance remain separate.
 
 ## Validation records
 
@@ -147,5 +148,6 @@ versioned record. Official Linux release assets do not include it.
 The [release guide](../releasing.md) specifies distribution filenames, manifests,
 checksums and tag-only publication rules. A main-branch build produces unsigned
 development downloads, not a published release. The optional hardware workflow
-requires a provisioned runner and explicit dispatch. Apple-silicon source jobs
-upload text records only; macOS binaries are not distributed.
+requires a provisioned runner and explicit dispatch. Apple-silicon jobs package
+`ColorCorrect Studio.app` into versioned ZIP and tar archives. Bundles are ad-hoc
+signed, without Developer ID signing or notarization.

@@ -2,6 +2,8 @@
 from pathlib import Path
 import hashlib
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import re
@@ -141,10 +143,28 @@ class ReleaseContracts(unittest.TestCase):
             self.assertNotIn(key, result)
         self.assertNotIn("developer", result["PATH"])
 
-    def test_macos_packaging_is_not_a_distribution_target(self):
+    def test_default_native_packager_keeps_macos_source_only(self):
         import package_native
         self.assertIn("osx-arm64", package_native.TARGETS)
         self.assertNotIn("osx-arm64", package_native.PACKAGE_TARGETS)
+
+    def test_macos_binary_tool_requires_explicit_opt_in_before_building(self):
+        import package_macos
+        with patch.object(sys,"argv",["package_macos.py"]), patch("package_macos.build") as build, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(SystemExit) as stopped:
+                package_macos.main()
+        self.assertEqual(stopped.exception.code,2)
+        self.assertIn("Binary packaging requires --binary",errors.getvalue())
+        build.assert_not_called()
+        with patch.object(sys,"argv",["package_macos.py","--binary","--source-build","source",
+                "--output","out","--wheel","sdk.whl"]), \
+             patch("package_macos.build",return_value={"rid":"osx-arm64","version":"0.2.0",
+                "signing":{"kind":"ad-hoc","notarized":False}}) as build, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(package_macos.main(),0)
+        build.assert_called_once()
+        self.assertEqual(json.loads(output.getvalue())["rid"],"osx-arm64")
 
     def test_windows_clean_environment_accepts_uppercase_systemroot(self):
         unsafe = {"SYSTEMROOT": "C:/Windows", "Path": "dev/bin", "PSMODULEPATH": "dev/modules", "USERPROFILE": "C:/Users/guest"}

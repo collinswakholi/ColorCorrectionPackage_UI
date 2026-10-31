@@ -125,7 +125,7 @@ jobs:
             artifacts/native-ci/${{ matrix.rid }}/package/package-manifest.json
           if-no-files-found: error
   publish:
-    name: Publish verified Windows and Linux preview
+    name: Publish verified full release
     needs: [packages, macos_source, validation]
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.packages.result == 'success' && needs.macos_source.result == 'success' && needs.validation.result == 'success' }}
     runs-on: ubuntu-24.04
@@ -138,16 +138,16 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: '3.12.10', architecture: x64}
-      - name: Verify all candidates, upload a draft, and publish as a prerelease
+      - name: Verify all five candidates, upload a draft, and publish full/latest
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/publish_release.py --publish --output "$RUNNER_TEMP/release-assets"
+        run: python scripts/publish_release.py --publish --stable --include-macos-arm64 --output "$RUNNER_TEMP/release-assets"
   macos_source:
-    name: Apple-silicon source build and tests (no binary distribution)
+    name: Apple-silicon application and source validation
     needs: [changes]
     if: needs.changes.outputs.native == 'true'
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       RUSTUP_TOOLCHAIN: 1.95.0-aarch64-apple-darwin
     steps:
@@ -164,8 +164,10 @@ jobs:
           rustc -Vv
           python -m pip install setuptools==78.1.0 wheel==0.45.1
           python -m pip install --only-binary=:all: --require-hashes -r scripts/requirements-ci.txt
-      - name: Build source and test local app/API
-        run: python scripts/native_ci_acceptance.py --rid osx-arm64
+      - name: Build, relocate and test Apple-silicon application/API
+        env:
+          CCP_NOTICE_GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/native_ci_acceptance.py --rid osx-arm64 --macos-binary
       - name: Upload text evidence only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -180,6 +182,17 @@ jobs:
             artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/result.json
             artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/cpu-inference-profile*.json
             artifacts/native-ci/osx-arm64/evidence/sdk-full-auto/result.json
+          if-no-files-found: error
+      - name: Upload verified Apple-silicon application candidate
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-osx-arm64-${{ github.sha }}
+          path: |
+            artifacts/native-ci/osx-arm64/package/*.zip
+            artifacts/native-ci/osx-arm64/package/*.tar.gz
+            artifacts/native-ci/osx-arm64/package/SHA256SUMS
+            artifacts/native-ci/osx-arm64/package/package-manifest.json
           if-no-files-found: error
   validation:
     name: Validation result

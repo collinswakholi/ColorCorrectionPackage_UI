@@ -38,7 +38,7 @@ class WorkflowContracts(unittest.TestCase):
                 if "CCP_NOTICE_GITHUB_TOKEN" in step.get("env", {}):
                     found.append((name, step["name"]))
                     self.assertEqual(step["env"]["CCP_NOTICE_GITHUB_TOKEN"], "${{ github.token }}")
-        self.assertEqual(found, [("packages", "Native package and installed SDK smoke (GPU gate remains separate)")])
+        self.assertEqual(found, [("packages", "Native package and installed SDK smoke (GPU gate remains separate)"), ("macos_source", "Build, relocate and test Apple-silicon application/API")])
 
     def test_concurrency_separates_main_pull_request_dispatch_and_version_tag(self):
         concurrency = load("native-builds.yml")["concurrency"]
@@ -123,7 +123,7 @@ class WorkflowContracts(unittest.TestCase):
                 if "GH_TOKEN" in step.get("env", {}):
                     self.assertEqual(name, "publish")
                     self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
-                    self.assertEqual(step["run"], 'python scripts/publish_release.py --publish --output "$RUNNER_TEMP/release-assets"')
+                    self.assertEqual(step["run"], 'python scripts/publish_release.py --publish --stable --include-macos-arm64 --output "$RUNNER_TEMP/release-assets"')
                 if "publish_release.py" in step.get("run", ""):
                     self.assertEqual(name, "publish")
 
@@ -163,15 +163,26 @@ class WorkflowContracts(unittest.TestCase):
                 self.assertIn("rustup show active-toolchain", setup)
                 self.assertIn("rustc -Vv", setup)
 
-    def test_source_only_mac_artifacts_and_separate_hardware_gate(self):
+    def test_explicit_apple_silicon_binary_candidate_and_separate_hardware_gate(self):
         workflow = load("native-builds.yml")
         mac = workflow["jobs"]["macos_source"]
         self.assertEqual(mac["runs-on"], "macos-15")
+        uploads = []
         for step in mac["steps"]:
             if step.get("uses", "").startswith("actions/setup-python@"):
                 self.assertEqual(step["with"]["architecture"], "arm64")
             self.assertNotIn("--install-package", step.get("run", ""))
             if step.get("uses", "").startswith("actions/upload-artifact@"):
+                uploads.append(step)
+                if step["with"]["name"].startswith("candidate-osx-arm64-"):
+                    self.assertEqual(step["if"], "success()")
+                    self.assertEqual(set(step["with"]["path"].splitlines()), {
+                        "artifacts/native-ci/osx-arm64/package/*.zip",
+                        "artifacts/native-ci/osx-arm64/package/*.tar.gz",
+                        "artifacts/native-ci/osx-arm64/package/SHA256SUMS",
+                        "artifacts/native-ci/osx-arm64/package/package-manifest.json",
+                    })
+                    continue
                 paths = step["with"]["path"].splitlines()
                 self.assertTrue(paths)
                 self.assertTrue(all(path.startswith("artifacts/native-ci/osx-arm64/evidence/")
@@ -182,6 +193,10 @@ class WorkflowContracts(unittest.TestCase):
                     "artifacts/native-ci/osx-arm64/evidence/sdk-full-cpu-inference/cpu-inference-profile*.json",
                     "artifacts/native-ci/osx-arm64/evidence/sdk-full-auto/result.json",
                 }.issubset(paths))
+        self.assertEqual(len(uploads), 2)
+        build = next(step for step in mac["steps"] if "native_ci_acceptance.py" in step.get("run", ""))
+        self.assertEqual(build["run"], "python scripts/native_ci_acceptance.py --rid osx-arm64 --macos-binary")
+        self.assertEqual(mac["env"]["RUSTUP_TOOLCHAIN"], "1.95.0-aarch64-apple-darwin")
         hardware = load("hardware-gpu-acceptance.yml")
         self.assertEqual(set(hardware["on"]), {"workflow_dispatch"})
         self.assertEqual(hardware["on"]["workflow_dispatch"]["inputs"]["enable_hardware_run"]["default"], "false")

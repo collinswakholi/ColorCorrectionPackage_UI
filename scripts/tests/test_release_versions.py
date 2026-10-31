@@ -1,6 +1,7 @@
 """Native product and SDK versions evolve independently but remain internally coherent."""
 import ast
 import json
+import plistlib
 from pathlib import Path
 import re
 import sys
@@ -92,6 +93,23 @@ class ReleaseVersions(unittest.TestCase):
             with patch("native_ci_acceptance.subprocess.check_output", return_value="0.2.0\n"):
                 self.assertEqual(emitted_package_versions(package, package, "linux-x64", "0.2.0"),
                                  {"debian": "0.2.0"})
+
+    def test_macos_emitted_bundle_versions_and_minimum_os_are_verified(self):
+        version=native_version(SCRIPTS.parent)
+        with tempfile.TemporaryDirectory() as temporary:
+            package=Path(temporary)
+            contents=package/'ColorCorrect Studio.app/Contents'
+            payload=contents/'MacOS';payload.mkdir(parents=True)
+            metadata={'CFBundleShortVersionString':version,'CFBundleVersion':version,'LSMinimumSystemVersion':'14.0'}
+            def write(values):
+                with (contents/'Info.plist').open('wb') as stream:plistlib.dump(values,stream)
+            write(metadata)
+            self.assertEqual(emitted_package_versions(package,payload,'osx-arm64',version),{'application_bundle':metadata})
+            for field,value in [('CFBundleShortVersionString','0.1.0'),('CFBundleVersion','0.1.0'),('LSMinimumSystemVersion','13.0')]:
+                with self.subTest(field=field):
+                    write(dict(metadata,**{field:value}))
+                    with self.assertRaisesRegex(RuntimeError,'match'):
+                        emitted_package_versions(package,payload,'osx-arm64',version)
 
 
 if __name__ == "__main__":

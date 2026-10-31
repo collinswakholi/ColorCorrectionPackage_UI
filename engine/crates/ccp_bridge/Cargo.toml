@@ -1,6 +1,6 @@
 [package]
 name = "ccp_bridge"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "NDJSON serve binary (ccp-engine) for ColorCorrect Studio"
 license = "MIT"

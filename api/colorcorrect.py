@@ -20,7 +20,7 @@ import time
 import tempfile
 from typing import Any, Callable
 
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
 

@@ -1,6 +1,6 @@
 [package]
 name = "ccp_core"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Speedy color science, chart refs, fit maps, and CCP FFC/GC/WB stages"
 license = "MIT"

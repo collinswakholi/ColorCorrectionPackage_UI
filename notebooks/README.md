@@ -14,12 +14,12 @@ application package available. The notebooks can run from any directory.
 ## Install the kernel environment
 
 Use Python 3.10+ and the wheel included in the installed/extracted app's `python/`
-folder. The SDK is independently versioned 2.2.1; use the wheel from your application package.
+folder. The SDK is independently versioned 2.2.2; use the wheel from your application package.
 
 ```sh
 python -m venv .venv
 # Activate this environment, then:
-python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.2.1-py3-none-any.whl
+python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.2.2-py3-none-any.whl
 python -m pip install jupyterlab ipykernel Pillow
 ```
 
@@ -67,12 +67,13 @@ their transforms automatically; there are no manual gamma or white-temperature
 parameters. Notebook 2 shows polynomial degree, PLS components, and CC neural
 settings. FFC neural settings are separate.
 
-With the current source engine, Auto chart and white-plane detection try an
+With the 0.2.2 engine, Auto chart and white-plane detection try an
 eligible GPU and recover to CPU when needed. `backend="cpu-inference"` selects
 CPU detection explicitly and requires the `cpu_inference_v1` worker capability.
 The legacy `backend="cpu"` selects CPU image correction while detection follows
-Auto. Published 0.2.1 packages still require GPU inference; a newer Python wheel
-does not replace their native engine.
+Auto. Older 0.2.1 packages still require GPU inference; a newer Python wheel
+does not replace their native engine. On macOS, set `COLORCORRECT_APP_ROOT` to
+`/Applications/ColorCorrect Studio.app/Contents/MacOS`.
 
 Standard WSL packages do not supply the experimental Dozen GPU add-on: follow the
 [WSL installation notes](../installer/README.md#experimental-wsl-gpu-setup) and

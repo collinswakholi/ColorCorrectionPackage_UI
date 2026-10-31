@@ -11,12 +11,12 @@ python -m pip install ./api
 
 The wheel does **not** contain the native worker, models, or inference libraries.
 Keep the installed/extracted application intact and set `root` to that folder.
-The native application and SDK are versioned independently; this SDK is 2.2.1.
+The native application and SDK are versioned independently; this SDK is 2.2.2.
 
-This guide follows the current source. CPU inference recovery and
-`backend="cpu-inference"` require a matching newly built native engine. The
-published 0.2.1 engine uses GPU inference; installing this wheel alone does not
-add CPU detection to that engine.
+Use the matching **0.2.2** native application for CPU inference recovery and
+`backend="cpu-inference"`. Older 0.2.1 engines require GPU inference; installing
+this wheel alone does not replace their native engine. For the Mac bundle, set
+`root="/Applications/ColorCorrect Studio.app/Contents/MacOS"`.
 
 ## Fit, then predict
 
@@ -81,8 +81,7 @@ parameters requires another fit. `ApplyOptions` can disable fitted stages or
 override FFC rendering settings, but cannot create a transform absent from a model.
 CC degree also controls the polynomial input features of PLS/NN; use integers
 1–7. The combination-term switch affects polynomial CC (`model="linear"`) only;
-PLS/NN always include those terms. The detailed reference explains SDK 2.2.1
-validation versus native normalization.
+PLS/NN always include those terms. The detailed reference explains SDK validation versus native normalization.
 
 See the [configuration reference](../docs/api/README.md#configuration-reference)
 for defaults, bounds, units, method-specific settings, and manual white-image crops.

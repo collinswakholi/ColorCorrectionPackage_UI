@@ -1,7 +1,8 @@
-"""Publish verified Windows/Linux candidates from this version-tag workflow run.
+"""Publish allowlisted candidates from a verified version-tag workflow run.
 
-Uses only the job's scoped GitHub token. Never builds, retags, deletes, replaces
-assets, publishes macOS binaries, or marks a preview as the latest stable release.
+Defaults to Windows/Linux previews. Stable/latest publication and Apple-silicon
+macOS application assets each require an explicit option. Never retags, deletes,
+replaces assets, or modifies an already published release.
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +21,7 @@ import zipfile
 from package_support import digest, native_version
 
 RIDS = ("win-x64", "win-arm64", "linux-x64", "linux-arm64")
+MAC_RID = "osx-arm64"
 PRODUCTION_FEATURES = {"ort-plane", "wgpu-lut", "rust-inference"}
 API = "https://api.github.com"
 
@@ -86,10 +89,14 @@ def validate_context(version: str, environment: dict) -> tuple[str, int, str, st
 
 def verify_source(github: GitHub, run_id: int, sha: str, tag: str):
     run = github.request(github.prefix + f"/actions/runs/{run_id}")
-    if (run.get("head_sha") != sha or run.get("event") != "push"
+    if (run.get("head_sha") != sha or run.get("head_branch") != tag or run.get("event") != "push"
             or run.get("path") != ".github/workflows/native-builds.yml"
             or run.get("repository", {}).get("full_name", "").lower() != github.prefix.removeprefix("/repos/").lower()):
         raise ValueError("The release candidates did not originate from this trusted workflow run")
+    validation = [job for job in github.pages(f"/actions/runs/{run_id}/jobs", "jobs")
+                  if job.get("name") == "Validation result"]
+    if len(validation) != 1 or validation[0].get("status") != "completed" or validation[0].get("conclusion") != "success":
+        raise ValueError("The current workflow attempt must complete its aggregate validation before publication")
     reference = github.request(github.prefix + "/git/ref/tags/" + tag)["object"]
     for _ in range(5):
         if reference["type"] == "commit":
@@ -104,15 +111,55 @@ def verify_source(github: GitHub, run_id: int, sha: str, tag: str):
         raise ValueError("The tagged source must belong to main")
 
 
+def release_rids(include_macos_arm64: bool = False) -> tuple[str, ...]:
+    return RIDS + ((MAC_RID,) if include_macos_arm64 else ())
+
+
 def distribution_names(version: str, rid: str) -> set[str]:
+    if rid not in release_rids(True):
+        raise ValueError("Unsupported release architecture: " + rid)
     stem = f"ColorCorrect-Studio-{version}-{rid}"
+    if rid == MAC_RID:
+        return {stem + ".zip", stem + ".tar.gz"}
     if rid.startswith("win-"):
         return {stem + ".zip", stem + "-Setup.exe"}
     architecture = "amd64" if rid == "linux-x64" else "arm64"
     return {stem + ".tar.gz", f"colorcorrect-studio_{version}_{architecture}.deb"}
 
 
-def stage_candidate(archive: Path, output: Path, version: str, rid: str, sha: str) -> list[Path]:
+def validate_manifest(manifest: dict, version: str, rid: str, sha: str, include_macos_arm64: bool):
+    if (not isinstance(manifest, dict) or not isinstance(manifest.get("source"), dict)
+            or not isinstance(manifest.get("worker_features_declared"), list)
+            or not all(isinstance(feature, str) for feature in manifest["worker_features_declared"])):
+        raise ValueError("Candidate manifest must contain structured source and feature metadata")
+    if (manifest.get("rid") != rid or manifest.get("version") != version
+            or manifest.get("source", {}).get("git_commit") != sha
+            or manifest.get("source", {}).get("working_tree_dirty") is not False
+            or manifest.get("media_scope") != "still images"
+            or len(manifest["worker_features_declared"]) != len(PRODUCTION_FEATURES)
+            or set(manifest["worker_features_declared"]) != PRODUCTION_FEATURES):
+        raise ValueError("Candidate manifest has incompatible source, version, architecture, or features")
+    if rid == MAC_RID and (not include_macos_arm64
+            or manifest.get("distribution_policy") != "application"
+            or manifest.get("architecture") != "arm64"
+            or manifest.get("minimum_os") != "macOS 14.0"
+            or not isinstance(manifest.get("signing"), dict)
+            or set(manifest["signing"]) != {"kind", "notarized"}
+            or manifest["signing"].get("kind") != "ad-hoc"
+            or manifest["signing"].get("notarized") is not False):
+        raise ValueError("Apple-silicon application distribution requires explicit opt-in and its binary manifest")
+
+
+def release_asset_names(version: str, include_macos_arm64: bool = False) -> set[str]:
+    names = {"SHA256SUMS"}
+    for rid in release_rids(include_macos_arm64):
+        names |= distribution_names(version, rid) | {f"SHA256SUMS-{rid}.txt", f"package-manifest-{rid}.json"}
+    return names
+
+
+def stage_candidate(archive: Path, output: Path, version: str, rid: str, sha: str, *, include_macos_arm64=False) -> list[Path]:
+    if rid == MAC_RID and not include_macos_arm64:
+        raise ValueError("macOS binary staging requires explicit opt-in")
     expected = distribution_names(version, rid)
     with zipfile.ZipFile(archive) as bundle:
         entries = bundle.infolist()
@@ -122,12 +169,7 @@ def stage_candidate(archive: Path, output: Path, version: str, rid: str, sha: st
         if any(entry.is_dir() or (entry.external_attr >> 16) & 0o170000 == 0o120000 for entry in entries):
             raise ValueError("Candidate release assets must be ordinary files")
         manifest = json.loads(bundle.read("package-manifest.json"))
-        if (manifest.get("rid") != rid or manifest.get("version") != version
-                or manifest.get("source", {}).get("git_commit") != sha
-                or manifest.get("source", {}).get("working_tree_dirty") is not False
-                or manifest.get("media_scope") != "still images"
-                or set(manifest.get("worker_features_declared", [])) != PRODUCTION_FEATURES):
-            raise ValueError("Candidate manifest has incompatible source, version, architecture, or features")
+        validate_manifest(manifest, version, rid, sha, include_macos_arm64)
         checksums = {}
         for line in bundle.read("SHA256SUMS").decode("ascii").splitlines():
             match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
@@ -153,13 +195,17 @@ def stage_candidate(archive: Path, output: Path, version: str, rid: str, sha: st
         return files
 
 
-def stage_run(github: GitHub, run_id: int, sha: str, version: str, output: Path) -> list[Path]:
+def stage_run(github: GitHub, run_id: int, sha: str, version: str, output: Path, *, include_macos_arm64=False) -> list[Path]:
     output.mkdir(parents=True, exist_ok=False)
     downloads = output / "artifact-downloads"
     downloads.mkdir()
     artifacts = list(github.pages(f"/actions/runs/{run_id}/artifacts", "artifacts"))
+    allowed_candidates = {f"candidate-{rid}-{sha}" for rid in release_rids(include_macos_arm64)}
+    if any(item["name"].startswith("candidate-") and item["name"].endswith("-" + sha)
+           and item["name"] not in allowed_candidates for item in artifacts):
+        raise ValueError("Workflow contains a candidate outside the selected distribution policy")
     files = []
-    for rid in RIDS:
+    for rid in release_rids(include_macos_arm64):
         matches = [item for item in artifacts if item["name"] == f"candidate-{rid}-{sha}" and not item["expired"]]
         if len(matches) != 1:
             raise ValueError("Exactly one candidate artifact is required for " + rid)
@@ -170,7 +216,7 @@ def stage_run(github: GitHub, run_id: int, sha: str, version: str, output: Path)
         github.download(matches[0]["id"], archive)
         if "sha256:" + digest(archive) != artifact_digest:
             raise ValueError("Downloaded GitHub artifact checksum mismatch: " + rid)
-        files += stage_candidate(archive, output, version, rid, sha)
+        files += stage_candidate(archive, output, version, rid, sha, include_macos_arm64=include_macos_arm64)
     combined = output / "SHA256SUMS"
     combined.write_text("".join(f"{digest(file)}  {file.name}\n" for file in sorted(files)), encoding="ascii", newline="\n")
     return files + [combined]
@@ -182,45 +228,120 @@ def verify_asset(asset: dict, file: Path):
         raise ValueError("Existing or uploaded release asset is not identical: " + file.name)
 
 
-def publish(github: GitHub, run_id: int, sha: str, tag: str, files: list[Path]) -> dict:
+def policy_marker(stable: bool, include_macos_arm64: bool) -> str:
+    policy = {"schema": 1, "mode": "stable" if stable else "preview", "rids": list(release_rids(include_macos_arm64))}
+    return "<!-- colorcorrect-release-policy:" + json.dumps(policy, sort_keys=True, separators=(",", ":")) + " -->"
+
+
+def verify_local_assets(files: list[Path], version: str, sha: str, include_macos_arm64: bool):
+    names = [file.name for file in files]
+    if len(set(names)) != len(names) or set(names) != release_asset_names(version, include_macos_arm64):
+        raise ValueError("Release must contain the complete allowlisted asset inventory")
+    if any(not file.is_file() or file.is_symlink() for file in files):
+        raise ValueError("Release assets must be ordinary files")
+    by_name = {file.name: file for file in files}
+    combined = {}
+    for line in by_name["SHA256SUMS"].read_text(encoding="ascii").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
+        if match is None or match[2] in combined:
+            raise ValueError("Malformed combined release checksum inventory")
+        combined[match[2]] = match[1]
+    if combined != {file.name: digest(file) for file in files if file.name != "SHA256SUMS"}:
+        raise ValueError("Combined release checksums do not match the complete asset inventory")
+    for rid in release_rids(include_macos_arm64):
+        validate_manifest(json.loads(by_name[f"package-manifest-{rid}.json"].read_text(encoding="utf-8")),
+                          version, rid, sha, include_macos_arm64)
+        checksums = {}
+        for line in by_name[f"SHA256SUMS-{rid}.txt"].read_text(encoding="ascii").splitlines():
+            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
+            if match is None or match[2] in checksums:
+                raise ValueError("Malformed architecture checksum inventory: " + rid)
+            checksums[match[2]] = match[1]
+        if checksums != {name: digest(by_name[name]) for name in distribution_names(version, rid)}:
+            raise ValueError("Architecture checksums do not match distributions: " + rid)
+
+
+def verify_release_identity(release: dict, sha: str, tag: str, stable: bool, include_macos_arm64: bool):
+    if not isinstance(release, dict) or not isinstance(release.get("body"), str):
+        raise ValueError("Malformed existing release identity")
+    body = release.get("body") or ""
+    sources = re.findall(r"<!-- colorcorrect-source:([0-9a-f]{40}) -->", body)
+    policies = re.findall(r"<!-- colorcorrect-release-policy:.*? -->", body)
+    legacy_preview = not stable and not include_macos_arm64 and not policies
+    if (sources != [sha] or release.get("tag_name") != tag or release.get("target_commitish") != sha
+            or release.get("prerelease") is not (not stable)
+            or not isinstance(release.get("draft"), bool)
+            or type(release.get("id")) is not int or release["id"] <= 0
+            or not (legacy_preview or policies == [policy_marker(stable, include_macos_arm64)])):
+        raise ValueError("Refusing to change a release with different source or distribution policy")
+
+
+def verified_remote_assets(github: GitHub, release_id: int, files: list[Path], *, complete=False) -> dict:
+    rows = list(github.pages(f"/releases/{release_id}/assets"))
+    if any(not isinstance(asset, dict) or not isinstance(asset.get("name"), str) for asset in rows):
+        raise ValueError("Malformed release asset metadata")
+    names = [asset.get("name") for asset in rows]
+    wanted = {file.name for file in files}
+    if len(set(names)) != len(names) or set(names) - wanted or (complete and set(names) != wanted):
+        raise ValueError("Release has duplicate, missing, or unexpected assets; nothing was replaced")
+    existing = dict(zip(names, rows))
+    for file in files:
+        if file.name in existing:
+            verify_asset(existing[file.name], file)
+    return existing
+
+
+def publish(github: GitHub, run_id: int, sha: str, tag: str, files: list[Path], *, stable=False, include_macos_arm64=False) -> dict:
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        raise ValueError("Publication requires an exact semantic version tag")
+    verify_local_assets(files, tag[1:], sha, include_macos_arm64)
     verify_source(github, run_id, sha, tag)
     marker = f"<!-- colorcorrect-source:{sha} -->"
     matches = [release for release in github.pages("/releases") if release["tag_name"] == tag]
     if len(matches) > 1:
         raise ValueError("Ambiguous existing release")
     release = matches[0] if matches else None
-    if release and (marker not in release.get("body", "") or release.get("target_commitish") != sha
-                    or release.get("prerelease") is not True):
-        raise ValueError("Refusing to change a release not created by this verified preview workflow")
+    if release:
+        verify_release_identity(release, sha, tag, stable, include_macos_arm64)
     if release is None:
         release = github.request(github.prefix + "/releases", method="POST", data={
-            "tag_name": tag, "target_commitish": sha, "name": f"ColorCorrect Studio {tag[1:]} (preview)",
-            "draft": True, "prerelease": True, "make_latest": "false",
-            "body": marker + "\n\nWindows and Ubuntu 24.04 downloads for x64 and ARM64. "
+            "tag_name": tag, "target_commitish": sha, "name": f"ColorCorrect Studio {tag[1:]}" + ("" if stable else " (preview)"),
+            "draft": True, "prerelease": not stable, "make_latest": "false",
+            "body": marker + "\n" + policy_marker(stable, include_macos_arm64) + "\n\nWindows and Ubuntu 24.04 downloads for x64 and ARM64. "
                     "Installers/packages and portable archives include the Python API wheel.\n\n"
-                    "This preview passed native build, installation, component and CPU SDK smoke checks. "
-                    "Native GPU performance and interactive UI acceptance remain separate release gates. "
-                    "Apple-silicon macOS is source-only; no macOS application binaries are distributed.\n\n"
+                    "Native build, installation, component and CPU/Auto SDK workflows are checked per architecture. "
+                    "Physical GPU and interactive UI coverage remain platform-specific. "
+                    + ("Apple-silicon macOS 14+ application archives are included; the app is ad-hoc signed, not notarized. "
+                       if include_macos_arm64 else "Apple-silicon macOS is source-only; no macOS application binaries are distributed. ")
+                    + "Windows/Linux builds are unsigned. No Intel Mac, Torch or video processing.\n\n"
                     "Each architecture has a package manifest and checksums; SHA256SUMS covers all other release assets."})
+        verify_release_identity(release, sha, tag, stable, include_macos_arm64)
     release_id = release["id"]
-    existing = {asset["name"]: asset for asset in github.pages(f"/releases/{release_id}/assets")}
-    wanted = {file.name for file in files}
-    if set(existing) - wanted:
-        raise ValueError("Existing release contains unexpected assets; nothing was replaced")
-    if not release["draft"] and set(existing) != wanted:
-        raise ValueError("Published releases are immutable; missing assets cannot be added")
+    existing = verified_remote_assets(github, release_id, files, complete=not release["draft"])
     for file in files:
         asset = existing.get(file.name)
         if asset is None:
             asset = github.request(github.prefix + f"/releases/{release_id}/assets?name=" + urllib.parse.quote(file.name, safe=""),
                                    method="POST", upload=file)
         verify_asset(asset, file)
+    verified_remote_assets(github, release_id, files, complete=True)
     verify_source(github, run_id, sha, tag)  # Recheck the live tag immediately before publication.
     if release["draft"]:
         release = github.request(github.prefix + f"/releases/{release_id}", method="PATCH",
-                                 data={"draft": False, "prerelease": True, "make_latest": "false"})
-    if release.get("draft") is not False or release.get("prerelease") is not True:
-        raise ValueError("GitHub did not confirm the requested preview publication")
+                                 data={"draft": False, "prerelease": not stable, "make_latest": "true" if stable else "false"})
+    if release.get("draft") is not False or release.get("prerelease") is not (not stable):
+        raise ValueError("GitHub did not confirm the requested publication state")
+    verify_release_identity(release, sha, tag, stable, include_macos_arm64)
+    if release["id"] != release_id:
+        raise ValueError("GitHub returned a different release after publication")
+    if stable:
+        for attempt in range(3):
+            latest = github.request(github.prefix + "/releases/latest")
+            if latest.get("id") == release_id and latest.get("tag_name") == tag:
+                break
+            if attempt == 2:
+                raise ValueError("GitHub did not confirm this full release as latest")
+            time.sleep(1)
     return release
 
 
@@ -228,16 +349,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--publish", action="store_true", help="explicitly publish after all local and remote verification")
+    parser.add_argument("--stable", action="store_true", help="publish a full release and explicitly mark it latest")
+    parser.add_argument("--include-macos-arm64", action="store_true", help="require and include verified Apple-silicon application archives")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     version = native_version(root)
     repository, run_id, sha, tag = validate_context(version, os.environ)
     github = GitHub(repository, os.environ.get("GH_TOKEN", ""))
     verify_source(github, run_id, sha, tag)
-    files = stage_run(github, run_id, sha, version, args.output.resolve())
-    print(json.dumps({"tag": tag, "source": sha, "assets": [file.name for file in files], "prerelease": True}), flush=True)
+    files = stage_run(github, run_id, sha, version, args.output.resolve(), include_macos_arm64=args.include_macos_arm64)
+    print(json.dumps({"tag": tag, "source": sha, "assets": [file.name for file in files], "prerelease": not args.stable,
+                      "macos_arm64": args.include_macos_arm64}), flush=True)
     if args.publish:
-        release = publish(github, run_id, sha, tag, files)
+        release = publish(github, run_id, sha, tag, files, stable=args.stable, include_macos_arm64=args.include_macos_arm64)
         print(json.dumps({"release": release["html_url"], "prerelease": release["prerelease"]}), flush=True)
 
 
