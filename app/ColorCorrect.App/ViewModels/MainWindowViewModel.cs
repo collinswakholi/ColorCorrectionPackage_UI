@@ -2598,8 +2598,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             _worker.Policy = SelectedAccelPolicy.Value;
             await _worker.StartAsync(cancellation).ConfigureAwait(false);
+            var warmed = _worker.Warmed;
+            var warmupError = _worker.LastError;
             await OnUi(() =>
             {
+                if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
                 WorkerReady = true;
                 WorkerStartupComplete = true;
                 WorkerStartupError = "";
@@ -2630,8 +2633,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             await OnUi(() =>
             {
                 Busy = false;
-                CurrentStage = "";
-                RefreshIdlePipeline();
+                EndPipeline();
                 NotifyRunCommands();
                 MaybeAutoDetect();
             }).ConfigureAwait(false);

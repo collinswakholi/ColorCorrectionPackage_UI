@@ -15,12 +15,16 @@ public sealed class WorkerRestartProgressTests
     [InlineData("success")]
     [InlineData("failure")]
     [InlineData("cancel")]
-    public async Task RestartClearsWarmupProgressAndPreservesCompletedResults(string mode)
+    [InlineData("rejected")]
+    [InlineData("rejected-startup")]
+    [InlineData("auto-rejected")]
+    public async Task RestartClearsWarmupProgressAndPreservesCompletedResults(string scenario)
     {
+        var mode = scenario is "rejected-startup" or "auto-rejected" ? "rejected" : scenario;
         var folder = Path.Combine(Path.GetTempPath(), "ccp-warmup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        Process? observer = null;
+        var observers = new List<Process>();
         Task? restart = null;
         try
         {
@@ -44,14 +48,19 @@ public sealed class WorkerRestartProgressTests
                 IsCorrected = true, ModelPath = model, CorrectedPath = output,
             };
             vm.Session.Add(item);
-            vm.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == "cpu-inference");
+            var requestedPolicy = scenario == "auto-rejected" ? "auto" : mode == "rejected" ? "vulkan" : "cpu-inference";
+            vm.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == requestedPolicy);
 
-            restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
+            if (scenario == "rejected-startup")
+            {
+                vm.Busy = true; // Initial startup owns the same busy state as InitializeAsync.
+                restart = (Task)typeof(MainWindowViewModel).GetMethod("StartWorkerAsync", flags)!.Invoke(vm, null)!;
+            }
+            else restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
             await Until(() => vm.CurrentStage == "Warming Opt2 1280");
             Assert.True(vm.Busy);
             Assert.True(vm.JobProgress > 0);
-            observer = Process.GetProcessById(int.Parse(File.ReadAllText(Path.Combine(folder, "pid"))));
-            _ = observer.SafeHandle;
+            ObserveWorker();
 
             if (mode == "cancel") vm.CancelBatchCommand.Execute(null);
             else File.WriteAllText(Path.Combine(folder, "continue"), "");
@@ -64,7 +73,12 @@ public sealed class WorkerRestartProgressTests
             Assert.Equal(0, vm.JobProgress);
             Assert.Equal(mode == "success", vm.WorkerReady);
             Assert.True(vm.WorkerStartupComplete);
-            if (mode == "success") Assert.Contains("Warmed", vm.Status);
+            if (mode == "success")
+            {
+                Assert.Contains("Warmed", vm.Status);
+                Assert.Empty(vm.WorkerStartupError);
+                Assert.Contains("optional adapter warning", worker.LastError);
+            }
             else Assert.NotEmpty(vm.WorkerStartupError);
             Assert.True(item.IsCorrected);
             Assert.Equal(model, item.ModelPath);
@@ -72,16 +86,61 @@ public sealed class WorkerRestartProgressTests
             Assert.Equal("previous successful model", File.ReadAllText(model));
             Assert.Equal("previous successful result", File.ReadAllText(output));
 
+            if (mode == "rejected")
+            {
+                Assert.Contains("Fixture inference runtime unavailable", vm.WorkerStartupError);
+                Assert.Contains("Check setup", vm.WorkerStartupError);
+                Assert.Equal(vm.WorkerStartupError, vm.Status);
+                Assert.DoesNotContain("not checked", vm.WorkerLine);
+                Assert.True(vm.HasWorkerError);
+                Assert.True(vm.ForceCpuRestartCommand.CanExecute(null));
+                Assert.False(observers[0].HasExited);
+                var ping = await worker.SendAsync(new() { ["cmd"] = "ping" });
+                Assert.True(ping.GetProperty("ok").GetBoolean());
+
+                // A failed engine selection must leave recovery available.
+                File.WriteAllText(Path.Combine(folder, "mode"), "success");
+                File.Delete(Path.Combine(folder, "continue"));
+                vm.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == "cpu-inference");
+                restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
+                await Until(() => vm.CurrentStage == "Warming Opt2 1280");
+                ObserveWorker();
+                Assert.True(observers[0].HasExited);
+                File.WriteAllText(Path.Combine(folder, "continue"), "");
+                await restart.WaitAsync(TimeSpan.FromSeconds(15));
+                Assert.True(vm.WorkerReady);
+                Assert.False(vm.HasWorkerError);
+                Assert.Empty(vm.WorkerStartupError);
+                Assert.Empty(vm.CurrentStage);
+                Assert.False(vm.ShowJobProgress);
+                Assert.Equal(0, vm.JobProgress);
+                Assert.True(item.IsCorrected);
+                Assert.Equal(model, item.ModelPath);
+                Assert.Equal(output, item.CorrectedPath);
+                Assert.Equal("previous successful model", File.ReadAllText(model));
+                Assert.Equal("previous successful result", File.ReadAllText(output));
+            }
+
             await vm.DisposeAsync();
-            Assert.True(observer.HasExited);
-            Assert.Equal(0, observer.ExitCode);
+            Assert.All(observers, observer =>
+            {
+                Assert.True(observer.HasExited);
+                Assert.Equal(0, observer.ExitCode);
+            });
+
+            void ObserveWorker()
+            {
+                var observer = Process.GetProcessById(int.Parse(File.ReadAllText(Path.Combine(folder, "pid"))));
+                _ = observer.SafeHandle;
+                observers.Add(observer);
+            }
         }
         finally
         {
             File.WriteAllText(Path.Combine(folder, "continue"), "");
             await vm.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12));
             if (restart is not null) await restart.WaitAsync(TimeSpan.FromSeconds(12));
-            observer?.Dispose();
+            foreach (var observer in observers) observer.Dispose();
             Dispatcher.UIThread.RunJobs();
             Directory.Delete(folder, true);
         }
@@ -95,7 +154,7 @@ public sealed class WorkerRestartProgressTests
             await File.WriteAllTextAsync(script, """
                 #!/bin/sh
                 printf '%s\n' "$$" > pid
-                printf '%s\n' '{"ok":true,"capabilities":["cpu_inference_v1"]}'
+                printf '%s\n' '{"ok":true,"title":"Ready Auto inference (not checked)","error":"Fixture optional adapter warning.","capabilities":["cpu_inference_v1"]}'
                 IFS= read -r line
                 printf '%s\n' '{"type":"progress","message":"Warming Opt2 1280"}'
                 mode=$(cat mode)
@@ -106,7 +165,11 @@ public sealed class WorkerRestartProgressTests
                     IFS= read -r line
                     exit 0
                 fi
-                printf '%s\n' '{"ok":true,"warmed":true,"device":"cpu-inference"}'
+                if [ "$mode" = rejected ]; then
+                    printf '%s\n' '{"ok":false,"warmed":false,"error":"Fixture inference runtime unavailable."}'
+                else
+                    printf '%s\n' '{"ok":true,"warmed":true,"device":"cpu-inference","title":"Warmed CPU inference"}'
+                fi
                 while IFS= read -r line; do
                     case "$line" in
                         *shutdown*) exit 0 ;;
@@ -128,14 +191,15 @@ public sealed class WorkerRestartProgressTests
                 static void Main() {
                     Console.OutputEncoding = new UTF8Encoding(false);
                     File.WriteAllText("pid", System.Diagnostics.Process.GetCurrentProcess().Id.ToString());
-                    Console.WriteLine("{\"ok\":true,\"capabilities\":[\"cpu_inference_v1\"]}");
+                    Console.WriteLine("{\"ok\":true,\"title\":\"Ready Auto inference (not checked)\",\"error\":\"Fixture optional adapter warning.\",\"capabilities\":[\"cpu_inference_v1\"]}");
                     Console.ReadLine();
                     Console.WriteLine("{\"type\":\"progress\",\"message\":\"Warming Opt2 1280\"}");
                     string mode = File.ReadAllText("mode");
                     if (mode == "cancel") { Console.ReadLine(); return; }
                     while (!File.Exists("continue")) Thread.Sleep(10);
                     if (mode == "failure") { Console.WriteLine("{broken"); Console.ReadLine(); return; }
-                    Console.WriteLine("{\"ok\":true,\"warmed\":true,\"device\":\"cpu-inference\"}");
+                    if (mode == "rejected") Console.WriteLine("{\"ok\":false,\"warmed\":false,\"error\":\"Fixture inference runtime unavailable.\"}");
+                    else Console.WriteLine("{\"ok\":true,\"warmed\":true,\"device\":\"cpu-inference\",\"title\":\"Warmed CPU inference\"}");
                     string line;
                     while ((line = Console.ReadLine()) != null) {
                         if (line.Contains("shutdown")) return;

@@ -309,9 +309,12 @@ public partial class MainWindowViewModel
         try
         {
             await _worker.RestartAsync(cancellation).ConfigureAwait(false);
+            var warmed = _worker.Warmed;
+            var warmupError = _worker.LastError;
             await RefreshAccelAsync().ConfigureAwait(false);
             await OnUi(() =>
             {
+                if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
                 WorkerReady = true;
                 WorkerStartupComplete = true;
                 WorkerStartupError = "";
@@ -339,6 +342,21 @@ public partial class MainWindowViewModel
                 EndPipeline();
             }).ConfigureAwait(false);
         }
+    }
+
+    private bool ReportWorkerWarmupFailure(bool warmed, string error)
+    {
+        if (warmed) return false;
+        WorkerReady = false;
+        WorkerStartupComplete = true;
+        var reason = string.IsNullOrWhiteSpace(error)
+            ? "The selected detection engine did not initialize."
+            : ConciseProcessingError(error);
+        WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
+        WorkerLine = "Detection unavailable";
+        Status = WorkerStartupError;
+        Log("Engine", WorkerStartupError, LogLevel.Error);
+        return true;
     }
 
     [RelayCommand]
