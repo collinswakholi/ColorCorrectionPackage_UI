@@ -8,6 +8,7 @@
 - Add Recommended, CPU-only and Custom setup choices, offline runtime repair and Check setup device diagnostics.
 - Report the backend and recovery used by each detection operation, including cached results and saved calibration provenance.
 - Improve detection retries, missing-dependency errors and disabled processing controls while preserving completed results after failure or cancellation.
+- Clear completed engine warmup progress after changing detection engines, including failed or cancelled restarts.
 - Fix Python worker shutdown after normal completion, timeouts and interruption, and wait for native worker cleanup.
 - Isolate native build outputs so packaging cannot reuse a stale worker from another build.
 - Clarify source-build requirements, installation choices and the distinction between these changes and the published 0.2.1 packages.

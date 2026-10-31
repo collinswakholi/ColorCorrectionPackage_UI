@@ -331,7 +331,14 @@ public partial class MainWindowViewModel
                 WorkerLine = "Worker failed";
             }).ConfigureAwait(false);
         }
-        finally { await OnUi(() => Busy = false).ConfigureAwait(false); }
+        finally
+        {
+            await OnUi(() =>
+            {
+                Busy = false;
+                EndPipeline();
+            }).ConfigureAwait(false);
+        }
     }
 
     [RelayCommand]
