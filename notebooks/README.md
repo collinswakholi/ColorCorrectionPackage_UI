@@ -73,7 +73,7 @@ CPU detection explicitly and requires the `cpu_inference_v1` worker capability.
 The legacy `backend="cpu"` selects CPU image correction while detection follows
 Auto. Older 0.2.1 packages still require GPU inference; a newer Python wheel
 does not replace their native engine. On macOS, set `COLORCORRECT_APP_ROOT` to
-`/Applications/ColorCorrect Studio.app/Contents/MacOS`.
+`/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
 
 Standard WSL packages do not supply the experimental Dozen GPU add-on: follow the
 [WSL installation notes](../installer/README.md#experimental-wsl-gpu-setup) and

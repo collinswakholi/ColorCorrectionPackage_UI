@@ -214,16 +214,33 @@ class ReferenceTests(unittest.TestCase):
 
 class SDKTests(unittest.TestCase):
     def test_explicit_macos_bundle_root_discovers_its_native_resources(self):
+        for layout in ("Contents/Resources/runtime", "Contents/MacOS"):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
+                bundle = Path(directory) / "ColorCorrect Studio.app"
+                resources = bundle / layout
+                (resources / "refs").mkdir(parents=True)
+                (resources / "refs/neutrals.json").write_text("{}", encoding="utf8")
+                with_client = Client(sys.executable, root=bundle)
+                try:
+                    self.assertEqual(with_client.engine.root, resources.resolve())
+                finally:
+                    with_client.close()
+
+    def test_macos_bundle_prefers_resources_runtime_and_preserves_explicit_legacy_root(self):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "ColorCorrect Studio.app"
-            resources = bundle / "Contents/MacOS"
-            (resources / "refs").mkdir(parents=True)
-            (resources / "refs/neutrals.json").write_text("{}", encoding="utf8")
-            with_client = Client(sys.executable, root=bundle)
-            try:
-                self.assertEqual(with_client.engine.root, resources.resolve())
-            finally:
-                with_client.close()
+            resources = bundle / "Contents/Resources/runtime"
+            legacy = bundle / "Contents/MacOS"
+            for candidate in (resources, legacy):
+                (candidate / "refs").mkdir(parents=True)
+                (candidate / "refs/neutrals.json").write_text("{}", encoding="utf8")
+            for supplied, expected in ((bundle, resources), (legacy, legacy)):
+                with self.subTest(root=supplied):
+                    with_client = Client(sys.executable, root=supplied)
+                    try:
+                        self.assertEqual(with_client.engine.root, expected.resolve())
+                    finally:
+                        with_client.close()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="colorcorrect-sdk-", suffix="-日本")

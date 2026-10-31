@@ -54,7 +54,7 @@ def rust_build_outputs(work: Path, rid: str) -> dict[str, Path]:
 def emitted_package_versions(package: Path, payload: Path, rid: str, version: str) -> dict:
     """Check emitted OS metadata rather than inferring versions from filenames."""
     if rid == "osx-arm64":
-        with (payload.parent / "Info.plist").open("rb") as stream:
+        with (payload.parents[1] / "Info.plist").open("rb") as stream:
             metadata = plistlib.load(stream)
         for key in ("CFBundleShortVersionString", "CFBundleVersion"):
             if metadata.get(key) != version:
@@ -90,7 +90,7 @@ def verify_macos_candidate(package: Path, work: Path, version: str, run) -> tupl
     manifest = json.loads((package / "package-manifest.json").read_text())
     if (manifest.get("rid") != "osx-arm64" or manifest.get("version") != version
             or manifest.get("distribution_policy") != "application"
-            or manifest.get("payload_root") != "ColorCorrect Studio.app/Contents/MacOS"):
+            or manifest.get("payload_root") != "ColorCorrect Studio.app/Contents/Resources/runtime"):
         raise RuntimeError("macOS binary manifest has an incompatible delivery contract")
     receipts = []
     for kind in ("zip", "tar.gz"):
@@ -131,7 +131,7 @@ def verify_macos_runtime(payload: Path, work: Path, evidence: Path, env: dict) -
     """Execute shipped native helpers from the relocated bundle, without Python."""
     outputs = {}
     for name, command in (
-        ("package-location", [payload / "ColorCorrect-Studio", "--package-check"]),
+        ("package-location", [payload.parents[1] / "MacOS/ColorCorrect-Studio", "--package-check"]),
         ("cpu-setup", [payload / "setup", "--diagnose", "--verify", "--install", "--mode", "cpu"]),
     ):
         isolated = dict(env, XDG_CONFIG_HOME=str(work / "macos-setup-preferences"))
@@ -254,8 +254,8 @@ def main():
                      "--output", work / "package", "--wheel", wheel, "--fetch-notices"], env=package_environment)
                 payload, report["macos_distribution"] = verify_macos_candidate(work / "package", work, report["version"], run)
                 runtime = payload
-                with (payload.parent / "Info.plist").open("rb") as stream:
-                    app = payload / plistlib.load(stream)["CFBundleExecutable"]
+                with (payload.parents[1] / "Info.plist").open("rb") as stream:
+                    app = payload.parents[1] / "MacOS" / plistlib.load(stream)["CFBundleExecutable"]
                 report["emitted_package_versions"] = emitted_package_versions(work / "package", payload, args.rid, report["version"])
                 shutil.copy2(work / "package/package-manifest.json", evidence / "package-manifest.json")
         else:

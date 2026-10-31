@@ -27,6 +27,7 @@ class MacPackageTests(unittest.TestCase):
         source = source_fixtures.MacSourceTests().inputs(root)
         stage(root, source)
         (source / "app/ColorCorrect.App.deps.json").write_text("{}")
+        (source / "app/System.Web.dll").write_bytes(b"managed PE resource fixture")
         assets = root / "app/ColorCorrect.App/Assets"; assets.mkdir()
         shutil.copy2(SCRIPTS.parent / "app/ColorCorrect.App/Assets/app.png", assets / "app.png")
         return source
@@ -84,11 +85,14 @@ class MacPackageTests(unittest.TestCase):
             fake, calls = self.tools()
             with patch.object(mac.platform, "system", return_value="Darwin"), patch.object(mac.platform, "machine", return_value="arm64"), patch.object(mac, "run", side_effect=fake):
                 result = mac.build(root, source, output, root / "colorcorrect_studio-2.2.1-py3-none-any.whl", root / "dependency-notices", False)
-            bundle = output / "payload" / mac.APP_NAME; runtime = bundle / "Contents/MacOS"
+            bundle = output / "payload" / mac.APP_NAME; runtime = bundle / "Contents/Resources/runtime"
+            launcher = bundle / "Contents/MacOS" / mac.EXECUTABLE
             self.assertEqual(result["distribution_policy"], "application")
             self.assertEqual(result["signing"], {"kind": "ad-hoc", "notarized": False})
             self.assertEqual(result["minimum_os"], "macOS 14.0")
-            self.assertEqual(result["payload_root"], mac.APP_NAME + "/Contents/MacOS")
+            self.assertEqual(result["payload_root"], mac.APP_NAME + "/Contents/Resources/runtime")
+            self.assertEqual(list((bundle / "Contents/MacOS").iterdir()), [launcher])
+            self.assertEqual((runtime / "app/System.Web.dll").read_bytes(), b"managed PE resource fixture")
             self.assertTrue((runtime / "models/manifest.json").is_file())
             self.assertTrue((runtime / "python/colorcorrect_studio-2.2.1-py3-none-any.whl").is_file())
             self.assertTrue((runtime / "licenses/dependencies/manifest.json").is_file())
@@ -114,7 +118,7 @@ class MacPackageTests(unittest.TestCase):
             for path in archives: self.assertTrue(path.is_file(), path)
             with zipfile.ZipFile(archives[0]) as archive:
                 info = archive.getinfo(mac.APP_NAME + "/Contents/MacOS/" + mac.EXECUTABLE)
-                self.assertEqual(stat.S_IMODE(info.external_attr >> 16), stat.S_IMODE((runtime / mac.EXECUTABLE).stat().st_mode))
+                self.assertEqual(stat.S_IMODE(info.external_attr >> 16), stat.S_IMODE(launcher.stat().st_mode))
                 if os.name != "nt": self.assertEqual(stat.S_IMODE(info.external_attr >> 16) & 0o111, 0o111)
                 self.assertFalse(any(stat.S_ISLNK(item.external_attr >> 16) for item in archive.infolist()))
                 self.assertTrue(all(name.startswith(mac.APP_NAME + "/") for name in archive.namelist()))
@@ -149,6 +153,7 @@ class MacPackageTests(unittest.TestCase):
         self.assertNotIn("x-terminal-emulator", mac.LAUNCHER)
         self.assertNotIn("/Users/", mac.LAUNCHER)
         self.assertIn("_NSGetExecutablePath", mac.LAUNCHER)
+        self.assertIn('../Resources/runtime', mac.LAUNCHER)
         self.assertIn('dateWithTimeIntervalSinceNow:120', mac.LAUNCHER)
         self.assertIn('reply[@"setup_verified"]', mac.LAUNCHER)
         self.assertIn('record[@"exit_code"]', mac.LAUNCHER)

@@ -659,9 +659,14 @@ class Client:
                 supplied_root = Path(root).expanduser()
             except (TypeError, ValueError, OSError) as exc:
                 raise InvalidInputError(f"Invalid native application root: {root!r}") from exc
-            bundle_root = supplied_root / "Contents" / "MacOS"
-            if not (supplied_root / "refs/neutrals.json").is_file() and (bundle_root / "refs/neutrals.json").is_file():
-                root = bundle_root
+            if not (supplied_root / "refs/neutrals.json").is_file():
+                # Keep managed assemblies in Resources so macOS can seal the
+                # bundle without treating them as unsigned native executables.
+                for bundle_root in (supplied_root / "Contents/Resources/runtime",
+                                    supplied_root / "Contents/MacOS"):
+                    if (bundle_root / "refs/neutrals.json").is_file():
+                        root = bundle_root
+                        break
         try:
             self._engine = Engine(executable, root=root, policy=backend, timeout=timeout, progress=progress)
         except FileNotFoundError as exc:

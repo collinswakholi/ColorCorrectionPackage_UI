@@ -314,7 +314,8 @@ def publish(github: GitHub, run_id: int, sha: str, tag: str, files: list[Path], 
                     + ("Apple-silicon macOS 14+ application archives are included; the app is ad-hoc signed, not notarized. "
                        if include_macos_arm64 else "Apple-silicon macOS is source-only; no macOS application binaries are distributed. ")
                     + "Windows/Linux builds are unsigned. No Intel Mac, Torch or video processing.\n\n"
-                    "Each architecture has a package manifest and checksums; SHA256SUMS covers all other release assets."})
+                    "Each architecture has a package manifest and checksums; SHA256SUMS covers all other release assets.\n\n"
+                    f"[Changes and upgrade details](https://github.com/{github.prefix.removeprefix('/repos/')}/blob/{tag}/CHANGELOG.md)."})
         verify_release_identity(release, sha, tag, stable, include_macos_arm64)
     release_id = release["id"]
     existing = verified_remote_assets(github, release_id, files, complete=not release["draft"])

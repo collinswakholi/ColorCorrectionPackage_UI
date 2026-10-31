@@ -26,14 +26,18 @@ class MacBinaryAcceptance(unittest.TestCase):
             executable = payload / "ColorCorrect Studio.app/Contents/MacOS/ColorCorrect-Studio"
             executable.parent.mkdir(parents=True)
             executable.write_bytes(b"synthetic native fixture")
-            relative = executable.relative_to(payload).as_posix()
+            runtime_data = payload / "ColorCorrect Studio.app/Contents/Resources/runtime/app/System.Web.dll"
+            runtime_data.parent.mkdir(parents=True)
+            runtime_data.write_bytes(b"synthetic managed resource")
             manifest = {"rid": "osx-arm64", "version": "0.2.2", "distribution_policy": "application",
-                        "payload_root": "ColorCorrect Studio.app/Contents/MacOS",
-                        "sha256": {relative: hashlib.sha256(executable.read_bytes()).hexdigest()}}
+                        "payload_root": "ColorCorrect Studio.app/Contents/Resources/runtime",
+                        "sha256": {path.relative_to(payload).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                                   for path in (executable, runtime_data)}}
             (package / "package-manifest.json").write_text(json.dumps(manifest))
             stem = "ColorCorrect-Studio-0.2.2-osx-arm64"
             with zipfile.ZipFile(package / (stem + ".zip"), "w") as archive:
-                archive.write(executable, relative)
+                for path in (executable, runtime_data):
+                    archive.write(path, path.relative_to(payload).as_posix())
             with tarfile.open(package / (stem + ".tar.gz"), "w:gz") as archive:
                 archive.add(payload / "ColorCorrect Studio.app", arcname="ColorCorrect Studio.app")
             commands = []
@@ -44,12 +48,12 @@ class MacBinaryAcceptance(unittest.TestCase):
                     shutil.copytree(payload, command[-1], dirs_exist_ok=True)
 
             relocated, receipt = verify_macos_candidate(package, work, "0.2.2", run)
-            self.assertEqual(relocated, work / "Relocated Applications/ColorCorrect Studio.app/Contents/MacOS")
+            self.assertEqual(relocated, work / "Relocated Applications/ColorCorrect Studio.app/Contents/Resources/runtime")
             self.assertEqual(len(receipt["archives"]), 2)
             self.assertEqual(sum(command[0] == "codesign" for command in commands), 2)
             executable.write_bytes(b"changed")
             # The distributed copy, not the source tree, remains the execution root.
-            self.assertEqual((relocated / "ColorCorrect-Studio").read_bytes(), b"synthetic native fixture")
+            self.assertEqual((relocated.parents[1] / "MacOS/ColorCorrect-Studio").read_bytes(), b"synthetic native fixture")
 
     def test_source_only_manifest_cannot_become_a_binary_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -61,7 +65,7 @@ class MacBinaryAcceptance(unittest.TestCase):
     def test_helpers_require_the_relocated_root_and_a_successful_cpu_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
-            payload = work / "Moved App/Contents/MacOS"
+            payload = work / "Moved App/Contents/Resources/runtime"
             payload.mkdir(parents=True)
             preferences = work / "macos-setup-preferences/colorcorrect/setup-state.json"
             preferences.parent.mkdir(parents=True)
@@ -74,6 +78,8 @@ class MacBinaryAcceptance(unittest.TestCase):
                 self.assertEqual(verify_macos_runtime(payload, work, work, {})["status"], "passed")
                 self.assertEqual(run.call_args.kwargs["timeout"], 180)
                 self.assertEqual(run.call_args.args[0][0], str(payload / "setup"))
+                self.assertEqual(run.call_args_list[0].args[0][0],
+                                 str(payload.parents[1] / "MacOS/ColorCorrect-Studio"))
             probe["probes"][0]["exit_code"] = 1
             replies = [subprocess.CompletedProcess([], 0, json.dumps(value), "") for value in (location, probe)]
             with patch("native_ci_acceptance.subprocess.run", side_effect=replies):

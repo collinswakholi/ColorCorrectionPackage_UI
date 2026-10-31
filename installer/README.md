@@ -58,7 +58,7 @@ explicit action. Neither installation route changes graphics drivers.
 ## Python SDK
 
 The optional wheel is in the application's `python/` folder. On macOS this folder
-is inside `ColorCorrect Studio.app/Contents/MacOS`. Install it into your Python
+is inside `ColorCorrect Studio.app/Contents/Resources/runtime`. Install it into your Python
 environment, then select that native root with `root=...`. The wheel
 contains neither the native engine nor its models. See the [Python guide](../api/README.md)
 for installation and examples.

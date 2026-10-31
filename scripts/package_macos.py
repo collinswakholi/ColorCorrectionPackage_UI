@@ -123,6 +123,8 @@ int main(int argc, char **argv) { @autoreleasepool {
     char *slash = strrchr(absolute, '/'); if (!slash) { free(absolute); return 1; }
     NSString *entry = @(slash + 1); *slash = 0;
     NSString *root = @(absolute); free(absolute);
+    if ([entry isEqual:@"ColorCorrect-Studio"])
+        root = [[root stringByAppendingPathComponent:@"../Resources/runtime"] stringByStandardizingPath];
     setenv("CCP_NEW_UI_ROOT", root.fileSystemRepresentation, 1);
     setenv("CCP_ENGINE_EXE", [root stringByAppendingPathComponent:@"ccp-engine"].fileSystemRepresentation, 1);
     setenv("ORT_DYLIB_PATH", [root stringByAppendingPathComponent:@"libonnxruntime.dylib"].fileSystemRepresentation, 1);
@@ -136,7 +138,7 @@ int main(int argc, char **argv) { @autoreleasepool {
             }
         NSTask *signature = NSTask.new;
         signature.executableURL = [NSURL fileURLWithPath:@"/usr/bin/codesign"];
-        signature.arguments = @[@"--verify", @"--deep", @"--strict", [[root stringByAppendingPathComponent:@"../.."] stringByStandardizingPath]];
+        signature.arguments = @[@"--verify", @"--deep", @"--strict", [[root stringByAppendingPathComponent:@"../../.."] stringByStandardizingPath]];
         signature.standardOutput = NSFileHandle.fileHandleWithStandardError;
         signature.standardError = NSFileHandle.fileHandleWithStandardError;
         NSError *error=nil;
@@ -338,8 +340,11 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
         raise ValueError("Package output must be outside copied source-build/resources")
     if os.path.lexists(output): raise FileExistsError(output)
     output.mkdir(parents=True)
-    payload = output / "payload"; bundle = payload / APP_NAME; folder = bundle / "Contents/MacOS"
-    folder.mkdir(parents=True); resources = bundle / "Contents/Resources"; resources.mkdir()
+    payload = output / "payload"; bundle = payload / APP_NAME; contents = bundle / "Contents"
+    macos = contents / "MacOS"; macos.mkdir(parents=True)
+    resources = contents / "Resources"; resources.mkdir()
+    folder = resources / "runtime"; folder.mkdir()
+    launcher = macos / EXECUTABLE
     safe_copy(source / "app", folder / "app")
     (folder / "app/ColorCorrect.App").chmod(0o755)
     shutil.copy2(source / "ccp-engine", folder / "ccp-engine"); (folder / "ccp-engine").chmod(0o755)
@@ -363,12 +368,12 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
     safe_copy(notices, folder / "licenses/dependencies")
     launcher_source = output / "launcher.m"; launcher_source.write_text(LAUNCHER, encoding="utf-8")
     run(["xcrun", "clang", "-arch", "arm64", "-mmacosx-version-min=14.0", "-fobjc-arc", "-O2",
-         "-framework", "Foundation", launcher_source, "-o", folder / EXECUTABLE])
-    (folder / EXECUTABLE).chmod(0o755)
+         "-framework", "Foundation", launcher_source, "-o", launcher])
+    launcher.chmod(0o755)
     # Native entry points avoid code-signing script xattrs, which ZIP transport
     # cannot reliably preserve. Each is signed independently before the bundle.
     for name in ("setup", "check-system"):
-        path = folder / name; shutil.copy2(folder / EXECUTABLE, path); path.chmod(0o755)
+        path = folder / name; shutil.copy2(launcher, path); path.chmod(0o755)
     png = (root / "app/ColorCorrect.App/Assets/app.png").read_bytes()
     if png[:8] != b"\x89PNG\r\n\x1a\n" or struct.unpack(">II", png[16:24]) != (512, 512): raise ValueError("Expected the reviewed 512px application icon")
     (resources / "app.icns").write_bytes(b"icns" + struct.pack(">I", len(png)+16) + b"ic09" + struct.pack(">I",len(png)+8) + png)
@@ -377,16 +382,16 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
             "CFBundleVersion": version, "CFBundleIconFile": "app.icns", "LSMinimumSystemVersion": "14.0", "LSArchitecturePriority": ["arm64"],
             "NSHighResolutionCapable": True, "NSPrincipalClass": "NSApplication", "NSHumanReadableCopyright": "Copyright © 2026 Collins Wakholi"}
     with (bundle / "Contents/Info.plist").open("wb") as stream: plistlib.dump(info, stream)
-    (folder / "INSTALL.txt").write_text("Apple silicon, macOS 14+. Move ColorCorrect Studio.app to Applications, then open it.\nThis build is ad-hoc signed and not notarized. macOS may require an explicit Security & Privacy approval.\nNo security settings or quarantine attributes are changed by this package.\nPython: pip install the wheel in Contents/MacOS/python; Client(root='/Applications/ColorCorrect Studio.app').\nRaw Engine uses root='/Applications/ColorCorrect Studio.app/Contents/MacOS'.\nCheck setup: Contents/MacOS/setup --diagnose --verify. All private runtimes are bundled.\n", encoding="utf-8")
-    audit = relocate_native(folder)
+    (folder / "INSTALL.txt").write_text("Apple silicon, macOS 14+. Move ColorCorrect Studio.app to Applications, then open it.\nThis build is ad-hoc signed and not notarized. macOS may require an explicit Security & Privacy approval.\nNo security settings or quarantine attributes are changed by this package.\nPython: pip install the wheel in Contents/Resources/runtime/python; Client(root='/Applications/ColorCorrect Studio.app').\nRaw Engine uses root='/Applications/ColorCorrect Studio.app/Contents/Resources/runtime'.\nCheck setup: Contents/Resources/runtime/setup --diagnose --verify. All private runtimes are bundled.\n", encoding="utf-8")
+    audit = relocate_native(contents)
     removed = [path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file() and
                ("torch" in path.name.lower() or path.name.lower().startswith("libc10") or path.name.lower() in ("ffmpeg", "ffprobe"))]
     if removed: raise ValueError("Removed runtime/media payloads cannot be distributed: " + ", ".join(removed))
     (folder / "dependency-report.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
     entitlements = output / "runtime-entitlements.plist"
     with entitlements.open("wb") as stream: plistlib.dump({"com.apple.security.cs.allow-jit": True}, stream)
-    for path in native_files(folder):
-        if path.name == EXECUTABLE: continue
+    for path in native_files(contents):
+        if path == launcher: continue
         args = ["codesign", "--force", "--sign", "-", "--timestamp=none"]
         if path == folder / "app/ColorCorrect.App": args += ["--entitlements", entitlements]
         run([*args, path])
@@ -399,13 +404,13 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
               "architecture": "arm64", "minimum_os": "macOS 14.0", "rust_target": "aarch64-apple-darwin", "media_scope": "still images",
               "signing": {"kind": "ad-hoc", "notarized": False}, "native_validation": "pending", "worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference"],
               "inference_policy": "Auto GPU then explicit CPU inference; forced GPU engines fail clearly", "notice_inventory": {"components": len(notice_report.get("components", [])), "unresolved": []}}
-    runtime_hashes = {path.relative_to(folder).as_posix(): digest(path) for path in sorted(folder.rglob("*")) if path.is_file() and path != folder / EXECUTABLE}
+    runtime_hashes = {path.relative_to(folder).as_posix(): digest(path) for path in sorted(folder.rglob("*")) if path.is_file()}
     (folder / "package-manifest.json").write_text(json.dumps({**common, "hash_scope": "private runtime; launcher and bundle signatures covered by external distribution manifest", "sha256": runtime_hashes}, indent=2), encoding="utf-8")
     run(["codesign", "--force", "--sign", "-", "--timestamp=none", "--entitlements", entitlements, bundle])
     run(["codesign", "--verify", "--deep", "--strict", bundle])
     # Outer bundle signing changes its main executable and resource envelope.
     # Only now can the complete external distribution manifest be hashed.
-    manifest = {**common, "payload_root": f"{APP_NAME}/Contents/MacOS", "sha256": {path.relative_to(payload).as_posix(): digest(path) for path in sorted(payload.rglob("*")) if path.is_file()}}
+    manifest = {**common, "payload_root": f"{APP_NAME}/Contents/Resources/runtime", "sha256": {path.relative_to(payload).as_posix(): digest(path) for path in sorted(payload.rglob("*")) if path.is_file()}}
     (output / "package-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     prefix = output / f"ColorCorrect-Studio-{version}-{RID}"
     archive_zip(payload, Path(str(prefix) + ".zip"))

@@ -16,7 +16,7 @@ The native application and SDK are versioned independently; this SDK is 2.2.2.
 Use the matching **0.2.2** native application for CPU inference recovery and
 `backend="cpu-inference"`. Older 0.2.1 engines require GPU inference; installing
 this wheel alone does not replace their native engine. For the Mac bundle, set
-`root="/Applications/ColorCorrect Studio.app/Contents/MacOS"`.
+`root="/Applications/ColorCorrect Studio.app/Contents/Resources/runtime"`.
 
 ## Fit, then predict
 

@@ -99,7 +99,7 @@ class ReleaseVersions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             package=Path(temporary)
             contents=package/'ColorCorrect Studio.app/Contents'
-            payload=contents/'MacOS';payload.mkdir(parents=True)
+            payload=contents/'Resources/runtime';payload.mkdir(parents=True)
             metadata={'CFBundleShortVersionString':version,'CFBundleVersion':version,'LSMinimumSystemVersion':'14.0'}
             def write(values):
                 with (contents/'Info.plist').open('wb') as stream:plistlib.dump(values,stream)

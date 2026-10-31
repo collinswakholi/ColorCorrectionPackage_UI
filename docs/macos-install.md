@@ -55,16 +55,16 @@ tools in their own environment. Install the wheel included with this app:
 ```sh
 python3 -m venv "$HOME/.venvs/colorcorrect"
 . "$HOME/.venvs/colorcorrect/bin/activate"
-python -m pip install "/Applications/ColorCorrect Studio.app/Contents/MacOS/python/colorcorrect_studio-2.2.2-py3-none-any.whl"
+python -m pip install "/Applications/ColorCorrect Studio.app/Contents/Resources/runtime/python/colorcorrect_studio-2.2.2-py3-none-any.whl"
 ```
 
-Use the bundle's **Contents/MacOS** directory as the SDK root:
+Use the bundle's **Contents/Resources/runtime** directory as the SDK root:
 
 ```python
 from pathlib import Path
 from colorcorrect import Client
 
-app_root = Path("/Applications/ColorCorrect Studio.app/Contents/MacOS")
+app_root = Path("/Applications/ColorCorrect Studio.app/Contents/Resources/runtime")
 with Client(root=app_root) as client:
     calibration = client.calibrate(
         Path.home() / "Pictures/chart.jpg",

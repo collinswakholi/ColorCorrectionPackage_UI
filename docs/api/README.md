@@ -10,7 +10,7 @@ detection; `backend="cpu-inference"` explicitly selects CPU detection.
 CPU inference requires the 0.2.2 native engine or another worker declaring
 `cpu_inference_v1`. Older 0.2.1 packages use GPU inference; updating the wheel
 does not replace that engine. On macOS, the native SDK root is
-`/Applications/ColorCorrect Studio.app/Contents/MacOS`.
+`/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
 
 Prefer the familiar `ColorCorrection(Config(save_path=...))` workflow if you used
 the original Python package: `run(Image=...)` calibrates, and `predict_image()` /
@@ -37,9 +37,10 @@ from the source checkout or current directory. An installed SDK can use
 `Client(root="/path/to/app")` from any working directory. Explicit `executable=`
 selects a worker; environment alternatives are `CCP_NEW_UI_ROOT` and
 `CCP_ENGINE_EXE` (or the legacy `COLORCORRECT_EXE`). No server is needed.
-An explicit macOS `.app` bundle root also resolves its `Contents/MacOS` resources;
-on Apple silicon, build the app from source using the
-[macOS instructions](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/building.md). Studio does not provide macOS application binaries.
+An explicit macOS `.app` bundle root resolves its `Contents/Resources/runtime`
+resources; legacy bundles using `Contents/MacOS` are also recognized. Raw `Engine`
+clients use the explicit runtime directory. See the [Mac installation guide](../macos-install.md)
+for application downloads or the [source build instructions](../building.md#apple-silicon-macos-source-build).
 
 ## Calibrate and apply
 

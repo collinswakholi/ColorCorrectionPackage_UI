@@ -142,7 +142,7 @@ python -m pip install ./api
 Set `root` to the installed or extracted application folder. The default Windows
 folder is `%LOCALAPPDATA%\Programs\ColorCorrect Studio`; the Debian package uses
 `/opt/colorcorrect-studio`. For the Mac application, use
-`/Applications/ColorCorrect Studio.app/Contents/MacOS`.
+`/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
 
 ```python
 from colorcorrect import ColorCorrection, Config
