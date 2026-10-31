@@ -95,7 +95,7 @@ class MacPackageTests(unittest.TestCase):
             for helper in ("setup", "check-system"):
                 self.assertEqual(mac.executable_architectures(runtime / helper), {("Darwin", "arm64")})
                 self.assertFalse((runtime / helper).read_bytes().startswith(b"#!"))
-                self.assertTrue(any(command[0] == "codesign" and "--sign" in command and command[-1] == str(runtime / helper) for command in calls))
+                self.assertTrue(any(command[0] == "codesign" and "--sign" in command and Path(command[-1]).resolve() == (runtime / helper).resolve() for command in calls))
             info = plistlib.loads((bundle / "Contents/Info.plist").read_bytes())
             self.assertEqual(info["CFBundleExecutable"], mac.EXECUTABLE)
             self.assertEqual(info["LSArchitecturePriority"], ["arm64"])
@@ -107,7 +107,7 @@ class MacPackageTests(unittest.TestCase):
             inner = json.loads((runtime / "package-manifest.json").read_text())
             self.assertNotIn(mac.EXECUTABLE, inner["sha256"])
             for name, sha in inner["sha256"].items(): self.assertEqual(digest(runtime / name), sha)
-            self.assertTrue(any(command[:2] == ["lipo", str(runtime / "app/libAvaloniaNative.dylib")] for command in calls))
+            self.assertTrue(any(command[0] == "lipo" and Path(command[1]).resolve() == (runtime / "app/libAvaloniaNative.dylib").resolve() for command in calls))
             self.assertTrue(any(command[0:2] == ["install_name_tool", "-change"] and command[3] == "@loader_path/libonnxruntime.dylib" for command in calls))
             self.assertTrue(any(command[:2] == ["codesign", "--verify"] for command in calls))
             archives = [output / "ColorCorrect-Studio-2.0.0-osx-arm64.zip", output / "ColorCorrect-Studio-2.0.0-osx-arm64.tar.gz"]
