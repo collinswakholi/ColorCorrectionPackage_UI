@@ -1,10 +1,14 @@
 """Real-pipe fixture, never used by the application."""
 import json
+import os
 from pathlib import Path
 import sys
 import time
 
-print(json.dumps({"ok": True, "event": "ready"}), flush=True)
+ready = {"ok": True, "event": "ready"}
+if "FAKE_WORKER_PATCH_SAMPLING" in os.environ:
+    ready["patch_sampling"] = json.loads(os.environ["FAKE_WORKER_PATCH_SAMPLING"])
+print(json.dumps(ready), flush=True)
 pending = None
 cleanup_delay = 0
 cleanup_exit = 0

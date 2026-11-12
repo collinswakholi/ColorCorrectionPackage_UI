@@ -134,6 +134,18 @@ class AtomicJsonTests(unittest.TestCase):
                 temporary.unlink()
 
 
+class PatchSamplingOptionsTests(unittest.TestCase):
+    def test_typed_options_preserve_grid_and_send_only_active_random_fields(self):
+        from colorcorrect import CalibrationOptions, InvalidInputError
+        self.assertEqual(CalibrationOptions().to_dict()["fit_samples"], 9)
+        opts = CalibrationOptions(samples_per_patch=20, sampling_seed=42)
+        payload = opts.to_dict()
+        self.assertNotIn("fit_samples", payload)
+        self.assertEqual((payload["samples_per_patch"], payload["sampling_seed"]), (20, 42))
+        with self.assertRaises(InvalidInputError):
+            replace(opts, fit_samples=9).to_dict()
+
+
 class ReferenceTests(unittest.TestCase):
     def test_duplicate_json_interpretation_fields_are_rejected(self):
         profile = ReferenceProfile.from_values([(50, 0, 0)] * 24)

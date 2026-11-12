@@ -224,7 +224,7 @@ budgets demonstrate configuration rather than recommend a model or optimizer.
 | `CalibrationOptions` field | Default | Accepted values / meaning |
 | --- | --- | --- |
 | `crop` | `0.75` | Patch-interior fraction, 0.01–1; unrelated to white-image `crop_rect` |
-| `fit_samples` | `9` | Integer 1–100000; samples per patch axis (`9` gives a 9×9 grid) |
+| `fit_samples` | `9` | Integer 1–200; grid points per patch axis (`9` gives a 9×9 grid) |
 | `input_space`, `target_space` | `"srgb"` | RGB encoding names listed under custom references below |
 | `input_white`, `target_white` | `"d65"` | White-point names listed below |
 | `clip_lo`, `clip_hi` | `-0.2`, `1.3` | Finite normalized channel limits, with `clip_lo < clip_hi` |
@@ -432,3 +432,13 @@ full transport and legacy behavior.
 
 Contributors can find repeatable checks and version-specific execution records
 in the [developer validation reference](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md).
+
+### Exact random patch samples
+
+The default 9×9 grid yields one mean color per patch. For reproducible random
+sampling, pass `samples_per_patch=20, sampling_seed=42` to `Engine.calibrate`
+or use `CalibrationOptions(samples_per_patch=20, sampling_seed=42)`.
+Random counts are 1–4096; seeds are unsigned 32-bit integers (default 0).
+Use either a grid count or a random count. The worker reuses the points after
+flat-field correction; replay needs only the saved model. See
+[the runnable sampling example](../../api/examples/calibrate_sampling.py).

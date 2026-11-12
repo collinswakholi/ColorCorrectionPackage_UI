@@ -23,6 +23,8 @@ from typing import Any, Callable
 __version__ = "2.2.2"
 COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
+_DEFAULT_POLICY = "auto"
+_STILL_FORMATS = ("png", "jpg", "jpeg")
 
 
 class EngineError(RuntimeError):
@@ -45,6 +47,45 @@ def _json_default(value: Any) -> str:
     raise TypeError(f"Not JSON serializable: {type(value).__name__}")
 
 
+def _validate_patch_sampling(parameters: dict[str, Any]) -> bool:
+    """Validate the run contract and identify requests needing random support."""
+    for alias in ("n_samples", "random_seed"):
+        if alias in parameters:
+            raise ValueError(
+                f"{alias} is not supported; use samples_per_patch with sampling_seed "
+                "for random sampling, or fit_samples for grid points per axis"
+            )
+    if "samples_per_patch" in parameters:
+        if "fit_samples" in parameters:
+            raise ValueError("Choose fit_samples or samples_per_patch, not both")
+        count = parameters["samples_per_patch"]
+        if type(count) is not int or not 1 <= count <= 4096:
+            raise ValueError("samples_per_patch must be an integer from 1 to 4096")
+        if "sampling_seed" in parameters:
+            seed = parameters["sampling_seed"]
+            if type(seed) is not int or not 0 <= seed <= 0xFFFFFFFF:
+                raise ValueError("sampling_seed must be an unsigned 32-bit integer")
+        return True
+    if "sampling_seed" in parameters:
+        raise ValueError("sampling_seed requires samples_per_patch")
+    if "fit_samples" in parameters:
+        axis = parameters["fit_samples"]
+        if type(axis) is not int or not 1 <= axis <= 200:
+            raise ValueError("fit_samples must be an integer from 1 to 200 grid points per axis")
+    return False
+
+
+def _validate_fit_output(parameters: dict[str, Any]) -> None:
+    if parameters.get("write_output", True) is False:
+        return
+    for name in ("output", "output_path"):
+        output = parameters.get(name)
+        if isinstance(output, (str, os.PathLike)):
+            if Path(output).suffix[1:].lower() not in _STILL_FORMATS:
+                raise ValueError("Written still output must use .png, .jpg or .jpeg")
+            return
+
+
 class Engine:
     """Serialized NDJSON worker client. Relative paths use the caller's cwd.
 
@@ -54,7 +95,7 @@ class Engine:
     session, so persist model paths rather than relying on last-fit state.
     """
     def __init__(self, executable: str | Path | None = None, *,
-                 root: str | Path | None = None, policy: str = "cpu",
+                 root: str | Path | None = None, policy: str = _DEFAULT_POLICY,
                  timeout: float = 600, progress: Callable[[str], None] | None = None):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
@@ -192,6 +233,13 @@ class Engine:
             raise ValueError("timeout must be finite and positive")
         if "cmd" in parameters or "command" in parameters:
             raise ValueError("Pass the operation as the first argument, not cmd/command")
+        random_sampling = _validate_patch_sampling(parameters) if command.lower() == "run" else False
+        if command.lower() == "run":
+            _validate_fit_output(parameters)
+        if command.lower() == "apply" and "output_format" in parameters:
+            output_format = parameters["output_format"]
+            if not isinstance(output_format, str) or output_format.lower() not in _STILL_FORMATS:
+                raise ValueError("output_format must be png, jpg or jpeg")
         if parameters.get("do_ffc") and not parameters.get("white"):
             raise ValueError("FFC requires an explicit white image (Blank.JPG in the example corpus)")
         nn = parameters.get("nn")
@@ -227,6 +275,9 @@ class Engine:
                     if check:
                         raise EngineError(reply["error"], reply)
                     return reply
+            if random_sampling:
+                if self.ready.get("patch_sampling") != "random-lcg32-v1":
+                    raise EngineError("Exact patch sampling requires an updated worker; the grid was not substituted.")
             try:
                 self._process.stdin.write(payload + "\n")
                 self._process.stdin.flush()
@@ -254,7 +305,13 @@ class Engine:
         return self.request("detect", image=image, **options)
 
     def fit(self, image, *, output, report, model_out, **options):
-        """Fit/calibrate and optionally correct the chart image; all artifact paths explicit."""
+        """Fit/calibrate and optionally correct the chart image.
+
+        All artifact paths are explicit. fit_samples selects grid points per
+        axis (1–200, default 9). samples_per_patch selects an exact random count
+        (1–4096), with optional sampling_seed (unsigned 32-bit, default 0).
+        Each patch still contributes one mean; the two patterns cannot be mixed.
+        """
         return self.request("run", image=image, output=output, report=report, model_out=model_out, **options)
 
     def calibrate(self, image, *, folder=None, white=None, detect_options=None, **options):
@@ -265,6 +322,8 @@ class Engine:
         A supplied handshake skips detection. White enables FFC unless explicitly
         disabled. No other stage or fitting defaults are changed.
         """
+        _validate_patch_sampling(options)
+        _validate_fit_output(options)
         if folder is not None:
             Path(folder).mkdir(parents=True, exist_ok=True)
         directory = Path(tempfile.mkdtemp(prefix="calibration-", dir=folder)).resolve()
@@ -374,7 +433,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", default="{}", help="JSON parameters, @file.json, or - for stdin")
     parser.add_argument("--engine", help="Path to ccp-engine executable")
     parser.add_argument("--root", help="App resource folder with models/ and refs/")
-    parser.add_argument("--policy", default="auto", help="auto (GPU then CPU inference), cpu-inference, directml, webgpu, vulkan; cpu selects CPU LUTs with Auto inference")
+    parser.add_argument("--policy", default=_DEFAULT_POLICY, help="auto (GPU then CPU inference), cpu-inference, directml, webgpu, vulkan; cpu selects CPU LUTs with Auto inference")
     parser.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args(argv)
     try:

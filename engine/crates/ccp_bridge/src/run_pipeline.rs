@@ -30,7 +30,7 @@ use ccp_core::refs::{
 };
 use ccp_core::sample::{
     load_image, sample_patch_obbs_view, sample_patch_obbs_view_transform, RgbImage, RgbView,
-    SamplingOptions,
+    SamplingOptions, MAX_GRID_SAMPLES_PER_AXIS, MAX_RANDOM_SAMPLES_PER_PATCH,
 };
 use ccp_core::stages::{
     apply_cc_inplace, apply_encoded_lut_inplace, apply_gc_inplace, apply_gc_pixel,
@@ -269,6 +269,9 @@ fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) 
 #[derive(Clone, Debug, Default)]
 pub struct ApplyImageReport {
     pub ffc_skipped: Option<String>,
+    pub decode_seconds: f64,
+    pub processing_seconds: f64,
+    pub export_seconds: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -864,18 +867,30 @@ fn preview_path(dir: &Path, stem: &str) -> PathBuf {
     dir.join(format!("{stem}.png"))
 }
 
+fn still_format(path: &Path) -> Result<image::ImageFormat> {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => Ok(image::ImageFormat::Png),
+        "jpg" | "jpeg" => Ok(image::ImageFormat::Jpeg),
+        _ => Err(Error::Message(
+            "output image extension must be png, jpg or jpeg".into(),
+        )),
+    }
+}
+
 pub fn write_still(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
+    let format = still_format(path)?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let rgb = array3_to_rgb8(arr)?;
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    if ext == "png" {
+    if format == image::ImageFormat::Png {
         let file = std::fs::File::create(path)?;
         let enc = PngEncoder::new_with_quality(
             std::io::BufWriter::new(file),
@@ -925,22 +940,37 @@ pub fn correction_settings(
     })
 }
 
-fn ffc_params_from_req(req: &Value) -> FfcFitParams {
+fn requested_ffc_method(req: &Value) -> Result<FfcFitMethod> {
+    let fields = match req.get("ffc") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(map)) => Some(map),
+        _ => return Err(Error::Message("ffc must be an object".into())),
+    };
+    let selector = fields
+        .and_then(|m| m.get("method").or_else(|| m.get("fit_method")))
+        .or_else(|| req.get("ffc_method"));
+    match selector {
+        None => Ok(FfcFitMethod::Poly),
+        Some(value) => match value.as_str().map(str::to_ascii_lowercase).as_deref() {
+            Some("linear") => Ok(FfcFitMethod::Linear),
+            Some("poly" | "polynomial") => Ok(FfcFitMethod::Poly),
+            Some("pls") => Ok(FfcFitMethod::Pls),
+            Some("nn") => Ok(FfcFitMethod::Nn),
+            _ => Err(Error::Message(
+                "unknown FFC method: choose linear, poly, pls or nn".into(),
+            )),
+        },
+    }
+}
+
+fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> FfcFitParams {
     let ffc = req.get("ffc").cloned().unwrap_or(Value::Null);
-    let method = json_str(&ffc, &["method", "fit_method"])
-        .or_else(|| json_str(req, &["ffc_method"]))
-        .unwrap_or("poly");
     let mut smooth = json_i64(&ffc, &["smooth", "smooth_window"], 5) as i32;
     if smooth % 2 == 0 {
         smooth += 1;
     }
     FfcFitParams {
-        method: match method.to_ascii_lowercase().as_str() {
-            "linear" => FfcFitMethod::Linear,
-            "pls" => FfcFitMethod::Pls,
-            "nn" => FfcFitMethod::Nn,
-            _ => FfcFitMethod::Poly,
-        },
+        method,
         bins: json_i64(&ffc, &["bins"], 50).max(2) as usize,
         smooth_window: smooth.max(1),
         degree: json_i64(&ffc, &["degree"], 5).max(1) as usize,
@@ -1076,12 +1106,59 @@ fn spaces_from_req(req: &Value) -> (String, String, String, String) {
     (input_space, input_white, target_space, target_white)
 }
 
-fn sampling_from_req(req: &Value) -> SamplingOptions {
-    let n = json_i64(req, &["fit_samples"], 9) as i32;
-    SamplingOptions {
-        samples_per_axis: if n <= 0 { 9 } else { n },
-        inner_fraction: 0.70,
+fn sampling_from_req(req: &Value) -> Result<SamplingOptions> {
+    for alias in ["n_samples", "random_seed"] {
+        if req.get(alias).is_some() {
+            return Err(Error::Message(format!(
+                "{alias} is not supported; use samples_per_patch and sampling_seed for random sampling, or fit_samples for grid points per axis"
+            )));
+        }
     }
+    let random = if let Some(value) = req.get("samples_per_patch") {
+        if req.get("fit_samples").is_some() {
+            return Err(Error::Message(
+                "choose fit_samples or samples_per_patch, not both".into(),
+            ));
+        }
+        let count = value
+            .as_u64()
+            .filter(|n| (1..=u64::from(MAX_RANDOM_SAMPLES_PER_PATCH)).contains(n))
+            .ok_or_else(|| {
+                Error::Message(format!(
+                    "samples_per_patch must be an integer from 1 to {MAX_RANDOM_SAMPLES_PER_PATCH}"
+                ))
+            })?;
+        let seed = match req.get("sampling_seed") {
+            None => 0,
+            Some(s) => s
+                .as_u64()
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or_else(|| {
+                    Error::Message("sampling_seed must be an unsigned 32-bit integer".into())
+                })?,
+        };
+        Some((count as u32, seed))
+    } else {
+        if req.get("sampling_seed").is_some() {
+            return Err(Error::Message(
+                "sampling_seed requires samples_per_patch".into(),
+            ));
+        }
+        None
+    };
+    let samples_per_axis = match req.get("fit_samples") {
+        None => SamplingOptions::default().samples_per_axis,
+        Some(value) => value.as_i64()
+            .filter(|n| (1..=i64::from(MAX_GRID_SAMPLES_PER_AXIS)).contains(n))
+            .ok_or_else(|| Error::Message(format!(
+                "fit_samples must be an integer from 1 to {MAX_GRID_SAMPLES_PER_AXIS} (grid points per axis)"
+            )))? as i32,
+    };
+    Ok(SamplingOptions {
+        samples_per_axis,
+        random,
+        ..SamplingOptions::default()
+    })
 }
 
 fn sample_faces(
@@ -1640,13 +1717,12 @@ fn ffc_method_name(method: FfcFitMethod) -> &'static str {
     }
 }
 
-fn attach_process(report: &mut Value, saved: &SavedPipeline, req: &Value) {
-    let ffc = ffc_params_from_req(req);
-    let ffc_method = if saved.do_ffc {
-        ffc_method_name(ffc.method)
-    } else {
-        "off"
-    };
+fn attach_process(report: &mut Value, saved: &SavedPipeline) {
+    let ffc_method = saved
+        .ffc_params
+        .as_ref()
+        .map(|p| ffc_method_name(p.method))
+        .unwrap_or("off");
     report["do_ffc"] = json!(saved.do_ffc);
     report["do_gc"] = json!(saved.do_gc);
     report["do_wb"] = json!(saved.do_wb);
@@ -1710,13 +1786,36 @@ pub fn run_from_json_ex(
     }
     let crop_rect = json_str(req, &["crop_rect"]).map(str::to_string);
 
-    let model_name = json_str(req, &["model", "method"]).unwrap_or("rpcc2");
+    let ffc_params = if do_ffc {
+        ffc_params_from_req(req, requested_ffc_method(req)?)
+    } else {
+        FfcFitParams::default()
+    };
+    let model_name = match req.get("model").or_else(|| req.get("method")) {
+        None => "rpcc2",
+        Some(Value::String(name)) if !name.is_empty() => name,
+        _ => {
+            return Err(Error::Message(
+                "CC model must be a nonempty method name".into(),
+            ))
+        }
+    };
     let kind = parse_model_kind(model_name)?;
+    if let Some(basis) = req.get("basis") {
+        if basis.as_str() != Some("polynomial")
+            || !matches!(
+                kind,
+                ModelKind::Linear | ModelKind::Pls | ModelKind::NeuralNet
+            )
+        {
+            return Err(Error::Message("only polynomial basis is supported for linear/PLS/NN; use the rpcc2/rpcc3 presets for root polynomials".into()));
+        }
+    }
     let (input_space, input_white, target_space, target_white) = spaces_from_req(req);
     let settings = correction_settings(&input_space, &input_white, &target_space, &target_white)?;
     validate_stage_input(&settings, do_ffc, stages.do_gc, stages.do_wb)?;
     let mapping = mapping_from_req(req);
-    let sampling = sampling_from_req(req);
+    let sampling = sampling_from_req(req)?;
     let neutrals = load_neutrals();
 
     let output = PathBuf::from(
@@ -1729,6 +1828,9 @@ pub fn run_from_json_ex(
     let lut_out = json_str(req, &["lut_out"]).map(PathBuf::from);
     let write_output = json_bool(req, &["write_output"], true);
     let preview_mode = PreviewMode::from_req(req);
+    if write_output {
+        still_format(&output)?;
+    }
 
     progress("Loading image");
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
@@ -1751,7 +1853,6 @@ pub fn run_from_json_ex(
     let mut ffc_plane_source = None;
     let mut ffc_white_size = None;
     let mut ffc_gain: Option<Arc<Array2<f32>>> = None;
-    let ffc_params = ffc_params_from_req(req);
     if do_ffc {
         if let Some(white) = white_path {
             progress("FFC");
@@ -2027,6 +2128,14 @@ pub fn run_from_json_ex(
     if let Some(context) = &reference_context {
         report_json["reference_context"] = serde_json::to_value(context)?;
     }
+    report_json["patch_sampling"] = if let Some((count, seed)) = sampling.random {
+        json!({"pattern":"random-lcg32-v1","samples_per_patch":count,
+            "sampling_seed":seed,"aggregation":"mean"})
+    } else {
+        json!({"pattern":"grid-v1","samples_per_axis":sampling.samples_per_axis,
+            "samples_per_patch":sampling.samples_per_axis * sampling.samples_per_axis,
+            "aggregation":"mean"})
+    };
     report_json["input_normalization"] = json!({
         "exif_orientation": "applied before detect, sample and export",
         "embedded_icc": if honor_icc { "convert to working sRGB when present" } else { "explicit pixel encoding; ICC conversion bypassed" },
@@ -2085,7 +2194,22 @@ pub fn run_from_json_ex(
         report_json["fit_warnings"] = json!(fit_warnings);
     }
     attach_ffc_plane(&mut report_json, &saved);
-    attach_process(&mut report_json, &saved, req);
+    attach_process(&mut report_json, &saved);
+    report_json["saturation_extrapolation_enabled"] = json!(stages.do_sat_extrapolate);
+    if req.get("samples_per_patch").is_none() {
+        report_json["fit_samples_per_axis"] = json!(sampling.samples_per_axis);
+    }
+    if let Some(ffc_params) = saved
+        .ffc_params
+        .as_ref()
+        .filter(|p| matches!(p.method, FfcFitMethod::Poly | FfcFitMethod::Linear))
+    {
+        report_json["ffc_effective_degree"] = json!(if ffc_params.method == FfcFitMethod::Linear {
+            1
+        } else {
+            ffc_params.degree
+        });
+    }
     if let Some(parent) = report.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -2188,7 +2312,25 @@ impl ApplyOptions {
         }
     }
 
+    /// Keep the historical Rust constructor infallible for library callers.
     pub fn from_req(req: &Value, saved: &SavedPipeline) -> Self {
+        Self::with_method(
+            req,
+            saved,
+            requested_ffc_method(req).unwrap_or(FfcFitMethod::Poly),
+        )
+    }
+
+    pub fn try_from_req(req: &Value, saved: &SavedPipeline) -> Result<Self> {
+        let method = if json_bool(req, &["do_ffc"], false) {
+            requested_ffc_method(req)?
+        } else {
+            FfcFitMethod::Poly
+        };
+        Ok(Self::with_method(req, saved, method))
+    }
+
+    fn with_method(req: &Value, saved: &SavedPipeline, method: FfcFitMethod) -> Self {
         Self {
             fast_mode: json_bool(req, &["fast_mode"], false),
             do_ffc: json_bool(req, &["do_ffc"], false),
@@ -2200,7 +2342,7 @@ impl ApplyOptions {
                 .map(PathBuf::from),
             crop_rect: json_str(req, &["crop_rect"]).map(str::to_string),
             ffc: if req.get("ffc").is_some() || req.get("ffc_method").is_some() {
-                ffc_params_from_req(req)
+                ffc_params_from_req(req, method)
             } else {
                 saved.ffc_params.clone().unwrap_or_default()
             },
@@ -2317,6 +2459,9 @@ pub fn apply_saved_to_image_ex_with_progress(
     progress: &mut dyn FnMut(&str),
 ) -> Result<ApplyImageReport> {
     remember_apply_backend("cpu");
+    if apply.write_output {
+        still_format(output)?;
+    }
     let settings = correction_settings(
         &saved.input_space_id,
         &saved.input_white_id,
@@ -2326,8 +2471,10 @@ pub fn apply_saved_to_image_ex_with_progress(
     validate_stage_input(&settings, apply.do_ffc, apply.do_gc, apply.do_wb)?;
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
     progress("Loading image");
+    let started = Instant::now();
     let loaded = ccp_core::sample::load_image_with_icc(image, honor_icc)?;
     let mut work = rgb_image_into_array3(loaded)?;
+    let decoded = Instant::now();
     let ffc_skipped = None;
     let gain = if apply.do_ffc {
         let white = apply.white.as_ref().filter(|p| !p.as_os_str().is_empty())
@@ -2430,6 +2577,7 @@ pub fn apply_saved_to_image_ex_with_progress(
     let write_message = if apply.write_output { Some("Writing outputs") }
         else if writes_final_preview { Some("Writing preview") } else { None };
     if let Some(message) = write_message { progress(message); }
+    let processed = Instant::now();
     finish_image_writes(
         &work,
         output,
@@ -2443,7 +2591,12 @@ pub fn apply_saved_to_image_ex_with_progress(
         },
     )?;
     if let Some(message) = write_message { progress(&format!("{message} complete")); }
-    Ok(ApplyImageReport { ffc_skipped })
+    Ok(ApplyImageReport {
+        ffc_skipped,
+        decode_seconds: decoded.duration_since(started).as_secs_f64(),
+        processing_seconds: processed.duration_since(decoded).as_secs_f64(),
+        export_seconds: processed.elapsed().as_secs_f64(),
+    })
 }
 
 fn combined_progress_label(lut: &LutPipeline, apply: &ApplyOptions) -> Option<String> {
@@ -2593,7 +2746,8 @@ mod tests {
         options.fast_mode = true;
         options.do_ffc = true;
         options.white = Some(dir.join("missing-white.png"));
-        let output = dir.join("existing-output-directory");
+        // A valid extension reaches the stage and write failures exercised below.
+        let output = dir.join("existing-output-directory.png");
         std::fs::create_dir_all(&output).unwrap();
         let retained = output.join("previous-result.txt");
         std::fs::write(&retained, b"retain previous artifact").unwrap();
@@ -2915,6 +3069,21 @@ mod tests {
     }
 
     #[test]
+    fn ffc_rejects_unsupported_active_method_but_ignores_disabled_settings() {
+        let saved = SavedPipeline::default();
+        for bad in [json!("svm"), json!(5)] {
+            let mut req = json!({"do_ffc":true, "ffc":{"method":bad}});
+            assert!(ApplyOptions::try_from_req(&req, &saved).is_err());
+            req["do_ffc"] = json!(false);
+            assert!(ApplyOptions::try_from_req(&req, &saved).is_ok());
+        }
+        assert_eq!(
+            requested_ffc_method(&json!({"ffc_method":"Polynomial"})).unwrap(),
+            FfcFitMethod::Poly
+        );
+    }
+
+    #[test]
     fn ffc_default_smooth_is_odd_five() {
         assert_eq!(FfcFitParams::default().smooth_window, 5);
         assert_eq!(FfcFitParams::default().smooth_window % 2, 1);
@@ -3115,6 +3284,163 @@ mod tests {
     }
 
     #[test]
+    fn sampling_request_rejects_coercion_overflow_and_aliases() {
+        assert_eq!(sampling_from_req(&json!({})).unwrap().samples_per_axis, 9);
+        for value in [
+            json!(true),
+            json!(1.5),
+            json!("9"),
+            Value::Null,
+            json!(0),
+            json!(-1),
+            json!(201),
+            json!(4_294_967_305u64),
+        ] {
+            let error = sampling_from_req(&json!({"fit_samples":value})).unwrap_err();
+            assert!(error.to_string().contains("fit_samples"));
+        }
+        for request in [
+            json!({"random_seed":42}),
+            json!({"n_samples":10}),
+            json!({"sampling_seed":42}),
+            json!({"fit_samples":9,"samples_per_patch":10}),
+            json!({"samples_per_patch":1.5}),
+            json!({"samples_per_patch":true}),
+            json!({"samples_per_patch":4097}),
+            json!({"samples_per_patch":10,"sampling_seed":4_294_967_296u64}),
+        ] {
+            assert!(sampling_from_req(&request).is_err(), "accepted {request}");
+        }
+        for count in [1, 10, 20, 50] {
+            let options =
+                sampling_from_req(&json!({"samples_per_patch":count,"sampling_seed":42})).unwrap();
+            assert_eq!(options.random, Some((count, 42)));
+        }
+    }
+
+    #[test]
+    fn effective_sampling_reports_and_saved_replay_preserve_both_patterns() {
+        let dir =
+            std::env::temp_dir().join(format!("ccp-sampling-integration-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let mut baseline = None;
+        for (index, count) in [None, None, Some(1u32), Some(10), Some(20), Some(50)]
+            .into_iter()
+            .enumerate()
+        {
+            let mut request = json!({"image":image,"handshake":classic_handshake(120,80),
+                "output":dir.join(format!("fit-{index}.png")),
+                "report":dir.join(format!("report-{index}.json")),
+                "model_out":dir.join(format!("model-{index}.json")),
+                "model":"ccm","do_ffc":false,"do_sat":false,"cross_validate":false,
+                "phase2_teacher":false,"preview_mode":"none"});
+            if let Some(n) = count {
+                request["samples_per_patch"] = json!(n);
+                request["sampling_seed"] = json!(42);
+            } else if index == 1 {
+                request["fit_samples"] = json!(9);
+            }
+            let fitted = run_from_json(&request, &mut |_| {}).unwrap();
+            let info = &fitted.report_json["patch_sampling"];
+            assert_eq!(info["aggregation"], "mean");
+            if let Some(n) = count {
+                assert_eq!(info["pattern"], "random-lcg32-v1");
+                assert_eq!(info["samples_per_patch"], n);
+                assert_eq!(info["sampling_seed"], 42);
+                assert!(fitted.report_json.get("fit_samples_per_axis").is_none());
+            } else {
+                assert_eq!(info["pattern"], "grid-v1");
+                assert_eq!(info["samples_per_axis"], 9);
+                assert_eq!(info["samples_per_patch"], 81);
+                assert_eq!(fitted.report_json["fit_samples_per_axis"], 9);
+                let value = serde_json::to_value(&fitted.saved).unwrap();
+                if let Some(previous) = baseline.as_ref() {
+                    assert_eq!(&value, previous);
+                } else {
+                    baseline = Some(value);
+                }
+            }
+            let restored = load_saved(&fitted.model_out).unwrap();
+            let applied = dir.join(format!("applied-{index}.png"));
+            apply_saved_to_image(&restored, &image, &applied).unwrap();
+            assert_eq!(
+                std::fs::read(&fitted.output).unwrap(),
+                std::fs::read(applied).unwrap()
+            );
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn invalid_export_and_method_selectors_do_not_create_fit_artifacts() {
+        let dir =
+            std::env::temp_dir().join(format!("ccp-request-rejection-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let request = json!({"image":dir.join("missing.png"),"handshake":classic_handshake(120,80),
+            "output":dir.join("output.png"),"report":dir.join("report.json"),
+            "model_out":dir.join("model.json"),"do_ffc":false});
+        for (field, value) in [
+            ("model", json!("unsupported")),
+            ("model", json!(true)),
+            ("model", Value::Null),
+            ("basis", json!("hybrid")),
+            ("output", json!(dir.join("bad.bmp"))),
+            ("fit_samples", json!(1.5)),
+            ("fit_samples", json!(4_294_967_305u64)),
+        ] {
+            let mut invalid = request.clone();
+            invalid[field] = value;
+            let message = run_from_json(&invalid, &mut |_| {})
+                .err()
+                .unwrap()
+                .to_string();
+            assert!(
+                !message.contains("os error 2"),
+                "validation must precede image loading: {message}"
+            );
+            assert!(
+                !dir.join("output.png").exists()
+                    && !dir.join("report.json").exists()
+                    && !dir.join("model.json").exists()
+                    && !dir.join("bad.bmp").exists()
+            );
+        }
+        let bad = dir.join("new-directory/output.bmp");
+        assert!(write_still(&Array3::zeros((1, 1, 3)), &bad).is_err());
+        assert!(!bad.parent().unwrap().exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn disabled_ffc_ignores_unused_invalid_white_for_fit_and_apply() {
+        let dir = std::env::temp_dir().join(format!("ccp-ffc-disabled-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("chart.png");
+        write_cast_classic(&image, 120, 80);
+        let invalid = dir.join("invalid-white.png");
+        std::fs::write(&invalid, b"not a readable image").unwrap();
+        let request = json!({"image": image, "handshake": classic_handshake(120, 80),
+            "output": dir.join("fitted.png"), "report": dir.join("report.json"),
+            "model_out": dir.join("model.json"), "white": invalid,
+            "do_ffc": false, "ffc":{"method":"unsupported"}, "phase2_teacher": false});
+        let fitted = run_from_json(&request, &mut |_| {}).unwrap();
+        assert!(!fitted.saved.do_ffc);
+        let output = dir.join("applied.png");
+        let apply = ApplyOptions {
+            do_ffc: false,
+            white: Some(invalid),
+            ..ApplyOptions::default()
+        };
+        let applied =
+            apply_saved_to_image_ex(&fitted.saved, &image, &output, None, &apply).unwrap();
+        assert!(output.is_file());
+        assert!(applied.ffc_skipped.is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn nn_request_options_train_and_roundtrip_for_every_optimizer() {
         let dir =
             std::env::temp_dir().join(format!("ccp-bridge-nn-options-{}", std::process::id()));
@@ -3195,7 +3521,18 @@ mod tests {
             "fit_samples": 5,
         });
         let mut notes = Vec::new();
+        for (field, val) in [
+            ("basis", json!("hybrid")),
+            ("random_seed", json!(42)),
+            ("n_samples", json!(10)),
+        ] {
+            let mut invalid = req.clone();
+            invalid[field] = val;
+            assert!(run_from_json(&invalid, &mut |_| {}).is_err());
+        }
         let out = run_from_json(&req, &mut |m| notes.push(m.to_string())).unwrap();
+        assert_eq!(out.report_json["fit_samples_per_axis"], 5);
+        assert_eq!(out.report_json["saturation_extrapolation_enabled"], true);
         assert!(out.output.is_file());
         assert!(out.report.is_file());
         assert!(out.model_out.is_file());

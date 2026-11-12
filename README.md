@@ -200,3 +200,5 @@ outside the application installation folder.
 Application code is [MIT licensed](LICENSE). Bundled models and dependencies have
 separate terms; read [third-party notices](THIRD_PARTY_NOTICES.md),
 [model notices](models/NOTICE.md), and [model provenance](docs/model-provenance.md).
+
+A [Python example](api/examples/calibrate_sampling.py) compares the default chart grid with exact, seeded random sampling.

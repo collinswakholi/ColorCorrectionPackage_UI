@@ -89,10 +89,16 @@ impl<'a> RgbView<'a> {
     }
 }
 
+/// Maximum samples per grid axis accepted by the existing desktop controls.
+pub const MAX_GRID_SAMPLES_PER_AXIS: i32 = 200;
+/// Maximum exact draws per patch in the opt-in seeded sampling contract.
+pub const MAX_RANDOM_SAMPLES_PER_PATCH: u32 = 4096;
+
 #[derive(Clone, Copy, Debug)]
 pub struct SamplingOptions {
     pub samples_per_axis: i32,
     pub inner_fraction: f64,
+    pub random: Option<(u32, u32)>, // (exact samples per patch, seed)
 }
 
 impl Default for SamplingOptions {
@@ -100,6 +106,7 @@ impl Default for SamplingOptions {
         Self {
             samples_per_axis: 9,
             inner_fraction: 0.70,
+            random: None,
         }
     }
 }
@@ -241,32 +248,54 @@ fn sample_one_patch_with<F>(
 where
     F: Fn(Vec3, f64, f64) -> Vec3,
 {
-    if options.samples_per_axis <= 0 {
-        return Err(Error::InvalidArgument(
-            "samples_per_axis must be positive".into(),
-        ));
+    if options.random.is_none()
+        && !(1..=MAX_GRID_SAMPLES_PER_AXIS).contains(&options.samples_per_axis)
+    {
+        return Err(Error::InvalidArgument(format!(
+            "samples_per_axis must be in 1..={MAX_GRID_SAMPLES_PER_AXIS}"
+        )));
     }
     let center = quad.bilerp(0.5, 0.5);
     let half = options.samples_per_axis / 2;
     let denom = half.max(1) as f64;
     let mut sum = [0.0; 3];
     let mut count = 0;
-    for sy in 0..options.samples_per_axis {
-        for sx in 0..options.samples_per_axis {
-            let ox = (sx - half) as f64 / denom;
-            let oy = (sy - half) as f64 / denom;
-            let u = 0.5 + ox * 0.5 * options.inner_fraction;
-            let v = 0.5 + oy * 0.5 * options.inner_fraction;
-            let point = quad.bilerp(u, v);
-            let sample = transform(
-                sample_bilinear_view(image, point.x, point.y),
-                point.x,
-                point.y,
-            );
-            for c in 0..3 {
-                sum[c] += sample[c];
+    let mut accumulate = |u, v| {
+        let point = quad.bilerp(u, v);
+        let sample = transform(
+            sample_bilinear_view(image, point.x, point.y),
+            point.x,
+            point.y,
+        );
+        for c in 0..3 {
+            sum[c] += sample[c];
+        }
+        count += 1;
+    };
+    if let Some((n, seed)) = options.random {
+        if !(1..=MAX_RANDOM_SAMPLES_PER_PATCH).contains(&n) {
+            return Err(Error::InvalidArgument(format!(
+                "samples_per_patch must be in 1..={MAX_RANDOM_SAMPLES_PER_PATCH}"
+            )));
+        }
+        let mut state = seed.wrapping_add((index as u32).wrapping_mul(2654435761));
+        let mut coordinate = || {
+            state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+            0.15 + 0.70 * (state as f64 / 4294967296.0)
+        };
+        for _ in 0..n {
+            accumulate(coordinate(), coordinate());
+        }
+    } else {
+        for sy in 0..options.samples_per_axis {
+            for sx in 0..options.samples_per_axis {
+                let ox = (sx - half) as f64 / denom;
+                let oy = (sy - half) as f64 / denom;
+                accumulate(
+                    0.5 + ox * 0.5 * options.inner_fraction,
+                    0.5 + oy * 0.5 * options.inner_fraction,
+                );
             }
-            count += 1;
         }
     }
     let measured = [
@@ -288,6 +317,26 @@ where
     })
 }
 
+fn validate_sampling_shape(spec: &ChartSpec, patch_obbs: &[Quad]) -> Result<usize> {
+    let expected = spec.patch_count();
+    if patch_obbs.len() != expected {
+        return Err(Error::InvalidArgument(format!(
+            "{} expected {expected} patch_obbs, got {}",
+            spec.id,
+            patch_obbs.len()
+        )));
+    }
+    if spec.names.len() != expected
+        || spec.reference_lab_d50.len() != expected
+        || spec.reference_srgb.len() != expected
+    {
+        return Err(Error::InvalidArgument(
+            "chart spec is missing names or reference colors".into(),
+        ));
+    }
+    Ok(expected)
+}
+
 /// Sample each Opt2 `patch_obb` with bilinear 9×9 inside the inner 0.70 box.
 pub fn sample_patch_obbs(
     image: &RgbImage,
@@ -305,22 +354,7 @@ pub fn sample_patch_obbs_view(
     patch_obbs: &[Quad],
     options: SamplingOptions,
 ) -> Result<Vec<ChartPatch>> {
-    let expected = spec.patch_count();
-    if patch_obbs.len() != expected {
-        return Err(Error::InvalidArgument(format!(
-            "{} expected {expected} patch_obbs, got {}",
-            spec.id,
-            patch_obbs.len()
-        )));
-    }
-    if spec.names.len() != expected
-        || spec.reference_lab_d50.len() != expected
-        || spec.reference_srgb.len() != expected
-    {
-        return Err(Error::InvalidArgument(
-            "chart spec is missing names or reference colors".into(),
-        ));
-    }
+    let expected = validate_sampling_shape(spec, patch_obbs)?;
     let mut patches = Vec::with_capacity(expected);
     for (index, obb) in patch_obbs.iter().enumerate() {
         patches.push(sample_one_patch(
@@ -348,14 +382,7 @@ pub fn sample_patch_obbs_view_transform<F>(
 where
     F: Fn(Vec3, f64, f64) -> Vec3,
 {
-    let expected = spec.patch_count();
-    if patch_obbs.len() != expected {
-        return Err(Error::InvalidArgument(format!(
-            "{} expected {expected} patch_obbs, got {}",
-            spec.id,
-            patch_obbs.len()
-        )));
-    }
+    let expected = validate_sampling_shape(spec, patch_obbs)?;
     let mut patches = Vec::with_capacity(expected);
     for (index, obb) in patch_obbs.iter().enumerate() {
         patches.push(sample_one_patch_with(
@@ -575,6 +602,226 @@ mod tests {
             assert!((raw.rgb[channel] as f64 - rgb[channel]).abs() < 1e-7);
         }
         assert!((managed.rgb[0] - raw.rgb[0]).abs() > 0.01);
+    }
+
+    #[test]
+    fn seeded_samples_use_exact_count_and_portable_coordinates() {
+        use std::cell::Cell;
+        let img = RgbImage::new(2, 2, vec![0.; 12]).unwrap();
+        let quad = Quad {
+            top_left: Vec2 { x: 0., y: 0. },
+            top_right: Vec2 { x: 1., y: 0. },
+            bottom_right: Vec2 { x: 1., y: 1. },
+            bottom_left: Vec2 { x: 0., y: 1. },
+        };
+        let spec = crate::refs::chart_spec_from_name("classic").unwrap();
+        for n in [1, 10, 20, 50] {
+            let seen = Cell::new(0);
+            let options = SamplingOptions {
+                random: Some((n, 42)),
+                ..SamplingOptions::default()
+            };
+            sample_one_patch_with(
+                &img.view(),
+                quad,
+                "A1",
+                0,
+                spec.reference_lab_d50[0],
+                spec.reference_srgb[0],
+                options,
+                &|rgb, x, y| {
+                    if seen.get() == 0 {
+                        assert!(
+                            (x - 0.32664162234868854).abs() < 1e-15
+                                && (y - 0.21168753178790212).abs() < 1e-15
+                        );
+                    }
+                    assert!((0.15..0.85).contains(&x) && (0.15..0.85).contains(&y));
+                    seen.set(seen.get() + 1);
+                    rgb
+                },
+            )
+            .unwrap();
+            assert_eq!(seen.get(), n);
+        }
+    }
+
+    #[test]
+    fn seeded_chart_sampling_returns_one_mean_per_patch_at_shared_coordinates() {
+        use std::cell::RefCell;
+        let image =
+            RgbImage::new(2, 2, vec![0., 0., 0., 1., 0., 0., 0., 1., 0., 1., 1., 0.]).unwrap();
+        let quad = Quad {
+            top_left: Vec2 { x: 0., y: 0. },
+            top_right: Vec2 { x: 1., y: 0. },
+            bottom_right: Vec2 { x: 1., y: 1. },
+            bottom_left: Vec2 { x: 0., y: 1. },
+        };
+        let spec = crate::refs::chart_spec_from_name("classic").unwrap();
+        let quads = vec![quad; spec.patch_count()];
+        // Independent LCG32-v1 vectors on an image whose bilinear RGB is [x,y,0].
+        for (count, expected_x, expected_y) in [
+            (1, 0.32664162234868854, 0.21168753178790212),
+            (10, 0.5477974176499992, 0.4818614460108802),
+            (20, 0.5412687717005611, 0.502462457367219),
+            (50, 0.5023298583645374, 0.5067418125374242),
+        ] {
+            let options = SamplingOptions {
+                random: Some((count, 42)),
+                ..SamplingOptions::default()
+            };
+            let sampled = sample_patch_obbs(&image, &spec, &quads, options).unwrap();
+            assert_eq!(sampled.len(), spec.patch_count());
+            assert!((sampled[0].measured_srgb[0] - expected_x).abs() < 1e-14);
+            assert!((sampled[0].measured_srgb[1] - expected_y).abs() < 1e-14);
+            assert_eq!(sampled[0].measured_srgb[2], 0.);
+            let mut stages = Vec::new();
+            for _ in 0..2 {
+                let coordinates = RefCell::new(Vec::new());
+                let transformed = sample_patch_obbs_view_transform(
+                    &image.view(),
+                    &spec,
+                    &quads,
+                    options,
+                    &|rgb, x, y| {
+                        coordinates.borrow_mut().push((x, y));
+                        rgb
+                    },
+                )
+                .unwrap();
+                assert_eq!(transformed, sampled);
+                let coordinates = coordinates.into_inner();
+                assert_eq!(coordinates.len(), spec.patch_count() * count as usize);
+                stages.push(coordinates);
+            }
+            assert_eq!(stages[0], stages[1]);
+        }
+    }
+
+    #[test]
+    fn grid_defaults_and_legacy_even_axis_coordinates_are_preserved() {
+        use std::cell::RefCell;
+        let image =
+            RgbImage::new(2, 2, vec![0., 0., 0., 1., 0., 0., 0., 1., 0., 1., 1., 0.]).unwrap();
+        let quad = Quad {
+            top_left: Vec2 { x: 0., y: 0. },
+            top_right: Vec2 { x: 1., y: 0. },
+            bottom_right: Vec2 { x: 1., y: 1. },
+            bottom_left: Vec2 { x: 0., y: 1. },
+        };
+        let spec = crate::refs::chart_spec_from_name("classic").unwrap();
+        let defaults = SamplingOptions::default();
+        assert_eq!(defaults.samples_per_axis, 9);
+        assert_eq!(defaults.inner_fraction, 0.70);
+        assert_eq!(defaults.random, None);
+        for (axis, first, last, mean) in [
+            (1, 0.5, 0.5, 0.5),
+            (2, 0.15, 0.5, 0.325),
+            (9, 0.15, 0.85, 0.5),
+        ] {
+            let coordinates = RefCell::new(Vec::new());
+            let patch = sample_one_patch_with(
+                &image.view(),
+                quad,
+                "A1",
+                0,
+                spec.reference_lab_d50[0],
+                spec.reference_srgb[0],
+                SamplingOptions {
+                    samples_per_axis: axis,
+                    ..defaults
+                },
+                &|rgb, x, y| {
+                    coordinates.borrow_mut().push((x, y));
+                    rgb
+                },
+            )
+            .unwrap();
+            let coordinates = coordinates.into_inner();
+            assert_eq!(coordinates.len(), (axis * axis) as usize);
+            for channel in 0..2 {
+                assert!((patch.measured_srgb[channel] - mean).abs() < 1e-14);
+            }
+            let initial = coordinates.first().unwrap();
+            let final_point = coordinates.last().unwrap();
+            assert!((initial.0 - first).abs() < 1e-14 && (initial.1 - first).abs() < 1e-14);
+            assert!((final_point.0 - last).abs() < 1e-14 && (final_point.1 - last).abs() < 1e-14);
+        }
+    }
+
+    #[test]
+    fn ordinary_and_transformed_sampling_reject_incomplete_chart_specs() {
+        let image = RgbImage::new(1, 1, vec![0.; 3]).unwrap();
+        let quad = Quad {
+            top_left: Vec2 { x: 0., y: 0. },
+            top_right: Vec2 { x: 0., y: 0. },
+            bottom_right: Vec2 { x: 0., y: 0. },
+            bottom_left: Vec2 { x: 0., y: 0. },
+        };
+        for missing in 0..3 {
+            let mut spec = crate::refs::chart_spec_from_name("classic").unwrap();
+            let quads = vec![quad; spec.patch_count()];
+            match missing {
+                0 => {
+                    spec.names.pop();
+                }
+                1 => {
+                    spec.reference_lab_d50.pop();
+                }
+                _ => {
+                    spec.reference_srgb.pop();
+                }
+            }
+            let ordinary = sample_patch_obbs(&image, &spec, &quads, SamplingOptions::default());
+            let transformed = sample_patch_obbs_view_transform(
+                &image.view(),
+                &spec,
+                &quads,
+                SamplingOptions::default(),
+                &|rgb, _, _| rgb,
+            );
+            for result in [ordinary, transformed] {
+                assert!(matches!(result, Err(Error::InvalidArgument(ref message))
+                    if message == "chart spec is missing names or reference colors"));
+            }
+        }
+    }
+
+    #[test]
+    fn sampling_rejects_unbounded_active_patterns_without_blocking_inactive_grid() {
+        let image = RgbImage::new(1, 1, vec![0.; 3]).unwrap();
+        let quad = Quad {
+            top_left: Vec2 { x: 0., y: 0. },
+            top_right: Vec2 { x: 0., y: 0. },
+            bottom_right: Vec2 { x: 0., y: 0. },
+            bottom_left: Vec2 { x: 0., y: 0. },
+        };
+        let spec = crate::refs::chart_spec_from_name("classic").unwrap();
+        let quads = vec![quad; spec.patch_count()];
+        for size in [0, -1, MAX_GRID_SAMPLES_PER_AXIS + 1, i32::MAX] {
+            let options = SamplingOptions {
+                samples_per_axis: size,
+                ..SamplingOptions::default()
+            };
+            assert!(sample_patch_obbs(&image, &spec, &quads, options).is_err());
+            let random = SamplingOptions {
+                random: Some((1, 42)),
+                ..options
+            };
+            assert_eq!(
+                sample_patch_obbs(&image, &spec, &quads, random)
+                    .unwrap()
+                    .len(),
+                spec.patch_count()
+            );
+        }
+        for count in [0, MAX_RANDOM_SAMPLES_PER_PATCH + 1] {
+            let options = SamplingOptions {
+                random: Some((count, 42)),
+                ..SamplingOptions::default()
+            };
+            assert!(sample_patch_obbs(&image, &spec, &quads, options).is_err());
+        }
     }
 
     #[test]
