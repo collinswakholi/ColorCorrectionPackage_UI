@@ -102,9 +102,13 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(cpu.devices()["echo"]["policy"], "cpu")
 
     def test_random_sampling_requires_a_capable_worker(self):
-        with self.assertRaisesRegex(EngineError, "updated worker"):
+        reply = self.engine.request("run", check=False, samples_per_patch=20, sampling_seed=42)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(reply["code"], "unsupported_capability")
+        with self.assertRaisesRegex(EngineError, "updated worker") as caught:
             self.engine.fit("chart.png", output="out.png", report="report.json",
                             model_out="model.json", samples_per_patch=20, sampling_seed=42)
+        self.assertEqual(caught.exception.reply, reply)
         self.assertTrue(self.engine.devices()["ok"])
 
     def test_random_sampling_rejects_wrong_or_unversioned_capability(self):

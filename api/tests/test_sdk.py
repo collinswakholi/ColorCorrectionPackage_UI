@@ -274,6 +274,11 @@ class SDKTests(unittest.TestCase):
     def fit(self, **options):
         return self.client.calibrate(self.folder / "chart.jpg", output_dir=self.folder / "results", **options)
 
+    def test_seeded_fit_reports_unsupported_worker(self):
+        with self.assertRaisesRegex(UnsupportedCapabilityError, "updated worker") as caught:
+            self.fit(options=CalibrationOptions(samples_per_patch=20, sampling_seed=42))
+        self.assertEqual(caught.exception.raw_reply["code"], "unsupported_capability")
+
     def test_explicit_cpu_inference_is_negotiated_before_work(self):
         with Client(sys.executable, root=ROOT, backend="cpu-inference", timeout=5) as client:
             detected = client.detect(self.folder / "chart.jpg")

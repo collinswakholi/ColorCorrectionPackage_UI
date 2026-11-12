@@ -34,6 +34,13 @@ class EngineError(RuntimeError):
         self.reply = reply
 
 
+def _unsupported_capability(message: str, *, check: bool) -> dict:
+    reply = {"ok": False, "code": "unsupported_capability", "error": message}
+    if check:
+        raise EngineError(message, reply)
+    return reply
+
+
 def _root(start: Path) -> Path | None:
     for candidate in (start, *start.parents):
         if (candidate / "refs/neutrals.json").is_file() and (candidate / "models/opt2").is_dir():
@@ -262,22 +269,19 @@ class Engine:
         with self._lock:
             self._start()
             if parameters.get("policy", self.policy) == "cpu-inference" and "cpu_inference_v1" not in set(self.ready.get("capabilities") or []):
-                reply = {"ok": False, "code": "unsupported_capability",
-                         "error": "This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine."}
-                if check:
-                    raise EngineError(reply["error"], reply)
-                return reply
+                return _unsupported_capability(
+                    "This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine.",
+                    check=check)
             if parameters.get("reference_profiles") or parameters.get("reference_assignments"):
                 missing = {"custom_references_v1", "chart_identity_v1"} - set(self.ready.get("capabilities") or [])
                 if missing:
-                    reply = {"ok": False, "code": "unsupported_capability",
-                             "error": "Worker cannot apply custom references; missing " + ", ".join(sorted(missing))}
-                    if check:
-                        raise EngineError(reply["error"], reply)
-                    return reply
-            if random_sampling:
-                if self.ready.get("patch_sampling") != "random-lcg32-v1":
-                    raise EngineError("Exact patch sampling requires an updated worker; the grid was not substituted.")
+                    return _unsupported_capability(
+                        "Worker cannot apply custom references; missing " + ", ".join(sorted(missing)),
+                        check=check)
+            if random_sampling and self.ready.get("patch_sampling") != "random-lcg32-v1":
+                return _unsupported_capability(
+                    "Exact patch sampling requires an updated worker; the grid was not substituted.",
+                    check=check)
             try:
                 self._process.stdin.write(payload + "\n")
                 self._process.stdin.flush()
