@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -89,12 +90,107 @@ class ClientTests(unittest.TestCase):
         def launch(args, **options):
             return POPEN([sys.executable, str(FAKE)], **options)
         self.mock = patch("colorcorrect.subprocess.Popen", side_effect=launch)
-        self.mock.start()
+        self.launch = self.mock.start()
         self.engine = Engine(sys.executable, root=ROOT, timeout=5)
 
     def tearDown(self):
         self.engine.close()
         self.mock.stop()
+
+    def test_explicit_cpu_override_reaches_worker(self):
+        with Engine(sys.executable, root=ROOT, policy="cpu") as cpu:
+            self.assertEqual(cpu.devices()["echo"]["policy"], "cpu")
+
+    def test_random_sampling_requires_a_capable_worker(self):
+        reply = self.engine.request("run", check=False, samples_per_patch=20, sampling_seed=42)
+        self.assertFalse(reply["ok"])
+        self.assertEqual(reply["code"], "unsupported_capability")
+        with self.assertRaisesRegex(EngineError, "updated worker") as caught:
+            self.engine.fit("chart.png", output="out.png", report="report.json",
+                            model_out="model.json", samples_per_patch=20, sampling_seed=42)
+        self.assertEqual(caught.exception.reply, reply)
+        self.assertTrue(self.engine.devices()["ok"])
+
+    def test_random_sampling_rejects_wrong_or_unversioned_capability(self):
+        for marker in (None, True, {}, "random", "random-lcg32-v2"):
+            with self.subTest(marker=marker), patch.dict(os.environ,
+                    {"FAKE_WORKER_PATCH_SAMPLING": json.dumps(marker)}):
+                try:
+                    with self.assertRaisesRegex(EngineError, "updated worker"):
+                        self.engine.fit("chart.png", output="out.png", report="report.json",
+                                        model_out="model.json", samples_per_patch=1)
+                    self.assertEqual(self.engine.devices()["echo"]["cmd"], "devices")
+                finally:
+                    self.engine.close()
+
+    def test_random_sampling_counts_and_seed_are_not_rewritten(self):
+        with patch.dict(os.environ, {"FAKE_WORKER_PATCH_SAMPLING": '"random-lcg32-v1"'}):
+            for count in (1, 10, 20, 50):
+                with self.subTest(count=count):
+                    echo = self.engine.fit("chart.png", output="out.png", report="report.json",
+                                           model_out="model.json", samples_per_patch=count,
+                                           sampling_seed=42)["echo"]
+                    self.assertEqual(echo["samples_per_patch"], count)
+                    self.assertEqual(echo["sampling_seed"], 42)
+                    self.assertNotIn("fit_samples", echo)
+            for seed in (0, 0xFFFFFFFF):
+                echo = self.engine.request("run", samples_per_patch=1, sampling_seed=seed)["echo"]
+                self.assertEqual(echo["sampling_seed"], seed)
+
+    def test_grid_default_and_explicit_grid_need_no_random_capability(self):
+        default = self.engine.request("run")["echo"]
+        self.assertNotIn("fit_samples", default)
+        self.assertNotIn("samples_per_patch", default)
+        for axis in (1, 9, 200):
+            with self.subTest(axis=axis):
+                self.assertEqual(self.engine.request("run", fit_samples=axis)["echo"]["fit_samples"], axis)
+
+    def test_invalid_sampling_is_rejected_before_worker_start(self):
+        invalid = [{"fit_samples": value} for value in (None, True, False, "9", 1.5, 0, -1, 201, 2**32 + 9)]
+        invalid += [{"samples_per_patch": value} for value in (None, True, "10", 1.5, 0, -1, 4097, 2**64)]
+        invalid += [{"samples_per_patch": 1, "sampling_seed": value}
+                    for value in (None, True, "42", 1.5, -1, 2**32)]
+        invalid += [{"sampling_seed": 42}, {"fit_samples": 9, "samples_per_patch": 10},
+                    {"n_samples": 10}, {"random_seed": 42}]
+        for options in invalid:
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.engine.request("run", **options)
+        self.launch.assert_not_called()
+
+    def test_calibrate_validates_sampling_before_detection_or_creating_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "not-created"
+            with patch.object(self.engine, "detect") as detect:
+                with self.assertRaisesRegex(ValueError, "fit_samples"):
+                    self.engine.calibrate("chart.png", folder=folder, fit_samples="9")
+                detect.assert_not_called()
+            self.assertFalse(folder.exists())
+        self.launch.assert_not_called()
+
+    def test_apply_rejects_unknown_formats_before_worker_start(self):
+        for output_format in (None, "tiff", "webp", "", True, ["png"]):
+            with self.subTest(output_format=output_format), self.assertRaises(ValueError):
+                self.engine.apply("model.json", "image.jpg", "out", output_format=output_format)
+        self.launch.assert_not_called()
+        for output_format in ("png", "jpg", "jpeg", "PNG", "JPEG"):
+            self.assertEqual(self.engine.apply("m", "i", "out", output_format=output_format)
+                             ["echo"]["output_format"], output_format)
+
+    def test_written_fit_outputs_require_supported_extensions(self):
+        for output in ("out", "out.tiff", "out.webp", "out.bmp"):
+            with self.subTest(output=output), self.assertRaisesRegex(ValueError, "still output"):
+                self.engine.fit("chart.png", output=output, report="report.json", model_out="model.json")
+        self.launch.assert_not_called()
+        # A report/model-only run does not serialize its dummy final destination.
+        echo = self.engine.request("run", output="unused.bin", write_output=False)["echo"]
+        self.assertFalse(echo["write_output"])
+        self.assertEqual(echo["output"], "unused.bin")
+
+    def test_disabled_ffc_does_not_validate_or_load_inactive_settings(self):
+        echo = self.engine.request("run", do_ffc=False, white="missing.png",
+                                   ffc={"method": "unsupported-inactive-method"})["echo"]
+        self.assertFalse(echo["do_ffc"])
+        self.assertEqual(echo["white"], "missing.png")
 
     def test_progress_and_paths(self):
         messages = []
@@ -102,7 +198,7 @@ class ClientTests(unittest.TestCase):
         with self.engine as engine:
             reply = engine.detect(Path("a space/日本.jpg"))
             self.assertEqual(reply["echo"]["image"], str(Path("a space/日本.jpg")))
-            self.assertEqual(reply["echo"]["policy"], "cpu")
+            self.assertEqual(reply["echo"]["policy"], "auto")
             self.assertEqual(messages, ["working"])
         self.assertIsNone(self.engine._process)
 
@@ -160,7 +256,7 @@ class ClientTests(unittest.TestCase):
 
     def test_all_convenience_operations(self):
         operations = [(lambda: self.engine.warmup(), "warmup"),
-                      (lambda: self.engine.fit("x", output="a", report="b", model_out="c"), "run"),
+                      (lambda: self.engine.fit("x", output="a.png", report="b", model_out="c"), "run"),
                       (lambda: self.engine.apply("m", "x", "out"), "apply"),
                       (lambda: self.engine.preview("m", "x", "cc", "out"), "preview_stage"),
                       (lambda: self.engine.export_cube("m", "out"), "export_cube")]

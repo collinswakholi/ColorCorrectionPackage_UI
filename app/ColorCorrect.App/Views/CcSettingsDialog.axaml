@@ -85,7 +85,7 @@
                     <TextBox x:Name="FitSamples" Classes="config" Margin="0,0,0,10"
                              Text="{Binding FitSamplesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="Samples per patch side"
-                             ToolTip.Tip="Sampling grid inside each chart patch: 3 means a 3 × 3 grid (9 samples)."/>
+                             ToolTip.Tip="Grid points per side: 3 gives 9 samples averaged into one color per patch."/>
 
                     <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
                         <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>

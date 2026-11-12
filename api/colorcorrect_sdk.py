@@ -407,7 +407,7 @@ class CalibrationOptions:
     do_sat: bool = True
     skip_saturated: bool = False
     crop: float = 0.75
-    fit_samples: int = 9
+    fit_samples: int | None = None
     degree: int = 2
     include_combinations: bool = True
     pls_components: int = 0
@@ -424,6 +424,8 @@ class CalibrationOptions:
     phase2_teacher: bool = False
     write_output: bool = True
     fast_mode: bool = True
+    samples_per_patch: int | None = None
+    sampling_seed: int | None = None
 
     def to_dict(self) -> dict:
         _choice(self.model, ("ccm", "rpcc2", "rpcc3", "linear", "pls", "nn"), "model")
@@ -432,7 +434,16 @@ class CalibrationOptions:
         for key in ("input_white", "target_white"):
             _choice(getattr(self, key), WHITE_POINTS, key)
         _finite(self.crop, "crop", 0.01, 1)
-        _integer(self.fit_samples, "fit_samples", 1, 100000)
+        if self.fit_samples is not None:
+            _integer(self.fit_samples, "fit_samples", 1, 200)
+        if self.samples_per_patch is not None:
+            _integer(self.samples_per_patch, "samples_per_patch", 1, 4096)
+            if self.fit_samples is not None:
+                raise InvalidInputError("choose fit_samples or samples_per_patch")
+        if self.sampling_seed is not None:
+            _integer(self.sampling_seed, "sampling_seed", 0, 2**32 - 1)
+            if self.samples_per_patch is None:
+                raise InvalidInputError("sampling_seed requires samples_per_patch")
         if self.do_cc and self.model == "linear":
             _integer(self.degree, "degree", 1, 12)
         if self.do_cc and self.model == "pls":
@@ -448,6 +459,8 @@ class CalibrationOptions:
             if key.startswith("do_") or key in ("skip_saturated", "include_combinations", "cross_validate", "phase2_teacher", "write_output", "fast_mode"):
                 if not (key == "do_ffc" and value is None) and type(value) is not bool:
                     raise InvalidInputError(f"{key} must be bool")
+        if self.fit_samples is None and self.samples_per_patch is None:
+            values["fit_samples"] = 9
         if not self.fast_mode:
             values.pop("fast_mode")
         for key in ("input_space", "input_white", "target_space", "target_white", "pls_components"):

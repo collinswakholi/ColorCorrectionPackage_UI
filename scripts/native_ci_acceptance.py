@@ -213,7 +213,7 @@ def main():
             log.write(repr(arguments) + "\n"); log.flush()
             try:
                 subprocess.run(arguments, check=True, stdout=log, stderr=subprocess.STDOUT, **kwargs)
-            except subprocess.CalledProcessError:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 log.flush()
                 with (evidence / "commands.log").open("rb") as diagnostic:
                     diagnostic.seek(max(0, diagnostic.seek(0, os.SEEK_END) - 16384))
@@ -335,12 +335,18 @@ def main():
             "dotnet_engine": ["dotnet", "test", root / "app/ColorCorrect.Engine.Tests/ColorCorrect.Engine.Tests.csproj", "-c", "Release",
                 "-p:RestoreLockedMode=true", "--logger", "trx;LogFileName=engine.trx", "--results-directory", evidence],
             "dotnet_headless": ["dotnet", "test", root / "app/ColorCorrect.App.Headless.Tests/ColorCorrect.App.Headless.Tests.csproj", "-c", "Release",
-                "-p:RestoreLockedMode=true", "--logger", "trx;LogFileName=headless.trx", "--results-directory", evidence],
+                "-p:RestoreLockedMode=true", "--disable-build-servers", "-m:1", "-p:UseSharedCompilation=false",
+                "--blame-hang", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "none",
+                "--logger", "trx;LogFileName=headless.trx", "--results-directory", evidence],
         }
         for name, command in component_commands.items():
             try:
-                run(command)
+                # VSTest's per-test timer starts after the build; bound startup as well.
+                run(command, timeout=900 if name == "dotnet_headless" else None)
                 report["component_tests"][name] = "passed; inspect logs/TRX for explicit skips"
+            except subprocess.TimeoutExpired as error:
+                report["component_tests"][name] = "timed out"
+                component_failures.append(f"{name}: exceeded {error.timeout}s")
             except subprocess.CalledProcessError as error:
                 report["component_tests"][name] = "failed"
                 component_failures.append(f"{name}: {error.returncode}")

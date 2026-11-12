@@ -134,6 +134,18 @@ class AtomicJsonTests(unittest.TestCase):
                 temporary.unlink()
 
 
+class PatchSamplingOptionsTests(unittest.TestCase):
+    def test_typed_options_preserve_grid_and_send_only_active_random_fields(self):
+        from colorcorrect import CalibrationOptions, InvalidInputError
+        self.assertEqual(CalibrationOptions().to_dict()["fit_samples"], 9)
+        opts = CalibrationOptions(samples_per_patch=20, sampling_seed=42)
+        payload = opts.to_dict()
+        self.assertNotIn("fit_samples", payload)
+        self.assertEqual((payload["samples_per_patch"], payload["sampling_seed"]), (20, 42))
+        with self.assertRaises(InvalidInputError):
+            replace(opts, fit_samples=9).to_dict()
+
+
 class ReferenceTests(unittest.TestCase):
     def test_duplicate_json_interpretation_fields_are_rejected(self):
         profile = ReferenceProfile.from_values([(50, 0, 0)] * 24)
@@ -261,6 +273,11 @@ class SDKTests(unittest.TestCase):
 
     def fit(self, **options):
         return self.client.calibrate(self.folder / "chart.jpg", output_dir=self.folder / "results", **options)
+
+    def test_seeded_fit_reports_unsupported_worker(self):
+        with self.assertRaisesRegex(UnsupportedCapabilityError, "updated worker") as caught:
+            self.fit(options=CalibrationOptions(samples_per_patch=20, sampling_seed=42))
+        self.assertEqual(caught.exception.raw_reply["code"], "unsupported_capability")
 
     def test_explicit_cpu_inference_is_negotiated_before_work(self):
         with Client(sys.executable, root=ROOT, backend="cpu-inference", timeout=5) as client:

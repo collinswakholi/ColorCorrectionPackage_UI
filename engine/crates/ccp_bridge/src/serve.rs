@@ -15,7 +15,7 @@ use ccp_detect::{
 use serde_json::{json, Value};
 
 use crate::run_pipeline::{
-    apply_saved_to_image_ex_with_progress, export_cube_from_saved, json_bool, json_f64, json_i64, json_str,
+    apply_saved_to_image_ex_with_progress, export_cube_from_saved, json_bool, json_f64, json_str,
     last_apply_backend, load_saved, run_from_json_ex, ApplyOptions, FfcGainCache, PreviewMode,
     SavedPipeline,
 };
@@ -155,6 +155,7 @@ fn emit_ready(state: &ServeState) {
     let ready = json!({
         "ok": true,
         "event": "ready",
+        "patch_sampling": "random-lcg32-v1",
         "device": state.device,
         "warmed": state.warmed,
         "title": ready_title(state.warmed, &state.policy),
@@ -463,6 +464,14 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         Some(p) => PathBuf::from(p),
         None => return json!({"ok":false,"error":"apply requires output_dir"}),
     };
+    let output_ext = match req.get("output_format") {
+        None => "jpg",
+        Some(v) => match v.as_str().map(str::to_ascii_lowercase).as_deref() {
+            Some("png") => "png",
+            Some("jpg" | "jpeg") => "jpg",
+            _ => return json!({"ok":false,"error":"output_format must be png, jpg or jpeg"}),
+        },
+    };
     let _ = std::fs::create_dir_all(&output_dir);
     emit_progress(&format!("Applying model to {} images", images.len()));
 
@@ -472,14 +481,6 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
     let artifact_bases = unique_artifact_bases(&valid_images);
-    let output_ext = match json_str(req, &["output_format"])
-        .unwrap_or("jpg")
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "png" => "png",
-        _ => "jpg",
-    };
     let jobs: Vec<(String, PathBuf, Option<PathBuf>)> = valid_images
         .into_iter()
         .zip(artifact_bases)
@@ -498,7 +499,10 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         })
         .collect();
 
-    let mut apply = ApplyOptions::from_req(req, &saved);
+    let mut apply = match ApplyOptions::try_from_req(req, &saved) {
+        Ok(apply) => apply,
+        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+    };
     apply.ffc_cache = Some(state.ffc_cache.clone());
     let apply_one = |img: &str, out: &Path, preview: Option<&Path>| -> Value {
         emit_progress(&format!(
@@ -516,6 +520,11 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
                     "output": out,
                     "preview_dir": preview,
                     "metrics_hidden": true,
+                    "timings": {
+                        "decode_seconds": report.decode_seconds,
+                        "processing_seconds": report.processing_seconds,
+                        "export_seconds": report.export_seconds,
+                    },
                 });
                 if let Some(skip) = report.ffc_skipped {
                     row["ffc_skipped"] = json!(skip);
@@ -582,7 +591,10 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
         .unwrap_or("corrected")
         .to_ascii_lowercase();
     let dummy = preview_dir.join("_unused.jpg");
-    let mut apply = ApplyOptions::from_req(req, &saved);
+    let mut apply = match ApplyOptions::try_from_req(req, &saved) {
+        Ok(apply) => apply,
+        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+    };
     apply.write_output = false;
     apply.preview_mode = PreviewMode::Stage(stage.clone());
     // Intermediate previews expose the original stage math. Fast mode only
@@ -642,7 +654,13 @@ fn write_cube_reply(saved: &SavedPipeline, req: &Value) -> Value {
         Some(p) => PathBuf::from(p),
         None => return json!({"ok":false,"error":"export_cube requires path"}),
     };
-    let size = json_i64(req, &["size"], DEFAULT_LUT_SIZE as i64).max(2) as usize;
+    let size = match req.get("size") {
+        None => DEFAULT_LUT_SIZE,
+        Some(value) => match value.as_u64().filter(|n| (2..=129).contains(n)) {
+            Some(size) => size as usize,
+            None => return json!({"ok":false,"error":"size must be an integer from 2 to 129"}),
+        },
+    };
     match export_cube_from_saved(saved, &path, size) {
         Ok(()) => {
             json!({"ok":true,"path": path, "size": size, "note":"LUT does not include flat-field."})
@@ -756,6 +774,31 @@ mod tests {
             assert_eq!(reply["ok"], false);
             assert!(reply["error"].as_str().unwrap().contains("cc_method"));
         }
+    }
+
+    #[test]
+    fn cube_export_rejects_invalid_sizes_before_writing() {
+        let dir = std::env::temp_dir().join(format!("ccp-invalid-cube-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("invalid.cube");
+        for size in [
+            json!(true),
+            json!(0),
+            json!(1),
+            json!(-2),
+            json!(33.5),
+            json!(130),
+            json!("33"),
+            Value::Null,
+            json!(u64::MAX),
+        ] {
+            let reply =
+                write_cube_reply(&SavedPipeline::default(), &json!({"path":path,"size":size}));
+            assert_eq!(reply["ok"], false);
+            assert!(reply["error"].as_str().unwrap().contains("size"));
+            assert!(!path.exists());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
