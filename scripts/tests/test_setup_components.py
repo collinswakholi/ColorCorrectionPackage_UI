@@ -13,6 +13,9 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from setup_components import component_manifest
 
 ROOT = Path(__file__).parents[2]
+# Allow host PowerShell startup, CIM initialization and child teardown on ARM64 CI.
+# The fixture still enforces its own shorter native probe deadline.
+POWERSHELL_TEST_TIMEOUT = 120
 
 class SetupComponentTests(unittest.TestCase):
     def test_cpu_closure_retains_linked_directml_but_not_webgpu(self):
@@ -47,7 +50,7 @@ class SetupComponentTests(unittest.TestCase):
             (payload/'prerequisites').mkdir()
             (payload/'prerequisites/vc-redist.json').write_text(json.dumps({'version':'14.44.35211.0','sha256':'0'*64}))
             (payload/'setup-components.json').write_text(json.dumps({'architecture':'arm64' if os.environ.get('PROCESSOR_ARCHITECTURE')=='ARM64' else 'x64','components':[]}))
-            completed = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(payload/'setup.ps1'),'-Mode','cpu','-Diagnose'],capture_output=True,text=True,timeout=40)
+            completed = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(payload/'setup.ps1'),'-Mode','cpu','-Diagnose'],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT)
             self.assertEqual(completed.returncode,0,completed.stderr)
             result=json.loads(completed.stdout)
             self.assertEqual(result['selected_components'],['cpu'])
@@ -55,7 +58,7 @@ class SetupComponentTests(unittest.TestCase):
             self.assertFalse((payload/'setup-state.json').exists())
             script=(payload/'setup.ps1').read_text()
             (payload/'setup.ps1').write_text(script.replace('$adapters = @();', 'function Get-CimInstance { throw "Inventory unavailable" }\n$adapters = @();'))
-            unknown=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(payload/'setup.ps1'),'-Diagnose'],capture_output=True,text=True,timeout=40)
+            unknown=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(payload/'setup.ps1'),'-Diagnose'],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT)
             self.assertEqual(unknown.returncode,0,unknown.stderr)
             unknown_result=json.loads(unknown.stdout)
             self.assertEqual(unknown_result['inventory_status'],'not_checked')
@@ -78,15 +81,15 @@ class SetupComponentTests(unittest.TestCase):
             backup.parent.mkdir(parents=True)
             shutil.move(str(payload/'onnxruntime_providers_webgpu.dll'),str(backup))
             command=['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(payload/'setup.ps1')]
-            inventory=subprocess.run(command+['-Diagnose','-Mode','cpu'],capture_output=True,text=True,timeout=40)
+            inventory=subprocess.run(command+['-Diagnose','-Mode','cpu'],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT)
             self.assertEqual(inventory.returncode,0,inventory.stderr)
             if not json.loads(inventory.stdout)['vc_runtime']['ready']:
                 self.skipTest('Host VC runtime unavailable; installer must be exercised in guest')
             environment=dict(os.environ,LOCALAPPDATA=str(payload/'user'))
-            cpu=subprocess.run(command+['-Mode','cpu','-Install','-NonInteractive'],capture_output=True,text=True,timeout=40,env=environment)
+            cpu=subprocess.run(command+['-Mode','cpu','-Install','-NonInteractive'],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT,env=environment)
             self.assertEqual(cpu.returncode,0,cpu.stderr)
             self.assertFalse((payload/'onnxruntime_providers_webgpu.dll').exists())
-            custom=subprocess.run(command+['-Mode','custom','-Components','webgpu','-Install','-NonInteractive'],capture_output=True,text=True,timeout=40,env=environment)
+            custom=subprocess.run(command+['-Mode','custom','-Components','webgpu','-Install','-NonInteractive'],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT,env=environment)
             self.assertEqual(custom.returncode,0,custom.stderr)
             self.assertEqual((payload/'onnxruntime_providers_webgpu.dll').read_bytes(),b'optional')
             state_bytes=(payload/'user/ColorCorrectStudio/setup-state.json').read_bytes()
@@ -131,7 +134,7 @@ class Worker { static int Main() {
                     pidfile=payload/'worker-pid.txt'
                     if pidfile.exists():pidfile.unlink()
                     environment=dict(os.environ,FIXTURE_FAILED_EXIT='1' if failed else '0',FIXTURE_INVALID='1' if invalid else '0',FIXTURE_THROW_AFTER_START='1' if interrupted else '0',FIXTURE_PID_FILE=str(pidfile))
-                    result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],capture_output=True,text=True,timeout=30,env=environment,creationflags=subprocess.CREATE_NO_WINDOW)
+                    result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],capture_output=True,text=True,timeout=POWERSHELL_TEST_TIMEOUT,env=environment,creationflags=subprocess.CREATE_NO_WINDOW)
                     self.assertEqual(result.returncode,0,result.stderr)
                     reply=json.loads(result.stdout)
                     self.assertEqual(reply['status'],'failed' if failed or invalid or interrupted else 'verified')

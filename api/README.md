@@ -2,18 +2,18 @@
 
 Fit a correction from a chart photograph, then apply it to still images captured
 under the same conditions. The SDK requires Python 3.10+ and has no Python ML or
-GUI runtime dependencies. Install the wheel from your application's `python/`
-folder, or install from this checkout:
+GUI runtime dependencies. Install the wheel from the `python/` folder in your Studio runtime.
 
 ```sh
-python -m pip install ./api
+python -m pip install "/path/to/runtime/python/colorcorrect_studio-2.3.0-py3-none-any.whl"
 ```
 
+For a source checkout, run `python -m pip install ./api`.
 The wheel does **not** contain the native worker, models, or inference libraries.
 Keep the installed/extracted application intact and set `root` to that folder.
-The native application and SDK are versioned independently; this SDK is 2.2.2.
+The native application and SDK are versioned independently; this SDK is 2.3.0.
 
-Use the matching **0.2.2** native application for CPU inference recovery and
+Use **Studio 0.3.0** for exact seeded patch sampling. The SDK checks the worker capability before fitting. Studio 0.2.2 introduced CPU inference recovery and
 `backend="cpu-inference"`. Older 0.2.1 engines require GPU inference; installing
 this wheel alone does not replace their native engine. For the Mac bundle, set
 `root="/Applications/ColorCorrect Studio.app/Contents/Resources/runtime"`.

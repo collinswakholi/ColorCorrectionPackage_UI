@@ -1,6 +1,6 @@
 # Compatibility
 
-ColorCorrect Studio 0.2.2 includes Windows and Ubuntu packages and an
+ColorCorrect Studio 0.3.0 includes Windows and Ubuntu packages and an
 Apple-silicon macOS app bundle. Keep the complete application folder or bundle
 together; its runtime, models and libraries are included. Python is optional.
 

@@ -14,12 +14,12 @@ application package available. The notebooks can run from any directory.
 ## Install the kernel environment
 
 Use Python 3.10+ and the wheel included in the installed/extracted app's `python/`
-folder. The SDK is independently versioned 2.2.2; use the wheel from your application package.
+folder. The SDK is independently versioned 2.3.0; use the wheel from your application package.
 
 ```sh
 python -m venv .venv
 # Activate this environment, then:
-python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.2.2-py3-none-any.whl
+python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.3.0-py3-none-any.whl
 python -m pip install jupyterlab ipykernel Pillow
 ```
 

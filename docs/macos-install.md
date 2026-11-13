@@ -7,14 +7,14 @@ need to install .NET, Rust or Python to use the desktop app.
 
 ## Download and open
 
-1. Download `ColorCorrect-Studio-0.2.2-osx-arm64.zip` from the
-   [0.2.2 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.2.2).
+1. Download `ColorCorrect-Studio-0.3.0-osx-arm64.zip` from the
+   [0.3.0 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.3.0).
    A `.tar.gz` alternative contains the same application bundle.
 2. Compare the archive's SHA-256 with its entry in the release's
    `SHA256SUMS-osx-arm64.txt`. For example, in the download directory:
 
    ```sh
-   shasum -a 256 ColorCorrect-Studio-0.2.2-osx-arm64.zip
+   shasum -a 256 ColorCorrect-Studio-0.3.0-osx-arm64.zip
    ```
 
 3. Double-click the ZIP in Finder. Move **ColorCorrect Studio.app** to
@@ -55,7 +55,7 @@ tools in their own environment. Install the wheel included with this app:
 ```sh
 python3 -m venv "$HOME/.venvs/colorcorrect"
 . "$HOME/.venvs/colorcorrect/bin/activate"
-python -m pip install "/Applications/ColorCorrect Studio.app/Contents/Resources/runtime/python/colorcorrect_studio-2.2.2-py3-none-any.whl"
+python -m pip install "/Applications/ColorCorrect Studio.app/Contents/Resources/runtime/python/colorcorrect_studio-2.3.0-py3-none-any.whl"
 ```
 
 Use the bundle's **Contents/Resources/runtime** directory as the SDK root:

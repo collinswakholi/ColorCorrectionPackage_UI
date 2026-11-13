@@ -5,7 +5,7 @@ Escape closes it and returns focus to its trigger. The guide is bundled into the
 application, so it does not depend on a browser or internet connection. Choose
 **Original research** to open the article in your browser.
 
-This guide describes version 0.2.2. Older 0.2.1 packages do not include the CPU
+This guide describes version 0.3.0. Older 0.2.1 packages do not include the CPU
 detection and device-aware setup controls below.
 
 ## Your first correction
