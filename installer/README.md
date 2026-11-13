@@ -9,7 +9,7 @@ not publisher-signed; Mac bundles use ad-hoc signing and are not notarized.
 ARM64 and WSL graphics workflows remain experimental.
 See [compatibility](../docs/compatibility.md) for platform requirements.
 
-Version **0.2.2** includes explicit CPU detection, Auto inference recovery and
+Version **0.3.0** includes explicit CPU detection, Auto inference recovery and
 device-aware setup. Previous release assets remain unchanged. Use the SDK wheel
 from your chosen application package to keep its worker and API together.
 
@@ -39,7 +39,7 @@ Rerun the matching installer with Custom to add omitted acceleration components.
 Install the Debian package using its actual downloaded filename:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.2.2_amd64.deb
+sudo apt install ./colorcorrect-studio_0.3.0_amd64.deb
 colorcorrect-studio
 ```
 

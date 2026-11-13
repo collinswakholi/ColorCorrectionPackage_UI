@@ -4,7 +4,7 @@ Turn a photographed color chart into a reusable correction for your still images
 Check the detected patches, fit the correction, inspect each stage, and apply the
 saved model to photographs captured under the same conditions.
 
-[Download 0.2.2](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.2.2)
+[Download 0.3.0](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.3.0)
 · [User guide](docs/user-guide.md) · [Python API](api/README.md)
 · [Build from source](docs/building.md)
 
@@ -20,7 +20,7 @@ libraries. Python is optional.
 
 ## Download and install
 
-**0.2.2** includes Windows and Ubuntu packages for x64 and ARM64, plus an
+**0.3.0** includes Windows and Ubuntu packages for x64 and ARM64, plus an
 Apple-silicon application for macOS 14+. The downloads are not signed with a
 publisher certificate. Mac apps use ad-hoc signing and are not notarized.
 See the [platform notes](docs/compatibility.md) for requirements and limitations.
@@ -32,11 +32,11 @@ graphics drivers.
 
 | Platform | Installer | Portable application |
 | --- | --- | --- |
-| Windows 11 · x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-win-x64.zip) |
-| Windows 11 · ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-win-arm64.zip) |
-| Ubuntu 24.04 · x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/colorcorrect-studio_0.2.2_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-linux-x64.tar.gz) |
-| Ubuntu 24.04 · ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/colorcorrect-studio_0.2.2_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-linux-arm64.tar.gz) |
-| Apple-silicon macOS 14+ | [Install the app](docs/macos-install.md) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-osx-arm64.zip) · [tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.2.2/ColorCorrect-Studio-0.2.2-osx-arm64.tar.gz) |
+| Windows 11 · x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-win-x64.zip) |
+| Windows 11 · ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-win-arm64.zip) |
+| Ubuntu 24.04 · x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/colorcorrect-studio_0.3.0_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-linux-x64.tar.gz) |
+| Ubuntu 24.04 · ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/colorcorrect-studio_0.3.0_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-linux-arm64.tar.gz) |
+| Apple-silicon macOS 14+ | [Install the app](docs/macos-install.md) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-osx-arm64.zip) · [tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.3.0/ColorCorrect-Studio-0.3.0-osx-arm64.tar.gz) |
 
 **x64** means 64-bit Intel/AMD; **ARM64** means 64-bit Arm. Choose your operating
 system's native architecture. These packages do not target 32-bit x86.
@@ -52,7 +52,7 @@ On **Ubuntu**, install the matching Debian package, then launch the app from the
 application menu or with `colorcorrect-studio`:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.2.2_amd64.deb  # ARM64: use the _arm64.deb file
+sudo apt install ./colorcorrect-studio_0.3.0_amd64.deb  # ARM64: use the _arm64.deb file
 colorcorrect-studio
 ```
 
@@ -132,13 +132,13 @@ interpretation downstream. See the [color interpretation guide](docs/user-guide.
 ## Python API
 
 The optional SDK uses the same native engine without Python ML or GUI
-dependencies. Install the bundled wheel from your app's `python/` folder, or
-install from this source checkout:
+dependencies. Install the SDK wheel from the `python/` folder in your Studio runtime.
 
 ```sh
-python -m pip install ./api
+python -m pip install "/path/to/runtime/python/colorcorrect_studio-2.3.0-py3-none-any.whl"
 ```
 
+Developers working from this checkout can run `python -m pip install ./api`.
 Set `root` to the installed or extracted application folder. The default Windows
 folder is `%LOCALAPPDATA%\Programs\ColorCorrect Studio`; the Debian package uses
 `/opt/colorcorrect-studio`. For the Mac application, use
@@ -155,8 +155,8 @@ with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStu
     calibration.export_lut("correction.cube")
 ```
 
-The desktop application is **0.2.2**.
-The independently versioned SDK is **2.2.2**. Its wheel does not include the native
+The desktop application is **0.3.0**.
+The independently versioned SDK is **2.3.0**. Its wheel does not include the native
 worker or models. For custom references, typed
 options, model reload, and partial batch failures, see the [API guide](api/README.md)
 and [typed API reference](docs/api/README.md).

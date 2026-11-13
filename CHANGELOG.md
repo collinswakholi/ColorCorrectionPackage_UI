@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Support reproducible chart fits with an exact random sample count per patch and a seed. Grid sampling remains available for existing recipes.
+- Select devices per processing operation and report the execution backend.
+- Bundle Python SDK 2.3.0. It checks the native worker capability before requesting exact seeded sampling, so older workers report an unsupported request. Install the wheel from the desktop distribution.
+
 ## 0.2.2
 
 - Add explicit CPU chart and white-plane detection. Auto tries available GPU engines and falls back to CPU when GPU inference cannot complete.
