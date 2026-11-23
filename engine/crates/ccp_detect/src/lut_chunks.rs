@@ -36,7 +36,7 @@ where
     F: FnMut(&[f32], &mut Vec<f32>) -> Result<(), String>,
 {
     let expected = gs.checked_pow(3).and_then(|n| n.checked_mul(3));
-    if gs < 2 || expected != Some(lut.len()) || rgb.len() % 3 != 0 || chunk_pixels == 0 {
+    if gs < 2 || expected != Some(lut.len()) || !rgb.len().is_multiple_of(3) || chunk_pixels == 0 {
         return Err("invalid LUT, RGB length, or chunk size".into());
     }
     if !lut.iter().all(|v| v.is_finite())

@@ -490,7 +490,7 @@ fn require_hardware_backend(ep: GpuEp) -> Result<(), String> {
         }
     };
     let hardware:Vec<_>=adapters.into_iter().map(|adapter|adapter.get_info())
-        .filter(|info|crate::probe::eligible_wgpu_adapter(info)).collect();
+        .filter(crate::probe::eligible_wgpu_adapter).collect();
     if hardware.is_empty() {
         return Err(format!("No hardware {backend:?} adapter available for {} inference. Software renderers cannot provide GPU inference; choose Auto or CPU.",ep.key()));
     }

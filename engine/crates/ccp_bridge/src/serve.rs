@@ -1497,15 +1497,22 @@ mod tests {
             },
         );
         assert_ne!(a, b);
-        let mut settings = DetectSettings::default();
-        settings.conf = 0.91;
-        assert_ne!(a, detect_cache_key(Path::new("x.jpg"), &settings));
-        settings = DetectSettings::default();
-        settings.allow_recall = false;
-        assert_ne!(a, detect_cache_key(Path::new("x.jpg"), &settings));
-        settings = DetectSettings::default();
-        settings.device = "directml".into();
-        assert_ne!(a, detect_cache_key(Path::new("x.jpg"), &settings));
+        for settings in [
+            DetectSettings {
+                conf: 0.91,
+                ..DetectSettings::default()
+            },
+            DetectSettings {
+                allow_recall: false,
+                ..DetectSettings::default()
+            },
+            DetectSettings {
+                device: "directml".into(),
+                ..DetectSettings::default()
+            },
+        ] {
+            assert_ne!(a, detect_cache_key(Path::new("x.jpg"), &settings));
+        }
     }
 
     #[test]

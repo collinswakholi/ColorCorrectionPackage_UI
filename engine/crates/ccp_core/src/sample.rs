@@ -778,12 +778,9 @@ mod tests {
         for pixel in [0usize, 4095, 4096, 4097, (width * height - 1) as usize] {
             let rgb = [0, 1, 2].map(|c| raw[pixel * 3 + c] as f64 / 255.0);
             let expected = crate::color::convert_encoded_rgb(rgb, &p3, &srgb).unwrap();
-            for c in 0..3 {
+            for (c, want) in expected.iter().enumerate() {
                 let got = managed.rgb[pixel * 3 + c] as f64;
-                assert!(
-                    (got - expected[c].clamp(0.0, 1.0)).abs() < 0.002,
-                    "{pixel}/{c}"
-                );
+                assert!((got - want.clamp(0.0, 1.0)).abs() < 0.002, "{pixel}/{c}");
             }
         }
     }

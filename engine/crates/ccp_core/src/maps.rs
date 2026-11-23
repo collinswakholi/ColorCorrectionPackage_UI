@@ -310,7 +310,7 @@ impl CorrectionModel {
                     check_len("x_std", self.x_std.len(), p)?;
                     check_finite("x_mean", &self.x_mean)?;
                     check_finite("x_std", &self.x_std)?;
-                    if self.x_std.iter().any(|&s| s == 0.0) {
+                    if self.x_std.contains(&0.0) {
                         return Err(invalid_model("x_std contains zero"));
                     }
                 }

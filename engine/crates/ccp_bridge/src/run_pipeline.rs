@@ -400,7 +400,7 @@ fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) 
             *img = Array3::from_shape_vec(dim, owned).map_err(|e| Error::Message(e.to_string()))?;
         }
         if let Some(slice) = img.as_slice_mut() {
-            let execution = ccp_detect::lut_wgpu::apply(slice, &lut, gs)
+            let execution = ccp_detect::lut_wgpu::apply(slice, lut, gs)
                 .map_err(|e| Error::coded(ErrorCode::ProcessingFailed, e))?;
             if let Some(reason) = &execution.chunks.fallback_reason {
                 eprintln!("LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
