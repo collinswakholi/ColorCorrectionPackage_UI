@@ -132,7 +132,7 @@ public sealed class BatchProgressTests
             using (var bitmap = PreviewRgb.FromRgb(8, 8, Enumerable.Repeat((byte)160, 8 * 8 * 3).ToArray())) bitmap.Save(corrected);
             var model = Path.Combine(root, "model.json"); File.WriteAllText(model, "{}");
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(source), model, new() { WriteOutput = true, PreviewMode = "none" });
-            using var item = new SessionItemViewModel(source); vm.Session.Add(item); vm.Active = item;
+            using var item = new SessionItemViewModel(source); vm.Session.Add(item); vm.Workspace.Active = item;
             Call(vm, "ApplyOutcome", item, new CorrectionOutcome { Ok = true, OutputPath = corrected, ModelPath = model, CompletedContext = context }, false, true);
             Assert.True(item.PreviewSuppressed); Assert.True(vm.IsResultPreviewSuppressed); Assert.Null(vm.CorrectedPreview);
             var session = Path.Combine(root, "session.json");
@@ -141,11 +141,11 @@ public sealed class BatchProgressTests
             vm.RestoreWorkingItems(loaded);
             var deadline = DateTime.UtcNow.AddSeconds(5);
             while (vm.OriginalPreview is null && DateTime.UtcNow < deadline) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
-            Assert.True(vm.Active!.PreviewSuppressed); Assert.True(vm.Active.IsCorrected); Assert.Null(vm.CorrectedPreview);
-            Assert.True(File.Exists(vm.Active.CorrectedPath));
+            Assert.True(vm.Workspace.Active!.PreviewSuppressed); Assert.True(vm.Workspace.Active.IsCorrected); Assert.Null(vm.CorrectedPreview);
+            Assert.True(File.Exists(vm.Workspace.Active.CorrectedPath));
             await vm.ShowResultPreviewCommand.ExecuteAsync(null);
-            Assert.False(vm.Active.PreviewSuppressed); Assert.NotNull(vm.CorrectedPreview);
-            Assert.Equal("Corrected", vm.StageName); Assert.Equal(context.Model.Sha256, vm.Active.CompletedContext!.Model.Sha256);
+            Assert.False(vm.Workspace.Active.PreviewSuppressed); Assert.NotNull(vm.CorrectedPreview);
+            Assert.Equal("Corrected", vm.StageName); Assert.Equal(context.Model.Sha256, vm.Workspace.Active.CompletedContext!.Model.Sha256);
         }
         finally { await vm.DisposeAsync(); Dispatcher.UIThread.RunJobs(); Directory.Delete(root, true); }
     }

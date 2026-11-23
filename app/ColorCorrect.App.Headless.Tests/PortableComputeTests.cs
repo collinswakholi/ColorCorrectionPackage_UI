@@ -221,7 +221,7 @@ public sealed class PortableComputeTests
         {
             IsCorrected = true, ModelPath = "missing-model.json", PreviewDir = "missing-previews",
         };
-        vm.Session.Add(item); vm.Active = item; vm.StageName = "GC";
+        vm.Session.Add(item); vm.Workspace.Active = item; vm.StageName = "GC";
         var method = typeof(MainWindowViewModel).GetMethod("EnsureStagePreviewAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
         await Assert.IsAssignableFrom<Task>(method.Invoke(vm, ["GC"]));
         Assert.False(vm.IsStagePreviewLoading);

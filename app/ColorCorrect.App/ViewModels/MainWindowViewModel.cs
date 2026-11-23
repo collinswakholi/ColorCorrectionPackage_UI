@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Workspace.PropertyChanged += OnWorkspaceStateChanged;
         Settings.DraftEdited += (_, _) => RefreshValidation();
         _client = new CorrectionClient(_worker);
         Session.CollectionChanged += (_, _) => RefreshBatchSubscriptions();
@@ -153,11 +154,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _loadedModelPath = "";
     [ObservableProperty] private bool _useLoadedModel;
     [ObservableProperty] private string _outputDir = "";
-    [ObservableProperty] private string _sessionCountLabel = "0";
-    [ObservableProperty] private string _sampleCountLabel = "0";
-    [ObservableProperty] private string _sampleQuery = "";
-    [ObservableProperty] private string _selectedGroup = "All";
-    [ObservableProperty] private string _imageMeta = "";
     [ObservableProperty] private string _batchLabel = "";
     [ObservableProperty] private string _batchProgressPct = "0%";
     [ObservableProperty] private string _overlayBadge = "";
@@ -172,7 +168,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _showPlane = true;
     private FfcPlane? _loadedModelPlane;
     [ObservableProperty] private double _overlayCrop = 0.75;
-    [ObservableProperty] private SessionItemViewModel? _active;
     [ObservableProperty] private NamedValue _selectedOutputFormat = new("png", "PNG");
     [ObservableProperty] private double _crop = 0.75;
     [ObservableProperty] private double _naturalWidth = 1;
@@ -194,18 +189,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _saveProgress;
     [ObservableProperty] private string _jobProgressPct = "0%";
     [ObservableProperty] private string _saveProgressLabel = "";
-    [ObservableProperty] private bool _hasSession;
-    [ObservableProperty] private bool _hasImage;
-    [ObservableProperty] private bool _hasCorrected;
 
     /// <summary>ΔE tiles, per-stage and per-patch rows, report and analysis panel states.</summary>
     public AnalysisViewModel Analysis { get; } = new();
 
-    partial void OnHasSessionChanged(bool value) => Analysis.HasSession = value;
+    private void OnHasSessionChanged(bool value) => Analysis.HasSession = value;
 
-    [ObservableProperty] private bool _hasSaveItems;
-    [ObservableProperty] private bool _hasCatalogFolders;
-    [ObservableProperty] private bool _hasWhiteRef;
     [ObservableProperty] private bool _saveCorrected = true;
     [ObservableProperty] private bool _saveFfc = true;
     [ObservableProperty] private bool _saveGc = true;
@@ -218,7 +207,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _canSaveWb;
     [ObservableProperty] private bool _canSaveCc;
     [ObservableProperty] private bool _canSaveReport;
-    [ObservableProperty] private bool _hasSelected;
     [ObservableProperty] private bool _hasReport;
     [ObservableProperty] private bool _showCorrected;
     [ObservableProperty] private bool _showFacePicker;
@@ -271,6 +259,24 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>The working session: the active still, session and selection flags, counts, catalog filter and image metadata.</summary>
+    public WorkspaceViewModel Workspace { get; } = new();
+
+    private void OnWorkspaceStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(WorkspaceViewModel.Active): OnActiveChanged(Workspace.Active); break;
+            case nameof(WorkspaceViewModel.HasSession): OnHasSessionChanged(Workspace.HasSession); break;
+            case nameof(WorkspaceViewModel.HasImage): OnHasImageChanged(Workspace.HasImage); break;
+            case nameof(WorkspaceViewModel.HasCorrected): OnHasCorrectedChanged(Workspace.HasCorrected); break;
+            case nameof(WorkspaceViewModel.SampleQuery): OnSampleQueryChanged(Workspace.SampleQuery); break;
+            case nameof(WorkspaceViewModel.SelectedGroup): OnSelectedGroupChanged(Workspace.SelectedGroup); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _useAllFaces;
@@ -307,34 +313,34 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public bool HasHiddenLayersError => Settings.ShowNn && !CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
     public string HiddenLayersError => CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out var error) ? "" : error;
     public bool ShowSessionNavigation => Session.Count > 1;
-    public bool CanNavigatePrevious => Active is not null && Session.IndexOf(Active) > 0;
-    public bool CanNavigateNext => Active is not null && Session.IndexOf(Active) >= 0 && Session.IndexOf(Active) < Session.Count - 1;
+    public bool CanNavigatePrevious => Workspace.Active is not null && Session.IndexOf(Workspace.Active) > 0;
+    public bool CanNavigateNext => Workspace.Active is not null && Session.IndexOf(Workspace.Active) >= 0 && Session.IndexOf(Workspace.Active) < Session.Count - 1;
     public string ActivePositionLabel
     {
         get
         {
-            var index = Active is null ? -1 : Session.IndexOf(Active);
-            return index < 0 ? "" : $"{index + 1} of {Session.Count} · {Active!.DisplayName}";
+            var index = Workspace.Active is null ? -1 : Session.IndexOf(Workspace.Active);
+            return index < 0 ? "" : $"{index + 1} of {Session.Count} · {Workspace.Active!.DisplayName}";
         }
     }
     public string PreviousSessionHint => CanNavigatePrevious
-        ? $"Previous image · {Session[Session.IndexOf(Active!) - 1].DisplayName} (Alt+Left)"
+        ? $"Previous image · {Session[Session.IndexOf(Workspace.Active!) - 1].DisplayName} (Alt+Left)"
         : "No previous image";
     public string NextSessionHint => CanNavigateNext
-        ? $"Next image · {Session[Session.IndexOf(Active!) + 1].DisplayName} (Alt+Right)"
+        ? $"Next image · {Session[Session.IndexOf(Workspace.Active!) + 1].DisplayName} (Alt+Right)"
         : "No next image";
     public string CropLabel => Crop.ToString("0.00");
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => WorkerStartupComplete && !WorkerReady;
     public bool CanOpenBatch => WorkerReady && !Busy && !IsSaving && Session.Count > 0;
-    public string DetectActionLabel => Active is not null && _detectionFailures.ContainsKey(Active.Path) ? "Retry" : "Detect";
+    public string DetectActionLabel => Workspace.Active is not null && _detectionFailures.ContainsKey(Workspace.Active.Path) ? "Retry" : "Detect";
     public string RunActionHint => !WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
         : Busy || IsSaving ? "Wait for the current operation, or cancel processing."
-        : Active is null ? "Add an image to start."
-        : !File.Exists(Active.Path) ? "Relink the missing image to continue."
+        : Workspace.Active is null ? "Add an image to start."
+        : !File.Exists(Workspace.Active.Path) ? "Relink the missing image to continue."
         : CachedOperationError(!WillUseLoadedModel) is { } error ? error
-        : !WillUseLoadedModel && Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
+        : !WillUseLoadedModel && Workspace.Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
         : "Run the active workflow (F5).";
     public string BatchFitHint => !WorkerReady ? "The processing engine is not ready."
         : Busy || IsSaving ? "Wait for the current operation."
@@ -384,17 +390,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public string ApplyLabel => WillUseLoadedModel ? "Apply model" : "Fit + apply";
     public string ModelModeHint => WillUseLoadedModel
         ? "Run applies the loaded GC/WB/CC. Method and degree are ignored. FFC (if on) is recomputed from the white still."
-        : Active?.Handshake is { Ok: true }
+        : Workspace.Active?.Handshake is { Ok: true }
             ? "Run fits a new model from this image and replaces the loaded model."
             : "Detect the chart on this image, then Run to fit a new model.";
-    public string WorkflowHint => Active is null ? "Add a still, then Fit + apply."
+    public string WorkflowHint => Workspace.Active is null ? "Add a still, then Fit + apply."
         : WillUseLoadedModel ? "Using the loaded model. Run applies it to this still."
-        : Active.Handshake is { Ok: true }
-            ? Active.IsCorrected ? "Corrected. Fit + apply again retrains from this still."
+        : Workspace.Active.Handshake is { Ok: true }
+            ? Workspace.Active.IsCorrected ? "Corrected. Fit + apply again retrains from this still."
                 : "Chart detected. Fit + apply trains a new model from this still."
             : "Detect the chart, then Fit + apply.";
-    public bool ShowStillPreview => HasImage;
-    public bool ShowChartSection => HasImage;
+    public bool ShowStillPreview => Workspace.HasImage;
+    public bool ShowChartSection => Workspace.HasImage;
     public bool ShowChartOverlay => OverlayHandshake is { Ok: true };
     public bool ShowOverlayLegend => ShowChartOverlay;
     public bool ShowPlaneOverlay => OverlayPlane is not null;
@@ -549,7 +555,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         _rangeAnchor = item;
         Activate(item);
-        HasSelected = Session.Any(sessionItem => sessionItem.IsSelected);
+        Workspace.HasSelected = Session.Any(sessionItem => sessionItem.IsSelected);
         RemoveSelectedCommand.NotifyCanExecuteChanged();
     }
 
@@ -680,15 +686,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Session.Clear();
-        Active = null;
+        Workspace.Active = null;
         _rangeAnchor = null;
         LastPreviewDir = "";
         SetPreview(null, null);
         OverlayHandshake = null;
         ApplyReport(null);
         DetectSummary = "Waiting for detect";
-        HasImage = false;
-        HasCorrected = false;
+        Workspace.HasImage = false;
+        Workspace.HasCorrected = false;
         ShowFacePicker = false;
         FaceOptions.Clear();
         ClearPicker();
@@ -773,9 +779,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void RemoveSelected()
     {
         var victims = Session.Where(item => item.IsSelected).ToList();
-        if (victims.Count == 0 && Active is not null)
+        if (victims.Count == 0 && Workspace.Active is not null)
         {
-            victims.Add(Active);
+            victims.Add(Workspace.Active);
         }
 
         RemoveItems(victims);
@@ -806,7 +812,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         Log("Session", $"Removed {names.Count} image(s).", LogLevel.Info, names);
 
-        if (Active is not null && !Session.Contains(Active))
+        if (Workspace.Active is not null && !Session.Contains(Workspace.Active))
         {
             if (Session.Count > 0)
             {
@@ -826,7 +832,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(CanOpenReport))]
     private void OpenReport()
     {
-        var path = Active?.ReportPath;
+        var path = Workspace.Active?.ReportPath;
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
             Status = "No report for the active image.";
@@ -863,12 +869,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void NavigateSession(int delta)
     {
-        if (Active is null)
+        if (Workspace.Active is null)
         {
             return;
         }
 
-        var index = Session.IndexOf(Active);
+        var index = Session.IndexOf(Workspace.Active);
         var next = index + delta;
         if (next >= 0 && next < Session.Count)
         {
@@ -1410,14 +1416,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         ShowCorrected = false;
-        HasCorrected = false;
+        Workspace.HasCorrected = false;
         ClearPicker();
         SetPreview(null, null);
         ApplyReport(null);
 
-        Active = item;
+        Workspace.Active = item;
         NotifyStageRadios();
-        HasImage = true;
+        Workspace.HasImage = true;
         RebuildFaces(item);
         if (ImageSizeReader.TryRead(item.Path, out var width, out var height))
         {
@@ -1472,12 +1478,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         UseAllFaces = ShowFacePicker && FaceOptions.Count > 0 && FaceIndex == FaceOptions.Count - 1 && FaceOptions[^1] == "All charts";
         OverlayFaceChoice = UseAllFaces ? 0 : Math.Max(0, FaceIndex);
-        if (Active is not null)
+        if (Workspace.Active is not null)
         {
-            Active.UseAllFaces = UseAllFaces;
+            Workspace.Active.UseAllFaces = UseAllFaces;
             if (!UseAllFaces)
             {
-                Active.FaceChoice = OverlayFaceChoice;
+                Workspace.Active.FaceChoice = OverlayFaceChoice;
             }
         }
     }
@@ -1556,7 +1562,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         if (_sourceWidth > 1 && _sourceHeight > 1)
         {
-            ImageMeta = $"{_sourceWidth} × {_sourceHeight}";
+            Workspace.ImageMeta = $"{_sourceWidth} × {_sourceHeight}";
         }
         else if (Preview is not null && TryBitmapSize(Preview, out var width, out var height))
         {
@@ -1564,7 +1570,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         else
         {
-            ImageMeta = "";
+            Workspace.ImageMeta = "";
         }
 
         SyncDisplaySize();
@@ -1574,12 +1580,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private bool ActiveIsWhiteRef()
     {
-        if (Active is null || string.IsNullOrWhiteSpace(Settings.WhiteImagePath) || !File.Exists(Settings.WhiteImagePath))
+        if (Workspace.Active is null || string.IsNullOrWhiteSpace(Settings.WhiteImagePath) || !File.Exists(Settings.WhiteImagePath))
         {
             return false;
         }
 
-        return PathsEqual(Active.Path, Settings.WhiteImagePath);
+        return PathsEqual(Workspace.Active.Path, Settings.WhiteImagePath);
     }
 
     private void EnsureWhiteInSession(bool activate)
@@ -1626,11 +1632,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void RefreshOverlay()
     {
         var original = StageName == "Original";
-        var handshake = original ? Active?.Handshake : null;
+        var handshake = original ? Workspace.Active?.Handshake : null;
         OverlayHandshake = handshake is { Ok: true } ? handshake : null;
         // Plane is detected on the white card. Draw it only on that still.
         var plane = original && ActiveIsWhiteRef()
-            ? _loadedModelPlane ?? Active?.FfcPlane ?? Session.Select(item => item.FfcPlane).FirstOrDefault(p => p is { IsValid: true })
+            ? _loadedModelPlane ?? Workspace.Active?.FfcPlane ?? Session.Select(item => item.FfcPlane).FirstOrDefault(p => p is { IsValid: true })
             : null;
         OverlayPlane = plane is { IsValid: true } ? plane : null;
         OverlayBadge = OverlayHandshake is { Ok: true }
@@ -1655,25 +1661,25 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private void ApplyReport(CorrectionReport? report) =>
-        Analysis.Apply(report, HasCorrected, () => BuildOptions().CliModel());
+        Analysis.Apply(report, Workspace.HasCorrected, () => BuildOptions().CliModel());
 
     public void PrepareSaveMenu() => RefreshSessionUi();
 
     private void RefreshSessionUi()
     {
-        HasSession = Session.Count > 0;
-        SessionCountLabel = Session.Count.ToString();
-        HasSelected = Session.Any(item => item.IsSelected);
-        HasSaveItems = Session.Any(item => item.HasSaveable);
+        Workspace.HasSession = Session.Count > 0;
+        Workspace.SessionCountLabel = Session.Count.ToString();
+        Workspace.HasSelected = Session.Any(item => item.IsSelected);
+        Workspace.HasSaveItems = Session.Any(item => item.HasSaveable);
         CanSaveCorrected = Session.Any(item => item.IncludeInSave && (item.IsCorrected || File.Exists(item.CorrectedPath)));
         CanSaveFfc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "ffc"));
         CanSaveGc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "gc"));
         CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "wb"));
         CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "cc"));
         CanSaveReport = Session.Any(item => item.IncludeInSave && File.Exists(item.ReportPath));
-        HasWhiteRef = !string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && File.Exists(Settings.WhiteImagePath);
+        Workspace.HasWhiteRef = !string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && File.Exists(Settings.WhiteImagePath);
         RefreshWhiteBadges();
-        HasReport = Active is not null && File.Exists(Active.ReportPath);
+        HasReport = Workspace.Active is not null && File.Exists(Workspace.Active.ReportPath);
         RefreshSessionNavigation();
         ClearSessionCommand.NotifyCanExecuteChanged();
         RemoveSelectedCommand.NotifyCanExecuteChanged();
@@ -1738,14 +1744,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private bool CanClear() => Session.Count > 0;
-    private bool CanRemove() => HasSelected;
+    private bool CanRemove() => Workspace.HasSelected;
     private bool CanOpenReport() => HasReport;
     private bool CanDetect() =>
-        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path);
+        WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
     private bool CanApply() =>
-        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
+        WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
-            || Active.Handshake is { Ok: true });
+            || Workspace.Active.Handshake is { Ok: true });
     private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
         WorkerReady && !Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
@@ -1868,7 +1874,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void RefreshDetectSummary()
     {
-        if (Active is null)
+        if (Workspace.Active is null)
         {
             DetectSummary = "";
             return;
@@ -1876,22 +1882,22 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
 
 
-        if (Active.Handshake is { Ok: true })
+        if (Workspace.Active.Handshake is { Ok: true })
         {
-            DetectSummary = $"{Active.DetectLabel} · {Math.Max(1, Active.Handshake.ChartCount)} chart(s)";
+            DetectSummary = $"{Workspace.Active.DetectLabel} · {Math.Max(1, Workspace.Active.Handshake.ChartCount)} chart(s)";
             return;
         }
 
         DetectSummary = WillUseLoadedModel
-            ? $"{Active.Name} — Run applies the loaded model (no chart needed)"
-            : string.IsNullOrWhiteSpace(Active.DetectLabel)
-                ? $"{Active.Name} — Detect the chart, then Run to fit"
-                : $"{Active.Name} — {Active.DetectLabel}";
+            ? $"{Workspace.Active.Name} — Run applies the loaded model (no chart needed)"
+            : string.IsNullOrWhiteSpace(Workspace.Active.DetectLabel)
+                ? $"{Workspace.Active.Name} — Detect the chart, then Run to fit"
+                : $"{Workspace.Active.Name} — {Workspace.Active.DetectLabel}";
     }
 
     private void MaybeAutoDetect()
     {
-        if (_disposed || _restoring || !CanDetect() || Active is not { Handshake: null } item)
+        if (_disposed || _restoring || !CanDetect() || Workspace.Active is not { Handshake: null } item)
         {
             return;
         }
@@ -2151,7 +2157,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 FfcPlaneSource = item.FfcPlane?.Source ?? "",
             }).ToList()
             : [],
-        ActivePath = includeItems ? Active?.Path ?? "" : "",
+        ActivePath = includeItems ? Workspace.Active?.Path ?? "" : "",
         Options = BuildOptions(),
         Crop = Crop,
         Theme = IsLightTheme ? "Light" : "Dark",
@@ -2190,7 +2196,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     CatalogFolders.Add(new CatalogFolderViewModel(folder));
                 }
             }
-            HasCatalogFolders = CatalogFolders.Count > 0;
+            Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
 
             ApplyOptions(state.Options);
             Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
@@ -2253,13 +2259,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         Session.Clear();
-        Active = null;
+        Workspace.Active = null;
         _rangeAnchor = null;
         LastPreviewDir = "";
         SetPreview(null, null);
         OverlayHandshake = null;
-        HasImage = false;
-        HasCorrected = false;
+        Workspace.HasImage = false;
+        Workspace.HasCorrected = false;
         ShowFacePicker = false;
         FaceOptions.Clear();
         ClearPicker();
@@ -2426,10 +2432,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             SampleGroups.Add(group);
         }
 
-        if (SelectedGroup != "All" &&
-            !SampleGroups.Contains(SelectedGroup, StringComparer.OrdinalIgnoreCase))
+        if (Workspace.SelectedGroup != "All" &&
+            !SampleGroups.Contains(Workspace.SelectedGroup, StringComparer.OrdinalIgnoreCase))
         {
-            SelectedGroup = "All";
+            Workspace.SelectedGroup = "All";
         }
 
         RefreshFilteredSamples();
@@ -2440,13 +2446,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         FilteredSamples.Clear();
         foreach (var item in _catalog)
         {
-            if (SelectedGroup != "All" && !string.Equals(item.Group, SelectedGroup, StringComparison.OrdinalIgnoreCase))
+            if (Workspace.SelectedGroup != "All" && !string.Equals(item.Group, Workspace.SelectedGroup, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(SampleQuery) &&
-                item.Name.IndexOf(SampleQuery, StringComparison.OrdinalIgnoreCase) < 0)
+            if (!string.IsNullOrWhiteSpace(Workspace.SampleQuery) &&
+                item.Name.IndexOf(Workspace.SampleQuery, StringComparison.OrdinalIgnoreCase) < 0)
             {
                 continue;
             }
@@ -2454,7 +2460,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             FilteredSamples.Add(item);
         }
 
-        SampleCountLabel = FilteredSamples.Count.ToString();
+        Workspace.SampleCountLabel = FilteredSamples.Count.ToString();
     }
 
     private async Task StartWorkerAsync()
@@ -2512,7 +2518,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _sourceWidth = Math.Max(1, width);
         _sourceHeight = Math.Max(1, height);
-        ImageMeta = _sourceWidth > 1 ? $"{_sourceWidth} × {_sourceHeight}" : "";
+        Workspace.ImageMeta = _sourceWidth > 1 ? $"{_sourceWidth} × {_sourceHeight}" : "";
         SyncDisplaySize();
     }
 
@@ -2768,7 +2774,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
             if (item.PreviewSuppressed) { corrected?.Dispose(); corrected = null; }
             SetPreview(original, corrected);
-            HasCorrected = CorrectedPreview is not null;
+            Workspace.HasCorrected = CorrectedPreview is not null;
             ReleaseIfUncached(original);
         }).ConfigureAwait(false);
     }
@@ -2793,7 +2799,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (corrected is null || item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Active, item))
+        if (corrected is null || item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Workspace.Active, item))
         {
             corrected?.Dispose();
             return;
@@ -2801,15 +2807,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         await OnUi(() =>
         {
-            if (item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Active, item))
+            if (item.PreviewSuppressed || gen != _previewGeneration || !ReferenceEquals(Workspace.Active, item))
             {
                 corrected.Dispose();
                 return;
             }
 
             SetPreview(OriginalPreview, corrected);
-            HasCorrected = CorrectedPreview is not null;
-            if (HasCorrected && StageName is "Original" or "Corrected")
+            Workspace.HasCorrected = CorrectedPreview is not null;
+            if (Workspace.HasCorrected && StageName is "Original" or "Corrected")
             {
                 ShowCorrected = true;
             }
@@ -2932,7 +2938,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    partial void OnActiveChanged(SessionItemViewModel? value)
+    private void OnActiveChanged(SessionItemViewModel? value)
     {
         OnPropertyChanged(nameof(IsResultPreviewSuppressed));
         OnPropertyChanged(nameof(ReferenceSummary));
@@ -2942,7 +2948,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         NotifyRunCommands();
     }
 
-    partial void OnHasImageChanged(bool value)
+    private void OnHasImageChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowStillPreview));
         OnPropertyChanged(nameof(ShowChartSection));
@@ -3006,8 +3012,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     partial void OnShowSampleChanged(bool value) { if (!_restoring) ScheduleSave(); }
     partial void OnShowDimChanged(bool value) { if (!_restoring) ScheduleSave(); }
     partial void OnShowPlaneChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnSampleQueryChanged(string value) => RefreshFilteredSamples();
-    partial void OnSelectedGroupChanged(string value) => RefreshFilteredSamples();
+    private void OnSampleQueryChanged(string value) => RefreshFilteredSamples();
+    private void OnSelectedGroupChanged(string value) => RefreshFilteredSamples();
     partial void OnCropChanged(double value)
     {
         OnPropertyChanged(nameof(CropLabel));
@@ -3101,7 +3107,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    partial void OnHasCorrectedChanged(bool value) => OnPropertyChanged(nameof(HasStageCorrected));
+    private void OnHasCorrectedChanged(bool value) => OnPropertyChanged(nameof(HasStageCorrected));
 
     partial void OnShowCorrectedChanged(bool value)
     {

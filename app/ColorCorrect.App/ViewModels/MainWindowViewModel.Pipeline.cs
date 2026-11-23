@@ -96,11 +96,11 @@ public partial class MainWindowViewModel
     public bool IsGcPreviewLoading => IsStagePreviewLoading && StageName == "GC";
     public bool IsWbPreviewLoading => IsStagePreviewLoading && StageName == "WB";
 
-    public bool HasStageFfc => ResultStageEnabled(Active, "ffc") && (Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
-    public bool HasStageGc => ResultStageEnabled(Active, "gc") && (Active?.IsCorrected == true || StageFileExists("gc.jpg"));
-    public bool HasStageWb => ResultStageEnabled(Active, "wb") && (Active?.IsCorrected == true || StageFileExists("wb.jpg"));
-    public bool HasStageCc => ResultStageEnabled(Active, "cc") && (Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
-    public bool HasStageCorrected => HasCorrected || Active?.IsCorrected == true || StageFileExists("corrected.jpg");
+    public bool HasStageFfc => ResultStageEnabled(Workspace.Active, "ffc") && (Workspace.Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
+    public bool HasStageGc => ResultStageEnabled(Workspace.Active, "gc") && (Workspace.Active?.IsCorrected == true || StageFileExists("gc.jpg"));
+    public bool HasStageWb => ResultStageEnabled(Workspace.Active, "wb") && (Workspace.Active?.IsCorrected == true || StageFileExists("wb.jpg"));
+    public bool HasStageCc => ResultStageEnabled(Workspace.Active, "cc") && (Workspace.Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
+    public bool HasStageCorrected => Workspace.HasCorrected || Workspace.Active?.IsCorrected == true || StageFileExists("corrected.jpg");
 
     public string WhiteImageLabel => string.IsNullOrWhiteSpace(Settings.WhiteImagePath)
         ? "Choose a white reference to use FFC"
@@ -180,7 +180,7 @@ public partial class MainWindowViewModel
     private void ClearWhite()
     {
         Settings.WhiteImagePath = "";
-        HasWhiteRef = false;
+        Workspace.HasWhiteRef = false;
         OnPropertyChanged(nameof(WhiteImageLabel));
         ScheduleSave();
     }
@@ -206,7 +206,7 @@ public partial class MainWindowViewModel
         }
 
         CatalogFolders.Add(new CatalogFolderViewModel(folder));
-        HasCatalogFolders = CatalogFolders.Count > 0;
+        Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
         Status = $"Catalog + {Path.GetFileName(folder)}";
@@ -222,7 +222,7 @@ public partial class MainWindowViewModel
         }
 
         CatalogFolders.Remove(folder);
-        HasCatalogFolders = CatalogFolders.Count > 0;
+        Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
         Status = $"Removed catalog folder {folder.Name}";
@@ -246,7 +246,7 @@ public partial class MainWindowViewModel
 
         Settings.WhiteImagePath = Path.GetFullPath(path);
         Settings.DoFfc = true;
-        HasWhiteRef = true;
+        Workspace.HasWhiteRef = true;
         OnPropertyChanged(nameof(WhiteImageLabel));
         Status = $"FFC white · {Path.GetFileName(Settings.WhiteImagePath)}";
         Log("FFC", Status, LogLevel.Info, [Settings.WhiteImagePath]);
@@ -549,7 +549,7 @@ public partial class MainWindowViewModel
     }
     private void OnWhiteImagePathChanged(string value)
     {
-        HasWhiteRef = !string.IsNullOrWhiteSpace(value) && File.Exists(value);
+        Workspace.HasWhiteRef = !string.IsNullOrWhiteSpace(value) && File.Exists(value);
         OnPropertyChanged(nameof(WhiteImageLabel));
         RefreshWhiteBadges();
         RefreshOverlay();
@@ -589,7 +589,7 @@ public partial class MainWindowViewModel
     private void SyncStagePreviewLoading()
     {
         var loading = IsDeferredStage(StageName)
-            && Active?.IsCorrected == true
+            && Workspace.Active?.IsCorrected == true
             && !HasReadyStageBitmap(StageName);
         IsStagePreviewLoading = loading;
         StagePreviewLoadingLabel = loading ? $"Loading {StageName}" : "";
@@ -628,7 +628,7 @@ public partial class MainWindowViewModel
 
     private void ApplyStagePreview()
     {
-        if (Active?.PreviewSuppressed == true && StageName != "Original") return;
+        if (Workspace.Active?.PreviewSuppressed == true && StageName != "Original") return;
         if (StageName == "Original")
         {
             if (OriginalPreview is not null)
@@ -711,7 +711,7 @@ public partial class MainWindowViewModel
 
     private async Task EnsureStagePreviewAsync(string stage)
     {
-        if (Active?.PreviewSuppressed == true) return;
+        if (Workspace.Active?.PreviewSuppressed == true) return;
         var key = stage.ToLowerInvariant() switch
         {
             "ffc" => "ffc",
@@ -736,7 +736,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var item = Active;
+        var item = Workspace.Active;
         if (item is null || !item.IsCorrected)
         {
             return;

@@ -14,11 +14,11 @@ public sealed class AnalysisPanelStateTests
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         try
         {
-            vm.HasSession = false;
+            vm.Workspace.HasSession = false;
             Assert.StartsWith("Add a chart still", vm.Analysis.DeltaEPlaceholder);
             Assert.EndsWith("per-stage ΔE.", vm.Analysis.DeltaEPlaceholder);
 
-            vm.HasSession = true;
+            vm.Workspace.HasSession = true;
             Assert.StartsWith("Detect the chart", vm.Analysis.ColorPlaceholder);
             Assert.EndsWith("the color scatter.", vm.Analysis.ColorPlaceholder);
 

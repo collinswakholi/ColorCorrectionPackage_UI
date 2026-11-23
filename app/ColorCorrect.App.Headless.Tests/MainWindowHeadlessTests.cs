@@ -235,7 +235,7 @@ public sealed class MainWindowHeadlessTests
             window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Same(item, vm.Active);
+            Assert.Same(item, vm.Workspace.Active);
             Assert.True(item.IsSelected);
         }
         finally
@@ -264,12 +264,12 @@ public sealed class MainWindowHeadlessTests
             Assert.False(vm.NextSessionCommand.CanExecute(null));
 
             vm.PreviousSessionCommand.Execute(null);
-            Assert.Equal("ColorCard_Combo.JPG", vm.Active?.Name);
+            Assert.Equal("ColorCard_Combo.JPG", vm.Workspace.Active?.Name);
             Assert.Equal("2 of 3 · ColorCard_Combo", vm.ActivePositionLabel);
             Assert.True(vm.NextSessionCommand.CanExecute(null));
 
             vm.PreviousSessionCommand.Execute(null);
-            Assert.Equal("ColorCard_Big.JPG", vm.Active?.Name);
+            Assert.Equal("ColorCard_Big.JPG", vm.Workspace.Active?.Name);
             Assert.False(vm.PreviousSessionCommand.CanExecute(null));
             Assert.True(window.PreviousImageButton.IsEffectivelyVisible);
             Assert.True(window.NextImageButton.IsEffectivelyVisible);

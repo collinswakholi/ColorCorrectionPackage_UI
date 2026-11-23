@@ -92,12 +92,12 @@ public sealed class BitmapLifetimeTests
             window.Show(); vm.RestoreWorkingItems(loaded);
             var stages = (Dictionary<string, Bitmap>)typeof(MainWindowViewModel).GetField("_stageBitmaps", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
             await Until(() => vm.Preview is not null && vm.CorrectedPreview is not null && stages.ContainsKey("corrected"));
-            Assert.True(vm.Active!.IsMissing);
+            Assert.True(vm.Workspace.Active!.IsMissing);
             Assert.True(SessionStore.Write(Path.Combine(root, "unresolved.json"), loaded));
             vm.Dialogs = new RelinkDialogs(moved);
             await vm.RelinkImageCommand.ExecuteAsync(null);
-            await Until(() => vm.OriginalPreview is not null && vm.Active?.Thumb is not null);
-            Assert.False(vm.Active!.IsMissing); Assert.NotNull(vm.Active.CompletedContext); Assert.Equal(moved, vm.Active.Path);
+            await Until(() => vm.OriginalPreview is not null && vm.Workspace.Active?.Thumb is not null);
+            Assert.False(vm.Workspace.Active!.IsMissing); Assert.NotNull(vm.Workspace.Active.CompletedContext); Assert.Equal(moved, vm.Workspace.Active.Path);
             for (var cycle = 0; cycle < 5; cycle++)
             {
                 foreach (var stage in new[] { "GC", "Corrected", "Original" })

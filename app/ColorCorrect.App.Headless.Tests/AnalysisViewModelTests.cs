@@ -52,10 +52,10 @@ public sealed class AnalysisViewModelTests
     public void ShellMirrorsSessionStateIntoThePanelGuidance()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.HasSession = true;
+        vm.Workspace.HasSession = true;
         Assert.True(vm.Analysis.HasSession);
         Assert.StartsWith("Detect the chart", vm.Analysis.DeltaEPlaceholder);
-        vm.HasSession = false;
+        vm.Workspace.HasSession = false;
         Assert.StartsWith("Add a chart still", vm.Analysis.DeltaEPlaceholder);
     }
 }

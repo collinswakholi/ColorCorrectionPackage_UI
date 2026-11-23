@@ -43,7 +43,7 @@ public sealed class AutoDetectEligibilityTests
             var item = new SessionItemViewModel(imagePath);
             vm.Session.Add(item);
             vm.HandleSessionClick(item, toggle: false, range: false);
-            Assert.Same(item, vm.Active);
+            Assert.Same(item, vm.Workspace.Active);
             Assert.Equal(0, item.DetectGeneration);
 
             // Simulate the current batch/save completing. A semaphore barrier queues

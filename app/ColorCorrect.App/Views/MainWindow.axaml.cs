@@ -232,7 +232,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (DataContext is not MainWindowViewModel { Active: { } active } vm)
+            if (DataContext is not MainWindowViewModel { Workspace.Active: { } active } vm)
             {
                 return;
             }

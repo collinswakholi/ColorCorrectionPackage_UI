@@ -21,11 +21,11 @@ public sealed class CompletedWorkflowTests
         {
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
-            vm.Active = missing; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = missing; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.True(window.RelinkSelectedImage.IsVisible);
-            vm.Active = present; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = present; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
-            vm.Active = null; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = null; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
         }
         finally { window.Close(); Avalonia.Threading.Dispatcher.UIThread.RunJobs(); File.Delete(available); }

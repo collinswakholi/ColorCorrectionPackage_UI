@@ -22,8 +22,8 @@ internal static class PublicFixtureCatalog
             catalog.Add(new(new(name, path, white ? "Whites" : "Samples", white)));
         }
         vm.SampleGroups.Clear(); foreach (var group in new[] { "All", "Whites", "Samples" }) vm.SampleGroups.Add(group);
-        vm.SelectedGroup = "All"; vm.FilteredSamples.Clear();
+        vm.Workspace.SelectedGroup = "All"; vm.FilteredSamples.Clear();
         foreach (var item in catalog) vm.FilteredSamples.Add(item);
-        vm.SampleCountLabel = catalog.Count.ToString();
+        vm.Workspace.SampleCountLabel = catalog.Count.ToString();
     }
 }

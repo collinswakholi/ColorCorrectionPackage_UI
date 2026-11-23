@@ -30,7 +30,7 @@ public partial class MainWindowViewModel
             if (_detectionFailures.TryGetValue(item.Path, out var failed))
             {
                 var key = await Task.Run(() => DetectionFailureKey(item));
-                if (_disposed || item != Active || !CanDetect() || item.Handshake is not null) return;
+                if (_disposed || item != Workspace.Active || !CanDetect() || item.Handshake is not null) return;
                 if (failed == key) return;
             }
             await DetectItemAsync(item, retryInference: false);
@@ -59,7 +59,7 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanDetect))]
     private Task DetectAsync()
     {
-        if (Active is not { } item || !File.Exists(item.Path) || !WorkerReady)
+        if (Workspace.Active is not { } item || !File.Exists(item.Path) || !WorkerReady)
         {
             return Task.CompletedTask;
         }
@@ -115,7 +115,7 @@ public partial class MainWindowViewModel
             {
                 if (failedKey is not null) _detectionFailures[item.Path] = failedKey;
                 if (!Session.Contains(item)) return;
-                if (item == Active) OnPropertyChanged(nameof(ReferenceSummary));
+                if (item == Workspace.Active) OnPropertyChanged(nameof(ReferenceSummary));
                 RefreshDetectSummary();
                 Status = "Detection failed. Previous results are kept.";
                 Log("Detect", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
@@ -137,7 +137,7 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanApply))]
     private async Task ApplyAsync()
     {
-        var item = Active;
+        var item = Workspace.Active;
         if (item is null || !CanApply())
         {
             return;
@@ -562,7 +562,7 @@ public partial class MainWindowViewModel
             InvalidateCalibration(item);
             item.ReferenceAssignments.Clear();
             item.ReferencesNeedAssignment = true;
-            if (item == Active) OnPropertyChanged(nameof(ReferenceSummary));
+            if (item == Workspace.Active) OnPropertyChanged(nameof(ReferenceSummary));
         }
         if (result.Ok && !string.IsNullOrWhiteSpace(result.HandshakeJson))
         {
@@ -577,7 +577,7 @@ public partial class MainWindowViewModel
             RememberJobAccel(null, null, handshake.Device);
             var charts = Math.Max(1, result.ChartCount > 0 ? result.ChartCount : handshake.ChartCount);
             var summary = $"{item.DetectLabel} · {charts} chart(s)";
-            if (item == Active)
+            if (item == Workspace.Active)
             {
                 OnPropertyChanged(nameof(ReferenceSummary));
                 DetectSummary = summary;
@@ -598,7 +598,7 @@ public partial class MainWindowViewModel
         {
             item.ApplyHandshake(null);
             item.DetectLabel = "no chart";
-            if (item == Active)
+            if (item == Workspace.Active)
             {
                 RebuildFaces(item);
                 RefreshOverlay();
@@ -617,7 +617,7 @@ public partial class MainWindowViewModel
         {
             item.ApplyHandshake(null);
             item.DetectLabel = string.IsNullOrWhiteSpace(result.Error) ? "Detection failed" : ConciseProcessingError(result.Error);
-            if (item == Active)
+            if (item == Workspace.Active)
             {
                 RebuildFaces(item);
                 RefreshOverlay();
@@ -728,7 +728,7 @@ public partial class MainWindowViewModel
             item.FfcPlane = FfcPlane.TryLoad(outcome.ModelPath);
         }
 
-        if (item == Active)
+        if (item == Workspace.Active)
         {
             if (!string.IsNullOrWhiteSpace(outcome.PreviewDir))
             {
@@ -743,7 +743,7 @@ public partial class MainWindowViewModel
             {
                 _previewGeneration++;
                 SetPreview(OriginalPreview, null);
-                HasCorrected = false; ShowCorrected = false; StageName = "Original";
+                Workspace.HasCorrected = false; ShowCorrected = false; StageName = "Original";
             }
             else _ = LoadCorrectedPreviewAsync(item);
             if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(LastPreviewDir))

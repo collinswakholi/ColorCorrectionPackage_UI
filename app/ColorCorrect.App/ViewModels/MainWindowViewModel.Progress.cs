@@ -147,7 +147,7 @@ public partial class MainWindowViewModel
         if (IsBatching) UpdateBatchStageProgress();
         if (Busy && !IsSaving)
         {
-            var name = IsBatching ? BatchLabel : Active?.Name;
+            var name = IsBatching ? BatchLabel : Workspace.Active?.Name;
             Status = string.IsNullOrWhiteSpace(name) ? CurrentStage : $"{CurrentStage} · {name}";
         }
     }

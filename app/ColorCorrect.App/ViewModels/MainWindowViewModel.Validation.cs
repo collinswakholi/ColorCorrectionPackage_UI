@@ -164,7 +164,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async System.Threading.Tasks.Task RelinkImageAsync()
     {
-        if (Busy || IsSaving || Active is not { } item || Dialogs is null) return;
+        if (Busy || IsSaving || Workspace.Active is not { } item || Dialogs is null) return;
         var paths = await Dialogs.OpenImagesAsync();
         if (paths.Count != 1) { if (paths.Count > 1) Status = "Choose one replacement image."; return; }
         var replacement = paths[0];

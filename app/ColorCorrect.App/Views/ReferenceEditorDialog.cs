@@ -51,7 +51,7 @@ public sealed class ReferenceEditorDialog : Window
     public ReferenceEditorDialog(MainWindowViewModel vm)
     {
         _vm = vm;
-        _item = vm.Active ?? throw new InvalidOperationException("Select a chart image first.");
+        _item = vm.Workspace.Active ?? throw new InvalidOperationException("Select a chart image first.");
         _handshake = _item.Handshake ?? throw new InvalidOperationException("Detect a chart before entering references.");
         Title = "Chart references";
         Width = 1080; Height = 740; MinWidth = 760; MinHeight = 520;

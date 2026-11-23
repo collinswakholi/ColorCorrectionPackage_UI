@@ -59,9 +59,9 @@ public sealed class ReferenceWorkflowTests
         var model=Path.Combine(directory,"model.json");File.WriteAllText(model,"{}");
         var vm=new MainWindowViewModel(persistenceEnabled:false) {Busy=false};
         using var item=new SessionItemViewModel("reference-workflow-missing.png");item.ApplyHandshake(Handshake("s"));
-        vm.Session.Add(item);vm.Active=item;
+        vm.Session.Add(item);vm.Workspace.Active=item;
         item.IsCorrected=true;item.IncludeInSave=true;item.CorrectedPath=corrected;item.ModelPath=model;item.PreviewDir=directory;
-        vm.LastPreviewDir=directory;vm.HasCorrected=true;vm.ShowCorrected=true;
+        vm.LastPreviewDir=directory;vm.Workspace.HasCorrected=true;vm.ShowCorrected=true;
         var generation=item.ApplyGeneration;
         try
         {
@@ -69,7 +69,7 @@ public sealed class ReferenceWorkflowTests
             vm.AssignReference(item,"s:a",Profile("new-reference"));
             Assert.False(item.IsCorrected);Assert.False(item.IncludeInSave);Assert.False(item.HasSaveable);
             Assert.Empty(item.CorrectedPath);Assert.Empty(item.ModelPath);Assert.Empty(item.PreviewDir);
-            Assert.False(vm.HasCorrected);Assert.False(vm.ShowCorrected);Assert.Empty(vm.LastPreviewDir);Assert.Null(vm.CorrectedPreview);
+            Assert.False(vm.Workspace.HasCorrected);Assert.False(vm.ShowCorrected);Assert.Empty(vm.LastPreviewDir);Assert.Null(vm.CorrectedPreview);
             Assert.True(item.ApplyGeneration>generation);
             Assert.True(File.Exists(corrected));Assert.True(File.Exists(model));
         }
@@ -194,7 +194,7 @@ public sealed class ReferenceWorkflowTests
     {
         var vm=new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item=new SessionItemViewModel("reference-workflow-missing.png");item.ApplyHandshake(Handshake("render",chart));
-        vm.Session.Add(item);vm.Active=item;
+        vm.Session.Add(item);vm.Workspace.Active=item;
         var dialog=new ReferenceEditorDialog(vm) {Width=760,Height=520};
         try
         {
@@ -224,7 +224,7 @@ public sealed class ReferenceWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-precision-missing.png");
-        item.ApplyHandshake(Handshake("precision")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("precision")); vm.Session.Add(item); vm.Workspace.Active = item;
         var profile = Profile("precise"); profile.Values[0] = [50.123456789012344, 180.12345678901235, -140.12345678901235];
         var dialog = new ReferenceEditorDialog(vm);
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
@@ -247,7 +247,7 @@ public sealed class ReferenceWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-reuse-missing.png");
-        item.ApplyHandshake(Handshake("reuse")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("reuse")); vm.Session.Add(item); vm.Workspace.Active = item;
         var profile = Profile("shared"); profile.Revision = 4; profile.Name = "  Shared imported reference  ";
         if (order == "column-major")
         {
@@ -285,7 +285,7 @@ public sealed class ReferenceWorkflowTests
         Directory.CreateDirectory(directory);
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-export-missing.png");
-        item.ApplyHandshake(Handshake("export")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("export")); vm.Session.Add(item); vm.Workspace.Active = item;
         var original = Profile("exported"); original.Revision = 4;
         vm.AssignReference(item, "export:a", original); item.FaceChoice = 1;
         var dialog = new ReferenceEditorDialog(vm);
@@ -320,7 +320,7 @@ public sealed class ReferenceWorkflowTests
         Directory.CreateDirectory(directory);
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-import-missing.png");
-        item.ApplyHandshake(Handshake("import")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("import")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("external"); source.Revision = 7; source.Name = "  External reference  ";
         var rows = source.Values;
         source.Values = Enumerable.Range(0, 24).Select(i => rows[(i % 4) * 6 + i / 4].ToArray()).ToList();
@@ -350,7 +350,7 @@ public sealed class ReferenceWorkflowTests
         Directory.CreateDirectory(directory);
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-import-edit-missing.png");
-        item.ApplyHandshake(Handshake("import-edit")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("import-edit")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("external-edit"); source.Revision = 7;
         var dialog = new ReferenceEditorDialog(vm);
         try
@@ -379,7 +379,7 @@ public sealed class ReferenceWorkflowTests
         Directory.CreateDirectory(directory);
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-export-fail-missing.png");
-        item.ApplyHandshake(Handshake("fail")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("fail")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("export-failure"); source.Revision = 4;
         vm.AssignReference(item, "fail:a", source);
         var dialog = new ReferenceEditorDialog(vm);
@@ -402,7 +402,7 @@ public sealed class ReferenceWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
         using var item = new SessionItemViewModel("reference-multichart-drafts-missing.png");
-        item.ApplyHandshake(Handshake("drafts")); vm.Session.Add(item); vm.Active = item;
+        item.ApplyHandshake(Handshake("drafts")); vm.Session.Add(item); vm.Workspace.Active = item;
         var dialog = new ReferenceEditorDialog(vm);
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         try

@@ -97,7 +97,7 @@ public sealed class BatchPresentationTests
                 });
             // Direct collection setup bypasses AddPaths' normal UI refresh.
             vm.PrepareSaveMenu();
-            Assert.True(vm.HasSession);
+            Assert.True(vm.Workspace.HasSession);
             Assert.All(vm.Session, item => Assert.True(item.HasProcessingProgress));
             var window = new MainWindow { Width = 1000, Height = 640, DataContext = vm };
             window.Show();

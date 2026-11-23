@@ -237,7 +237,7 @@
                         </Panel>
                     </Button>
                     <Button x:Name="SaveLink" Theme="{StaticResource ToolbarIconButton}"
-                            Click="SaveButton_Click" IsEnabled="{Binding HasSaveItems}"
+                            Click="SaveButton_Click" IsEnabled="{Binding Workspace.HasSaveItems}"
                             ToolTip.Tip="Save corrected, stage, and report files (Ctrl+S)"
                             AutomationProperties.AcceleratorKey="Ctrl+S"
                             AutomationProperties.Name="Save corrected images">
@@ -370,7 +370,7 @@
                                 <TextBlock Text="Add media" Classes="sectionLabel" VerticalAlignment="Center"/>
                                 <Border Classes="countBadge" DockPanel.Dock="Right" Margin="8,0,0,0"
                                         ToolTip.Tip="Images available in Catalog">
-                                    <TextBlock x:Name="SampleCount" Text="{Binding SampleCountLabel}" Classes="caption"/>
+                                    <TextBlock x:Name="SampleCount" Text="{Binding Workspace.SampleCountLabel}" Classes="caption"/>
                                 </Border>
                             </DockPanel>
                             <Border x:Name="DropZone" Classes="dropZone" PointerPressed="OnDropZonePressed"
@@ -409,7 +409,7 @@
                                                     Margin="0,0,12,4">
                                             <TextBlock Text="Session" Classes="sectionLabel" VerticalAlignment="Center"/>
                                             <Border Classes="countBadge">
-                                                <TextBlock x:Name="LoadedCount" Text="{Binding SessionCountLabel}" Classes="caption"/>
+                                                <TextBlock x:Name="LoadedCount" Text="{Binding Workspace.SessionCountLabel}" Classes="caption"/>
                                             </Border>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
@@ -435,7 +435,7 @@
                                             <Button x:Name="ClearSelectedBtn" Theme="{StaticResource SessionIconButton}"
                                                     Classes="sessionTool"
                                                     Command="{Binding RemoveSelectedCommand}"
-                                                    IsVisible="{Binding HasSelected}"
+                                                    IsVisible="{Binding Workspace.HasSelected}"
                                                     ToolTip.Tip="Remove selected from session (Delete)"
                                                     AutomationProperties.AcceleratorKey="Delete"
                                                     AutomationProperties.Name="Remove selected from session">
@@ -462,12 +462,12 @@
                                     </controls:FitWrapPanel>
                                     <TextBlock x:Name="LoadedEmpty" Classes="caption" Margin="0,0,0,6"
                                                Text="Your working images appear here. Add files or choose from Catalog."
-                                               IsVisible="{Binding !HasSession}"/>
+                                               IsVisible="{Binding !Workspace.HasSession}"/>
                                     <Button x:Name="RelinkSelectedImage" Content="Relink image…" Command="{Binding RelinkImageCommand}"
-                                            IsVisible="{Binding Active.IsMissing, FallbackValue=False, TargetNullValue=False}"
+                                            IsVisible="{Binding Workspace.Active.IsMissing, FallbackValue=False, TargetNullValue=False}"
                                             Theme="{StaticResource TinyButton}" HorizontalAlignment="Left" Margin="0,0,0,6"
                                             AutomationProperties.Name="Relink selected image" ToolTip.Tip="Find a moved image. Matching content retains its detection and references."/>
-                                    <Border Classes="sessionScroller" IsVisible="{Binding HasSession}">
+                                    <Border Classes="sessionScroller" IsVisible="{Binding Workspace.HasSession}">
                                     <ScrollViewer x:Name="SessionScroll"
                                                   AllowAutoHide="False"
                                                   HorizontalScrollBarVisibility="Auto"
@@ -562,7 +562,7 @@
                                             ToolTip.Tip="Keep another folder of stills in Catalog, including white references"
                                             AutomationProperties.Name="Add catalog folder"/>
                                     <ItemsControl ItemsSource="{Binding CatalogFolders}"
-                                                  IsVisible="{Binding HasCatalogFolders}">
+                                                  IsVisible="{Binding Workspace.HasCatalogFolders}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <controls:FitWrapPanel/>
@@ -586,16 +586,16 @@
                                     </ItemsControl>
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                         <TextBox x:Name="SampleSearch" Classes="config"
-                                                 PlaceholderText="Filter by name…" Text="{Binding SampleQuery}"
+                                                 PlaceholderText="Filter by name…" Text="{Binding Workspace.SampleQuery}"
                                                  AutomationProperties.Name="Filter catalog by name"/>
                                         <Border Grid.Column="1" Classes="countBadge" VerticalAlignment="Center"
                                                 ToolTip.Tip="Visible catalog images">
-                                            <TextBlock Text="{Binding SampleCountLabel}" Classes="caption"/>
+                                            <TextBlock Text="{Binding Workspace.SampleCountLabel}" Classes="caption"/>
                                         </Border>
                                     </Grid>
                                     <ComboBox x:Name="SampleGroupFilter" Classes="config"
                                               ItemsSource="{Binding SampleGroups}"
-                                              SelectedItem="{Binding SelectedGroup}"
+                                              SelectedItem="{Binding Workspace.SelectedGroup}"
                                               AutomationProperties.Name="Catalog group"/>
                                     <Border Classes="thumbScroller">
                                     <ScrollViewer x:Name="CatalogScroll" AllowAutoHide="False"
@@ -719,10 +719,10 @@
                                     </Border>
                                     <TextBlock Text="Drop a white still, click W on a catalog tile, or choose a file."
                                                Classes="caption" Margin="0,0,0,6"
-                                               IsVisible="{Binding !HasWhiteRef}"/>
+                                               IsVisible="{Binding !Workspace.HasWhiteRef}"/>
                                     <Button Content="White file" Theme="{StaticResource TinyButton}"
                                             Command="{Binding BrowseWhiteCommand}" HorizontalAlignment="Stretch"
-                                            Margin="0,0,0,10" IsVisible="{Binding !HasWhiteRef}"
+                                            Margin="0,0,0,10" IsVisible="{Binding !Workspace.HasWhiteRef}"
                                             AutomationProperties.Name="Choose white reference"/>
                                     </StackPanel>
                                     <Border Classes="stageRow">
@@ -941,9 +941,9 @@
                             <StackPanel x:Name="InputSize" DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
                                         VerticalAlignment="Center">
                                 <TextBlock Text="{Binding ActivePositionLabel}" Classes="caption" VerticalAlignment="Center"
-                                           IsVisible="{Binding HasSession}" TextTrimming="CharacterEllipsis" MaxWidth="260"
+                                           IsVisible="{Binding Workspace.HasSession}" TextTrimming="CharacterEllipsis" MaxWidth="260"
                                            ToolTip.Tip="{Binding ActivePositionLabel}"/>
-                                <TextBlock Text="{Binding ImageMeta}" Classes="caption" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Workspace.ImageMeta}" Classes="caption" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="StageZoomLabel" Text="{Binding #OriginalStage.ScaleLabel}"
                                            Classes="caption" IsVisible="{Binding ShowStillPreview}" VerticalAlignment="Center"/>
                                 <Button x:Name="StageFitBtn" Content="Fit" Theme="{StaticResource TinyButton}"
@@ -956,7 +956,7 @@
                                     <RadioButton x:Name="OriginalStageRadio" Content="Original" GroupName="StageView"
                                                  Theme="{StaticResource StageRadioButton}"
                                                  IsChecked="{Binding IsStageOriginal}"
-                                                 IsEnabled="{Binding HasImage}"
+                                                 IsEnabled="{Binding Workspace.HasImage}"
                                                  AutomationProperties.Name="Original stage"/>
                                     <RadioButton x:Name="FfcStageRadio" GroupName="StageView"
                                                  Theme="{StaticResource StageRadioButton}"
@@ -1049,7 +1049,7 @@
                                     ToolTip.Tip="Hover for RGB / Lab. Right-click a point to copy. Esc clears.">
                                 <Grid>
                                     <StackPanel x:Name="InputEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                IsVisible="{Binding !HasImage}">
+                                                IsVisible="{Binding !Workspace.HasImage}">
                                         <TextBlock Text="Drop a still to begin" Classes="caption"
                                                    HorizontalAlignment="Center"/>
                                     </StackPanel>
@@ -1601,9 +1601,9 @@
                     <TextBlock Text="Batch" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" Margin="0,0,0,8"/>
                     <TextBlock Text="Add stills to Session first."
                                Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"
-                               IsVisible="{Binding !HasSession}"/>
+                               IsVisible="{Binding !Workspace.HasSession}"/>
                     <ScrollViewer MaxHeight="160" HorizontalScrollBarVisibility="Disabled"
-                                  IsVisible="{Binding HasSession}" Margin="0,0,0,10">
+                                  IsVisible="{Binding Workspace.HasSession}" Margin="0,0,0,10">
                         <ItemsControl ItemsSource="{Binding Session}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:SessionItemViewModel">
@@ -1618,7 +1618,7 @@
                     </ScrollViewer>
                     <TextBlock Text="FFC whites and *_corrected outputs start unchecked."
                                Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"
-                               IsVisible="{Binding HasSession}"/>
+                               IsVisible="{Binding Workspace.HasSession}"/>
                     <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0"
                             Padding="0,10,0,10">
                         <StackPanel>

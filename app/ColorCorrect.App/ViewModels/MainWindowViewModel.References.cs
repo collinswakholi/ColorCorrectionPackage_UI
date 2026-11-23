@@ -8,9 +8,9 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    public string ReferenceSummary => Active is { ReferencesNeedAssignment: true }
+    public string ReferenceSummary => Workspace.Active is { ReferencesNeedAssignment: true }
         ? "Custom references need reassignment after detection."
-        : Active is { ReferenceAssignments.Count: > 0 } item
+        : Workspace.Active is { ReferenceAssignments.Count: > 0 } item
             ? $"Custom references · {item.ReferenceAssignments.Count} chart(s)"
             : "Built-in chart references";
 
@@ -42,7 +42,7 @@ public partial class MainWindowViewModel
         // Explicit built-in assignments for remaining faces keep multi-chart custom requests complete.
         item.ReferencesNeedAssignment = false;
         InvalidateCalibration(item);
-        if (item == Active)
+        if (item == Workspace.Active)
         {
             UseLoadedModel = false;
             ApplyReport(null);
@@ -57,13 +57,13 @@ public partial class MainWindowViewModel
     private void InvalidateCalibration(SessionItemViewModel item)
     {
         item.InvalidateCalibration();
-        if (item == Active)
+        if (item == Workspace.Active)
         {
             // A bitmap decode scheduled before the edit must never reattach the
             // old result after the current result associations have been cleared.
             _previewGeneration++;
             LastPreviewDir = "";
-            HasCorrected = false;
+            Workspace.HasCorrected = false;
             ShowCorrected = false;
             StageName = "Original";
             SetPreview(OriginalPreview, null);

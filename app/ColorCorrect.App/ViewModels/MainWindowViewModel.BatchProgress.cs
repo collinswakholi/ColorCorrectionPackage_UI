@@ -21,7 +21,7 @@ public partial class MainWindowViewModel
     private int _batchImageCount;
     private string[] _combinedProgressKeys = [];
 
-    public bool IsResultPreviewSuppressed => Active?.PreviewSuppressed == true;
+    public bool IsResultPreviewSuppressed => Workspace.Active?.PreviewSuppressed == true;
 
     internal static CorrectionOptions CaptureBatchOptions(CorrectionOptions options, bool previews, string? appliedModel = null)
     {
@@ -123,7 +123,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ShowResultPreviewAsync()
     {
-        if (Busy || IsSaving || Active is not { PreviewSuppressed: true } item) return;
+        if (Busy || IsSaving || Workspace.Active is not { PreviewSuppressed: true } item) return;
         if (!File.Exists(ResolveCorrectedViewPath(item)))
         {
             Status = "The corrected image is unavailable. Process the image again to create a preview.";

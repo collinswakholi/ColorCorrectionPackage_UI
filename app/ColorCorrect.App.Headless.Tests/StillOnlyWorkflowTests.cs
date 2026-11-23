@@ -91,7 +91,7 @@ public sealed class StillOnlyWorkflowTests
             Assert.Equal(2, vm.RestoreWorkingItems(state));
             var item = Assert.Single(vm.Session);
             Assert.Equal(still, item.Path);
-            Assert.Same(item, vm.Active);
+            Assert.Same(item, vm.Workspace.Active);
             Assert.False(item.IncludeInBatch);
             Assert.Contains("Skipped 2 unsupported session", vm.Status);
             Assert.Contains("Video is not supported", vm.Status);
@@ -108,16 +108,16 @@ public sealed class StillOnlyWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, WorkerReady = true };
         vm.AddPaths([Sample()]);
-        Assert.True(vm.HasImage);
-        Assert.NotNull(vm.Active);
+        Assert.True(vm.Workspace.HasImage);
+        Assert.NotNull(vm.Workspace.Active);
         var skipped = vm.RestoreWorkingItems(new SessionState
         {
             Items = [new SessionItemDto { Path = Sample(), IsVideo = true }],
         });
         Assert.Equal(1, skipped);
         Assert.Empty(vm.Session);
-        Assert.Null(vm.Active);
-        Assert.False(vm.HasImage);
+        Assert.Null(vm.Workspace.Active);
+        Assert.False(vm.Workspace.HasImage);
         Assert.False(vm.ShowStillPreview);
         Assert.Null(vm.Preview);
         Assert.Null(vm.OriginalPreview);
