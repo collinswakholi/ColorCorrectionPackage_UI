@@ -32,21 +32,13 @@ public partial class MainWindowViewModel
     public IReadOnlyList<NamedValue> ProcessingDevices { get; } = new NamedValue[] {
         new("auto", "Auto (recommended)"), new("cpu", "CPU"), new("gpu", "GPU")
     };
-    [ObservableProperty] private NamedValue _selectedProcessingDevice = new("auto", "Auto (recommended)");
 
     [ObservableProperty] private string _cropRect = "";
     [ObservableProperty] private string _stageName = "Original";
     [ObservableProperty] private bool _isStagePreviewLoading;
     [ObservableProperty] private string _stagePreviewLoadingLabel = "";
-    [ObservableProperty] private string _accelJson = "";
-    [ObservableProperty] private string _lutNote = "LUT does not include flat-field.";
-    [ObservableProperty] private bool _forceCpu;
-    [ObservableProperty] private bool _fastMode = true;
-    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Auto (recommended)");
     private bool _accelSync;
-    [ObservableProperty] private bool _phase2Teacher = true;
     [ObservableProperty] private string _lastPreviewDir = "";
-    [ObservableProperty] private string _accelHint = "Checking graphics hardware…";
     private readonly Dictionary<string, Bitmap> _stageBitmaps = new(StringComparer.OrdinalIgnoreCase);
     private string _usedDetect = "";
     private string _detectFallback = "";
@@ -277,16 +269,16 @@ public partial class MainWindowViewModel
     private async Task ForceCpuRestartAsync()
     {
         var cancellation = BeginJob();
-        _worker.Policy = SelectedAccelPolicy.Value;
+        _worker.Policy = Compute.SelectedAccelPolicy.Value;
         _detectionFailures.Clear();
         _engineGeneration++;
         _usedDetect = _usedPlane = _usedApply = "";
         await OnUi(() =>
         {
             Busy = true;
-            WorkerReady = false;
-            WorkerStartupComplete = false;
-            WorkerStartupError = "";
+            Compute.WorkerReady = false;
+            Compute.WorkerStartupComplete = false;
+            Compute.WorkerStartupError = "";
             Status = "Restarting worker…";
         }).ConfigureAwait(false);
         try
@@ -298,23 +290,23 @@ public partial class MainWindowViewModel
             await OnUi(() =>
             {
                 if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
-                WorkerReady = true;
-                WorkerStartupComplete = true;
-                WorkerStartupError = "";
-                WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
+                Compute.WorkerReady = true;
+                Compute.WorkerStartupComplete = true;
+                Compute.WorkerStartupError = "";
+                Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
                     ? $"Warmed · {_worker.Device}"
                     : _worker.Title;
-                Status = WorkerLine;
+                Status = Compute.WorkerLine;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
         {
             await OnUi(() =>
             {
-                WorkerStartupComplete = true;
-                WorkerStartupError = ex.Message;
+                Compute.WorkerStartupComplete = true;
+                Compute.WorkerStartupError = ex.Message;
                 Status = ex.Message;
-                WorkerLine = "Worker failed";
+                Compute.WorkerLine = "Worker failed";
             }).ConfigureAwait(false);
         }
         finally
@@ -330,15 +322,15 @@ public partial class MainWindowViewModel
     private bool ReportWorkerWarmupFailure(bool warmed, string error)
     {
         if (warmed) return false;
-        WorkerReady = false;
-        WorkerStartupComplete = true;
+        Compute.WorkerReady = false;
+        Compute.WorkerStartupComplete = true;
         var reason = string.IsNullOrWhiteSpace(error)
             ? "The selected detection engine did not initialize."
             : ConciseProcessingError(error);
-        WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
-        WorkerLine = "Detection unavailable";
-        Status = WorkerStartupError;
-        Log("Engine", WorkerStartupError, LogLevel.Error);
+        Compute.WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
+        Compute.WorkerLine = "Detection unavailable";
+        Status = Compute.WorkerStartupError;
+        Log("Engine", Compute.WorkerStartupError, LogLevel.Error);
         return true;
     }
 
@@ -353,19 +345,19 @@ public partial class MainWindowViewModel
             var hint = AccelHintFrom(report);
             await OnUi(() =>
             {
-                AccelJson = raw;
+                Compute.AccelJson = raw;
                 AccelRows.Clear();
                 foreach (var row in rows)
                 {
                     AccelRows.Add(row);
                 }
 
-                AccelHint = hint;
+                Compute.AccelHint = hint;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
         {
-            await OnUi(() => AccelJson = ex.Message).ConfigureAwait(false);
+            await OnUi(() => Compute.AccelJson = ex.Message).ConfigureAwait(false);
         }
     }
 
@@ -498,26 +490,26 @@ public partial class MainWindowViewModel
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnForceCpuChanged(bool value)
+    private void OnForceCpuChanged(bool value)
     {
-        if (value) SelectedProcessingDevice = ProcessingDevices[1];
-        else if (SelectedProcessingDevice.Value == "cpu") SelectedProcessingDevice = ProcessingDevices[0];
+        if (value) Compute.SelectedProcessingDevice = ProcessingDevices[1];
+        else if (Compute.SelectedProcessingDevice.Value == "cpu") Compute.SelectedProcessingDevice = ProcessingDevices[0];
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnSelectedProcessingDeviceChanged(NamedValue value)
+    private void OnSelectedProcessingDeviceChanged(NamedValue value)
     {
-        ForceCpu = value.Value == "cpu";
+        Compute.ForceCpu = value.Value == "cpu";
         RefreshDeviceSummary();
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnFastModeChanged(bool value)
+    private void OnFastModeChanged(bool value)
     {
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnSelectedAccelPolicyChanged(NamedValue value)
+    private void OnSelectedAccelPolicyChanged(NamedValue value)
     {
         if (_restoring || _accelSync)
         {
@@ -541,7 +533,7 @@ public partial class MainWindowViewModel
             _accelSync = false;
         }
     }
-    partial void OnPhase2TeacherChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnPhase2TeacherChanged(bool value) { if (!_restoring) ScheduleSave(); }
     partial void OnLastPreviewDirChanged(string value)
     {
         ClearStageBitmaps();
@@ -806,7 +798,7 @@ public partial class MainWindowViewModel
             _usedApply = apply.Trim();
         }
 
-        if (string.IsNullOrWhiteSpace(AccelJson))
+        if (string.IsNullOrWhiteSpace(Compute.AccelJson))
         {
             RefreshDeviceSummary();
             return;
@@ -814,14 +806,14 @@ public partial class MainWindowViewModel
 
         try
         {
-            using var doc = JsonDocument.Parse(AccelJson);
+            using var doc = JsonDocument.Parse(Compute.AccelJson);
             AccelRows.Clear();
             foreach (var row in ParseAccel(doc.RootElement))
             {
                 AccelRows.Add(row);
             }
 
-            AccelHint = AccelHintFrom(doc.RootElement);
+            Compute.AccelHint = AccelHintFrom(doc.RootElement);
         }
         catch
         {
@@ -834,18 +826,18 @@ public partial class MainWindowViewModel
         var lines = new List<string> { DetectionStatus };
         if (!string.IsNullOrWhiteSpace(_detectFallback)) lines.Add($"Fallback: {_detectFallback}");
         if (!string.IsNullOrWhiteSpace(_usedPlane)) lines.Add($"White-plane detection: {LabelStage(_usedPlane)}");
-        lines.Add($"Correction: {SelectedProcessingDevice.Label}" + (string.IsNullOrWhiteSpace(_usedApply) ? " — not run" : $" · last used {LabelStage(_usedApply)}"));
+        lines.Add($"Correction: {Compute.SelectedProcessingDevice.Label}" + (string.IsNullOrWhiteSpace(_usedApply) ? " — not run" : $" · last used {LabelStage(_usedApply)}"));
         return string.Join("\n", lines);
     }
 
     public string DetectionStatus => string.IsNullOrWhiteSpace(_usedDetect)
-        ? $"Detection: {SelectedAccelPolicy.Label} — not checked"
+        ? $"Detection: {Compute.SelectedAccelPolicy.Label} — not checked"
         : $"Detection: {LabelStage(_usedDetect)}";
 
     private void RefreshDeviceSummary()
     {
         OnPropertyChanged(nameof(DetectionStatus));
-        AccelHint = AccelHintFrom(default);
+        Compute.AccelHint = AccelHintFrom(default);
     }
 
     private static string LabelStage(string value) => value.Trim().ToLowerInvariant() switch

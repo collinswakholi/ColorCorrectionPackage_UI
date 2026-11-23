@@ -44,7 +44,7 @@ public sealed class CompletedWorkflowTests
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(photo), b, new() { DoGc = false, DoWb = true, FastMode = false });
             var apply = typeof(MainWindowViewModel).GetMethod("ApplyOutcome", BindingFlags.Instance | BindingFlags.NonPublic)!;
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = true, ModelPath = b, CompletedContext = context }, false, false]);
-            vm.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.FastMode = true;
+            vm.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.Compute.FastMode = true;
             Assert.Equal(b, item.ModelPath); Assert.Equal(b, item.CompletedContext!.Model.Path);
             Assert.False(vm.ReplayOptions(item)!.DoGc); Assert.True(vm.ReplayOptions(item)!.DoWb); Assert.False(vm.ReplayOptions(item)!.FastMode);
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = false, ModelPath = c, Error = "cancelled" }, false, false]);

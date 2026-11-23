@@ -77,10 +77,10 @@ public partial class App : Application
             var finished = false;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                finished = vm.WorkerReady || vm.WorkerStartupComplete;
-                splash.SetStatus(vm.WorkerReady
+                finished = vm.Compute.WorkerReady || vm.Compute.WorkerStartupComplete;
+                splash.SetStatus(vm.Compute.WorkerReady
                     ? "Engine ready"
-                    : vm.WorkerStartupComplete
+                    : vm.Compute.WorkerStartupComplete
                         ? "Engine unavailable — opening recovery controls"
                         : string.IsNullOrWhiteSpace(vm.CurrentStage) ? "Starting color engine…" : vm.CurrentStage);
             });

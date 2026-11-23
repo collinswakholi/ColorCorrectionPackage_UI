@@ -208,7 +208,7 @@
                               SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
                               AutomationProperties.Name="Output format"/>
 
-                    <CheckBox IsChecked="{Binding Phase2Teacher}" FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,10"
+                    <CheckBox IsChecked="{Binding Compute.Phase2Teacher}" FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,10"
                               AutomationProperties.Name="Export training data">
                         <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}" Text="Export training data"/>
                     </CheckBox>

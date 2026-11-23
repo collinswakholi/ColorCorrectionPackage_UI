@@ -106,7 +106,7 @@ public sealed class StillOnlyWorkflowTests
     [AvaloniaFact]
     public void RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, WorkerReady = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, Compute = { WorkerReady = true } };
         vm.AddPaths([Sample()]);
         Assert.True(vm.Workspace.HasImage);
         Assert.NotNull(vm.Workspace.Active);

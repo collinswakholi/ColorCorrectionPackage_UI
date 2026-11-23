@@ -19,7 +19,7 @@ public partial class MainWindowViewModel
     private int _engineGeneration;
 
     private string DetectionFailureKey(SessionItemViewModel item) =>
-        $"{AssetIdentity.Capture(item.Path).Sha256}:{Crop:R}:{SelectedAccelPolicy.Value}:{_engineGeneration}";
+        $"{AssetIdentity.Capture(item.Path).Sha256}:{Crop:R}:{Compute.SelectedAccelPolicy.Value}:{_engineGeneration}";
 
     private async Task AutoDetectIfNeededAsync(SessionItemViewModel item)
     {
@@ -59,7 +59,7 @@ public partial class MainWindowViewModel
     [RelayCommand(CanExecute = nameof(CanDetect))]
     private Task DetectAsync()
     {
-        if (Workspace.Active is not { } item || !File.Exists(item.Path) || !WorkerReady)
+        if (Workspace.Active is not { } item || !File.Exists(item.Path) || !Compute.WorkerReady)
         {
             return Task.CompletedTask;
         }
@@ -580,7 +580,7 @@ public partial class MainWindowViewModel
             if (item == Workspace.Active)
             {
                 OnPropertyChanged(nameof(ReferenceSummary));
-                DetectSummary = summary;
+                Compute.DetectSummary = summary;
                 RebuildFaces(item);
                 RefreshOverlay();
             }

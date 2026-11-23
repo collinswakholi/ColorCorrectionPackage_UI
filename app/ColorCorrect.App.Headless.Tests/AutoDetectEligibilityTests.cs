@@ -37,7 +37,7 @@ public sealed class AutoDetectEligibilityTests
         try
         {
             await gate.WaitAsync(); held = true;
-            vm.WorkerReady = true;
+            vm.Compute.WorkerReady = true;
             vm.Busy = busy;
             vm.IsSaving = saving;
             var item = new SessionItemViewModel(imagePath);

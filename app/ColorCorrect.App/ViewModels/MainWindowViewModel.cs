@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Compute.PropertyChanged += OnComputeStateChanged;
         Workspace.PropertyChanged += OnWorkspaceStateChanged;
         Settings.DraftEdited += (_, _) => RefreshValidation();
         _client = new CorrectionClient(_worker);
@@ -105,7 +106,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             {
                 ApplyInstallationDefaults();
                 ShowFirstRunSetup = File.Exists(SetupHelperPath) && !File.Exists(InstalledSetup.StatePath);
-                if (ShowFirstRunSetup) SetupSummary = "Choose Recommended, CPU only, or Custom. Check setup verifies installed support; installation shows the proposed changes before applying them.";
+                if (ShowFirstRunSetup) Compute.SetupSummary = "Choose Recommended, CPU only, or Custom. Check setup verifies installed support; installation shows the proposed changes before applying them.";
             }
             LoadSetupSelection();
         }
@@ -141,10 +142,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<PipelineStepViewModel> PipelineSteps { get; } = [];
 
     [ObservableProperty] private string _status = "Starting ColorCorrect engine…";
-    [ObservableProperty] private string _workerLine = "Worker: starting";
-    [ObservableProperty] private bool _workerStartupComplete;
-    [ObservableProperty] private string _workerStartupError = "";
-    [ObservableProperty] private string _detectSummary = "Waiting for detect";
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _currentStage = "";
     [ObservableProperty] private string _savedModelSummary = "";
@@ -178,7 +175,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private int _faceIndex;
     [ObservableProperty] private int _overlayFaceChoice;
     [ObservableProperty] private bool _busy = true;
-    [ObservableProperty] private bool _workerReady;
     [ObservableProperty] private bool _isBatching;
     [ObservableProperty] private bool _showBatchProgress;
     [ObservableProperty] private bool _showPipeline;
@@ -277,6 +273,29 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>Processing engine state: worker startup and readiness, processing device and acceleration choices, and the GPU setup options.</summary>
+    public ComputeViewModel Compute { get; } = new();
+
+    private void OnComputeStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(ComputeViewModel.WorkerLine): OnWorkerLineChanged(Compute.WorkerLine); break;
+            case nameof(ComputeViewModel.WorkerStartupComplete): OnWorkerStartupCompleteChanged(Compute.WorkerStartupComplete); break;
+            case nameof(ComputeViewModel.WorkerStartupError): OnWorkerStartupErrorChanged(Compute.WorkerStartupError); break;
+            case nameof(ComputeViewModel.WorkerReady): OnWorkerReadyChanged(Compute.WorkerReady); break;
+            case nameof(ComputeViewModel.SelectedProcessingDevice): OnSelectedProcessingDeviceChanged(Compute.SelectedProcessingDevice); break;
+            case nameof(ComputeViewModel.ForceCpu): OnForceCpuChanged(Compute.ForceCpu); break;
+            case nameof(ComputeViewModel.FastMode): OnFastModeChanged(Compute.FastMode); break;
+            case nameof(ComputeViewModel.SelectedAccelPolicy): OnSelectedAccelPolicyChanged(Compute.SelectedAccelPolicy); break;
+            case nameof(ComputeViewModel.Phase2Teacher): OnPhase2TeacherChanged(Compute.Phase2Teacher); break;
+            case nameof(ComputeViewModel.SelectedSetupMode): OnSelectedSetupModeChanged(Compute.SelectedSetupMode); break;
+            case nameof(ComputeViewModel.SetupSummary): OnSetupSummaryChanged(Compute.SetupSummary); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _useAllFaces;
@@ -308,7 +327,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    public string WorkerChip => ShortenWorkerLine(WorkerLine);
+    public string WorkerChip => ShortenWorkerLine(Compute.WorkerLine);
     public bool NnSettingsValid => !Settings.ShowNn || CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
     public bool HasHiddenLayersError => Settings.ShowNn && !CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
     public string HiddenLayersError => CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out var error) ? "" : error;
@@ -332,17 +351,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public string CropLabel => Crop.ToString("0.00");
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
-    public bool HasWorkerError => WorkerStartupComplete && !WorkerReady;
-    public bool CanOpenBatch => WorkerReady && !Busy && !IsSaving && Session.Count > 0;
+    public bool HasWorkerError => Compute.WorkerStartupComplete && !Compute.WorkerReady;
+    public bool CanOpenBatch => Compute.WorkerReady && !Busy && !IsSaving && Session.Count > 0;
     public string DetectActionLabel => Workspace.Active is not null && _detectionFailures.ContainsKey(Workspace.Active.Path) ? "Retry" : "Detect";
-    public string RunActionHint => !WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
+    public string RunActionHint => !Compute.WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
         : Busy || IsSaving ? "Wait for the current operation, or cancel processing."
         : Workspace.Active is null ? "Add an image to start."
         : !File.Exists(Workspace.Active.Path) ? "Relink the missing image to continue."
         : CachedOperationError(!WillUseLoadedModel) is { } error ? error
         : !WillUseLoadedModel && Workspace.Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
         : "Run the active workflow (F5).";
-    public string BatchFitHint => !WorkerReady ? "The processing engine is not ready."
+    public string BatchFitHint => !Compute.WorkerReady ? "The processing engine is not ready."
         : Busy || IsSaving ? "Wait for the current operation."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
         : CachedOperationError(true) ?? "Detect a chart and fit each selected image.";
@@ -353,7 +372,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ? "Engine error"
         : Busy
             ? "Working"
-            : WorkerReady
+            : Compute.WorkerReady
                 ? "Ready"
                 : "Starting";
     public bool IsUseLoadedMode
@@ -427,8 +446,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         _started = true;
-        WorkerStartupComplete = false;
-        WorkerStartupError = "";
+        Compute.WorkerStartupComplete = false;
+        Compute.WorkerStartupError = "";
         _ = StartWorkerAsync();
     }
 
@@ -692,7 +711,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         SetPreview(null, null);
         OverlayHandshake = null;
         ApplyReport(null);
-        DetectSummary = "Waiting for detect";
+        Compute.DetectSummary = "Waiting for detect";
         Workspace.HasImage = false;
         Workspace.HasCorrected = false;
         ShowFacePicker = false;
@@ -1333,7 +1352,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.FfcMaxVal = 1.8m;
         Settings.ClipLo = -0.2m;
         Settings.ClipHi = 1.3m;
-        Phase2Teacher = true;
+        Compute.Phase2Teacher = true;
         ClearNumericDrafts();
         UpdateCcSummary();
         Log("Settings", "Reset correction settings to defaults.", LogLevel.Info, CorrectionSettingsDetails());
@@ -1747,14 +1766,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool CanRemove() => Workspace.HasSelected;
     private bool CanOpenReport() => HasReport;
     private bool CanDetect() =>
-        WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
+        Compute.WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
     private bool CanApply() =>
-        WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
+        Compute.WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Workspace.Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
+    private bool CanBatchFit() => Compute.WorkerReady && !Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
-        WorkerReady && !Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
+        Compute.WorkerReady && !Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
     private bool CanRestartWorker() => !Busy && !IsSaving;
     private bool CanCancel() => Busy;
     private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);
@@ -1767,9 +1786,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : [100];
         return new CorrectionOptions
         {
-            CpuLut = ForceCpu,
-            LutDevice = SelectedProcessingDevice.Value,
-            FastMode = FastMode,
+            CpuLut = Compute.ForceCpu,
+            LutDevice = Compute.SelectedProcessingDevice.Value,
+            FastMode = Compute.FastMode,
             BatchPreviewResults = BatchPreviewResults,
             Method = Settings.SelectedMethod.Value,
             Degree = int.TryParse(Settings.SelectedDegree?.Value, out var degree) ? degree : 2,
@@ -1811,7 +1830,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             FfcMaxVal = ClampFfcMaxVal((double)Settings.FfcMaxVal, ClampFfcCutOff((double)Settings.FfcCutOff)),
             ClipLo = ClampClipLo((double)Settings.ClipLo),
             ClipHi = ClampClipHi((double)Settings.ClipHi, ClampClipLo((double)Settings.ClipLo)),
-            Phase2Teacher = Phase2Teacher,
+            Phase2Teacher = Compute.Phase2Teacher,
         }.Normalize();
     }
 
@@ -1876,7 +1895,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         if (Workspace.Active is null)
         {
-            DetectSummary = "";
+            Compute.DetectSummary = "";
             return;
         }
 
@@ -1884,11 +1903,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         if (Workspace.Active.Handshake is { Ok: true })
         {
-            DetectSummary = $"{Workspace.Active.DetectLabel} · {Math.Max(1, Workspace.Active.Handshake.ChartCount)} chart(s)";
+            Compute.DetectSummary = $"{Workspace.Active.DetectLabel} · {Math.Max(1, Workspace.Active.Handshake.ChartCount)} chart(s)";
             return;
         }
 
-        DetectSummary = WillUseLoadedModel
+        Compute.DetectSummary = WillUseLoadedModel
             ? $"{Workspace.Active.Name} — Run applies the loaded model (no chart needed)"
             : string.IsNullOrWhiteSpace(Workspace.Active.DetectLabel)
                 ? $"{Workspace.Active.Name} — Detect the chart, then Run to fit"
@@ -2163,8 +2182,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Theme = IsLightTheme ? "Light" : "Dark",
         TrustedOutputDirs = _trusted.ToList(),
         CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
-        ForceCpu = ForceCpu,
-        AccelPolicy = SelectedAccelPolicy.Value,
+        ForceCpu = Compute.ForceCpu,
+        AccelPolicy = Compute.SelectedAccelPolicy.Value,
         ShowLattice = ShowLattice,
         ShowSample = ShowSample,
         ShowDim = ShowDim,
@@ -2205,9 +2224,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
                 ? state.AccelPolicy
                 : state.ForceCpu ? "cpu" : "auto";
-            SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
-            ForceCpu = state.ForceCpu || policy == "cpu";
-            _worker.Policy = SelectedAccelPolicy.Value;
+            Compute.SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
+            Compute.ForceCpu = state.ForceCpu || policy == "cpu";
+            _worker.Policy = Compute.SelectedAccelPolicy.Value;
             ShowLattice = state.ShowLattice ?? true;
             ShowSample = state.ShowSample ?? true;
             ShowDim = state.ShowDim ?? true;
@@ -2352,9 +2371,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void ApplyOptions(CorrectionOptions options)
     {
         Settings.ClearDrafts(notify: false);
-        ForceCpu = options.CpuLut;
-        SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
-        FastMode = options.FastMode;
+        Compute.ForceCpu = options.CpuLut;
+        Compute.SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
+        Compute.FastMode = options.FastMode;
         BatchPreviewResults = options.BatchPreviewResults;
         options.Normalize();
         Settings.SelectedMethod = Pick(Methods, options.Method);
@@ -2394,7 +2413,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.FfcMaxVal = (decimal)ClampFfcMaxVal(options.FfcMaxVal, ClampFfcCutOff(options.FfcCutOff));
         Settings.ClipLo = (decimal)ClampClipLo(options.ClipLo);
         Settings.ClipHi = (decimal)ClampClipHi(options.ClipHi, ClampClipLo(options.ClipLo));
-        Phase2Teacher = options.Phase2Teacher;
+        Compute.Phase2Teacher = options.Phase2Teacher;
         var model = File.Exists(options.LoadedModelPath) ? options.LoadedModelPath
             : File.Exists(options.ModelInPath) ? options.ModelInPath : "";
         LoadedModelPath = model;
@@ -2468,17 +2487,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var cancellation = BeginJob();
         try
         {
-            _worker.Policy = SelectedAccelPolicy.Value;
+            _worker.Policy = Compute.SelectedAccelPolicy.Value;
             await _worker.StartAsync(cancellation).ConfigureAwait(false);
             var warmed = _worker.Warmed;
             var warmupError = _worker.LastError;
             await OnUi(() =>
             {
                 if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
-                WorkerReady = true;
-                WorkerStartupComplete = true;
-                WorkerStartupError = "";
-                WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
+                Compute.WorkerReady = true;
+                Compute.WorkerStartupComplete = true;
+                Compute.WorkerStartupError = "";
+                Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
                     ? (_worker.Warmed ? $"Warmed · {_worker.Device}" : $"Ready · {_worker.Device}")
                     : _worker.Title;
                 Status = "Ready.";
@@ -2492,10 +2511,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             await OnUi(() =>
             {
-                WorkerReady = false;
-                WorkerStartupComplete = true;
-                WorkerStartupError = ex.Message;
-                WorkerLine = "Worker failed";
+                Compute.WorkerReady = false;
+                Compute.WorkerStartupComplete = true;
+                Compute.WorkerStartupError = ex.Message;
+                Compute.WorkerLine = "Worker failed";
                 Status = ex.Message;
                 Log("Worker", ex.Message, LogLevel.Error);
             }).ConfigureAwait(false);
@@ -2856,9 +2875,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     partial void OnBusyChanged(bool value) => NotifyRunCommands();
     partial void OnIsSavingChanged(bool value) => NotifyRunCommands();
-    partial void OnWorkerReadyChanged(bool value) => NotifyRunCommands();
-    partial void OnWorkerStartupCompleteChanged(bool value) => NotifyRunCommands();
-    partial void OnWorkerStartupErrorChanged(string value) => OnPropertyChanged(nameof(HasWorkerError));
+    private void OnWorkerReadyChanged(bool value) => NotifyRunCommands();
+    private void OnWorkerStartupCompleteChanged(bool value) => NotifyRunCommands();
+    private void OnWorkerStartupErrorChanged(string value) => OnPropertyChanged(nameof(HasWorkerError));
     partial void OnIsBatchingChanged(bool value) => CancelBatchCommand.NotifyCanExecuteChanged();
     partial void OnLoadedModelPathChanged(string value)
     {
@@ -3050,7 +3069,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnWorkerLineChanged(string value) => OnPropertyChanged(nameof(WorkerChip));
+    private void OnWorkerLineChanged(string value) => OnPropertyChanged(nameof(WorkerChip));
 
     private static double ClampTol(double value, double fallback)
     {

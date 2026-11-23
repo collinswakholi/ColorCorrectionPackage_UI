@@ -20,17 +20,17 @@ public sealed class MainWindowHeadlessTests
         {
             window.AccelMenu.IsOpen = true;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.FastMode);
             Assert.False(window.AdvancedAcceleration.IsExpanded);
-            Assert.Equal("auto", vm.SelectedProcessingDevice.Value);
+            Assert.Equal("auto", vm.Compute.SelectedProcessingDevice.Value);
             window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[1];
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.ForceCpu);
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.ForceCpu);
+            Assert.True(vm.Compute.FastMode);
             window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[2];
             Dispatcher.UIThread.RunJobs();
-            Assert.False(vm.ForceCpu);
-            Assert.True(vm.FastMode);
+            Assert.False(vm.Compute.ForceCpu);
+            Assert.True(vm.Compute.FastMode);
             var build = typeof(MainWindowViewModel).GetMethod("BuildOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             Assert.Equal("gpu", Assert.IsType<ColorCorrect.Engine.CorrectionOptions>(build.Invoke(vm, null)).LutDevice);
             window.AdvancedAcceleration.IsExpanded = true;
@@ -38,10 +38,10 @@ public sealed class MainWindowHeadlessTests
             Assert.True(window.AdvancedAcceleration.IsExpanded);
             window.CompatibilityProcessing.IsChecked = true;
             Dispatcher.UIThread.RunJobs();
-            Assert.False(vm.FastMode);
+            Assert.False(vm.Compute.FastMode);
             window.CompatibilityProcessing.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.FastMode);
         }
         finally { window.Close(); Dispatcher.UIThread.RunJobs(); }
     }

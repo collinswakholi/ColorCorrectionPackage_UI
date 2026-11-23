@@ -18,17 +18,13 @@ public partial class MainWindowViewModel
     public IReadOnlyList<NamedValue> SetupModes { get; } = new NamedValue[] {
         new("recommended", "Recommended"), new("cpu", "CPU only"), new("custom", "Custom")
     };
-    [ObservableProperty] private NamedValue _selectedSetupMode = new("recommended", "Recommended");
-    [ObservableProperty] private bool _setupWebGpu = true;
-    [ObservableProperty] private bool _setupDirectMl = true;
-    public bool IsCustomSetup => SelectedSetupMode.Value == "custom";
+    public bool IsCustomSetup => Compute.SelectedSetupMode.Value == "custom";
     public bool IsWindowsSetup => OperatingSystem.IsWindows();
-    partial void OnSelectedSetupModeChanged(NamedValue value) => OnPropertyChanged(nameof(IsCustomSetup));
-    [ObservableProperty] private string _setupSummary = "";
-    public bool HasSetupSummary => !string.IsNullOrWhiteSpace(SetupSummary);
+    private void OnSelectedSetupModeChanged(NamedValue value) => OnPropertyChanged(nameof(IsCustomSetup));
+    public bool HasSetupSummary => !string.IsNullOrWhiteSpace(Compute.SetupSummary);
     private readonly HashSet<SessionItemViewModel> _batchSubscriptions = [];
 
-    partial void OnSetupSummaryChanged(string value) => OnPropertyChanged(nameof(HasSetupSummary));
+    private void OnSetupSummaryChanged(string value) => OnPropertyChanged(nameof(HasSetupSummary));
 
     private void RefreshBatchSubscriptions()
     {
@@ -57,13 +53,13 @@ public partial class MainWindowViewModel
             {
                 var policy = detection.GetString();
                 if (policy == "cpu-inference" || (applyAuto && policy == "auto"))
-                    SelectedAccelPolicy = Pick(AccelPolicies, policy);
+                    Compute.SelectedAccelPolicy = Pick(AccelPolicies, policy);
             }
             if (json.RootElement.TryGetProperty("correction_policy", out var correction))
             {
                 var policy = correction.GetString();
                 if (policy == "cpu" || (applyAuto && policy == "auto"))
-                    SelectedProcessingDevice = Pick(ProcessingDevices, policy);
+                    Compute.SelectedProcessingDevice = Pick(ProcessingDevices, policy);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -77,19 +73,19 @@ public partial class MainWindowViewModel
             using var json = JsonDocument.Parse(File.ReadAllText(statePath ?? ColorCorrect.Engine.InstalledSetup.StatePath));
             if (json.RootElement.ValueKind != JsonValueKind.Object) return;
             if (json.RootElement.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String)
-                SelectedSetupMode = Pick(SetupModes, mode.GetString() ?? "recommended");
+                Compute.SelectedSetupMode = Pick(SetupModes, mode.GetString() ?? "recommended");
             if (json.RootElement.TryGetProperty("components", out var components) && components.ValueKind == JsonValueKind.Array)
             {
                 var values = components.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString()).ToArray();
-                SetupWebGpu = values.Contains("webgpu");
-                SetupDirectMl = values.Contains("directml");
+                Compute.SetupWebGpu = values.Contains("webgpu");
+                Compute.SetupDirectMl = values.Contains("directml");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
     }
 
     private void AddSetupSelection(ProcessStartInfo start)
-        => AppendSetupSelection(start, SelectedSetupMode.Value, SetupWebGpu, SetupDirectMl, OperatingSystem.IsWindows());
+        => AppendSetupSelection(start, Compute.SelectedSetupMode.Value, Compute.SetupWebGpu, Compute.SetupDirectMl, OperatingSystem.IsWindows());
 
     private static void AppendSetupSelection(ProcessStartInfo start, string mode, bool webGpu, bool directMl, bool windows)
     {
@@ -124,7 +120,7 @@ public partial class MainWindowViewModel
             : macos ? new[] { "--diagnose", "--verify" } : new[] { helper, "--diagnose", "--verify" };
         foreach (var arg in args) start.ArgumentList.Add(arg);
         if (install) start.ArgumentList.Add(windows ? "-Install" : "--install");
-        AppendSetupSelection(start, SelectedSetupMode.Value, SetupWebGpu, SetupDirectMl, windows);
+        AppendSetupSelection(start, Compute.SelectedSetupMode.Value, Compute.SetupWebGpu, Compute.SetupDirectMl, windows);
         return start;
     }
 
@@ -133,7 +129,7 @@ public partial class MainWindowViewModel
         var helper = SetupHelperPath;
         if (!File.Exists(helper))
         {
-            SetupSummary = "Setup tools are missing. Repair using the original installer or portable archive.";
+            Compute.SetupSummary = "Setup tools are missing. Repair using the original installer or portable archive.";
             return;
         }
         var cancel = BeginJob();
@@ -151,8 +147,8 @@ public partial class MainWindowViewModel
             var stderr = await errors;
             if (process.ExitCode != 0) throw new IOException(string.IsNullOrWhiteSpace(stderr) ? "Setup check failed. Repair using the original package." : stderr);
             using var report = JsonDocument.Parse(raw);
-            SetupSummary = FormatSetupReport(report.RootElement);
-            if (install) SetupSummary += "\nApply engine change to use the saved setup preferences.";
+            Compute.SetupSummary = FormatSetupReport(report.RootElement);
+            if (install) Compute.SetupSummary += "\nApply engine change to use the saved setup preferences.";
             if (install && OperatingSystem.IsMacOS())
             {
                 ApplyInstallationDefaults(applyAuto: true);
@@ -164,7 +160,7 @@ public partial class MainWindowViewModel
             Status = install ? "Setup preferences saved." : "Setup check complete.";
         }
         catch (OperationCanceledException) { Status = "Setup check cancelled."; }
-        catch (Exception ex) { SetupSummary = ConciseProcessingError(ex.Message); Status = "Setup needs attention."; }
+        catch (Exception ex) { Compute.SetupSummary = ConciseProcessingError(ex.Message); Status = "Setup needs attention."; }
         finally { Busy = false; NotifyRunCommands(); }
     }
 
@@ -226,7 +222,7 @@ public partial class MainWindowViewModel
             return;
         }
         var helper = SetupHelperPath;
-        if (!File.Exists(helper)) { SetupSummary = "Setup tools are missing. Repair using the original package."; return; }
+        if (!File.Exists(helper)) { Compute.SetupSummary = "Setup tools are missing. Repair using the original package."; return; }
         try
         {
             var start = new ProcessStartInfo(OperatingSystem.IsWindows() ? "powershell.exe" : "x-terminal-emulator")
@@ -237,19 +233,19 @@ public partial class MainWindowViewModel
             foreach (var arg in args) start.ArgumentList.Add(arg);
             AddSetupSelection(start);
             Process.Start(start);
-            SetupSummary = "Review the selection in setup. When it finishes, choose Check setup and Apply engine change. Use CPU selects CPU detection and correction.";
+            Compute.SetupSummary = "Review the selection in setup. When it finishes, choose Check setup and Apply engine change. Use CPU selects CPU detection and correction.";
         }
         catch (Exception ex)
         {
-            SetupSummary = $"Could not open setup: {ConciseProcessingError(ex.Message)}. Run {Path.GetFileName(helper)} from the application folder.";
+            Compute.SetupSummary = $"Could not open setup: {ConciseProcessingError(ex.Message)}. Run {Path.GetFileName(helper)} from the application folder.";
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
     private async Task UseCpuAsync()
     {
-        SelectedAccelPolicy = Pick(AccelPolicies, "cpu-inference");
-        SelectedProcessingDevice = ProcessingDevices[1];
+        Compute.SelectedAccelPolicy = Pick(AccelPolicies, "cpu-inference");
+        Compute.SelectedProcessingDevice = ProcessingDevices[1];
         await ForceCpuRestartAsync();
     }
 }

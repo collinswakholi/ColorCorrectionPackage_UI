@@ -115,7 +115,7 @@
                             AutomationProperties.Name="Open processing settings">
                         <StackPanel>
                             <TextBlock Text="ColorCorrect Studio" Classes="heading"/>
-                            <Border Classes="accelChip" ToolTip.Tip="{Binding WorkerLine}">
+                            <Border Classes="accelChip" ToolTip.Tip="{Binding Compute.WorkerLine}">
                                 <TextBlock x:Name="ExeStatus" Text="Processing settings" Classes="caption"
                                            TextWrapping="Wrap"/>
                             </Border>
@@ -135,7 +135,7 @@
                                 <StackPanel>
                                 <TextBlock Text="Image correction" Classes="settingsLabel" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="ProcessingDevice" Classes="config" ItemsSource="{Binding ProcessingDevices}"
-                                          MinHeight="36" SelectedItem="{Binding SelectedProcessingDevice}"
+                                          MinHeight="36" SelectedItem="{Binding Compute.SelectedProcessingDevice}"
                                           AutomationProperties.Name="Image correction device">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:NamedValue"><TextBlock Text="{Binding Label}"/></DataTemplate>
@@ -150,7 +150,7 @@
                                     <StackPanel>
                                         <TextBlock Text="Detection engine" Classes="settingsLabel" Margin="0,0,0,6"/>
                                         <ComboBox x:Name="DetectionEngine" Classes="config" MinHeight="36" ItemsSource="{Binding AccelPolicies}"
-                                                  SelectedItem="{Binding SelectedAccelPolicy}"
+                                                  SelectedItem="{Binding Compute.SelectedAccelPolicy}"
                                                   AutomationProperties.Name="Inference mode">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:NamedValue">
@@ -164,7 +164,7 @@
                                                 Command="{Binding ForceCpuRestartCommand}" HorizontalAlignment="Stretch"
                                                 AutomationProperties.Name="Apply engine change"/>
                                         <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,16,0,12"/>
-                                        <CheckBox x:Name="CompatibilityProcessing" IsChecked="{Binding FastMode, Converter={StaticResource InverseBool}}"
+                                        <CheckBox x:Name="CompatibilityProcessing" IsChecked="{Binding Compute.FastMode, Converter={StaticResource InverseBool}}"
                                                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                                   AutomationProperties.Name="Use previous processing method"
                                                   ToolTip.Tip="For comparing or reproducing older results. Slower; evaluates gamma and white balance separately. Fast processing is the default for every device.">
@@ -175,22 +175,22 @@
                                         <Expander x:Name="ProcessingDeviceDetails" Header="Device details" IsExpanded="False"
                                                   Theme="{StaticResource ProcessingDisclosure}">
                                             <StackPanel Margin="0,4,0,0">
-                                                <TextBlock Text="{Binding AccelHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                <TextBlock Text="{Binding Compute.AccelHint}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                                 <Button Content="Check setup" Command="{Binding CheckSetupCommand}" Theme="{StaticResource SecondaryButton}"
                                                         HorizontalAlignment="Stretch" Margin="0,0,0,6" AutomationProperties.Name="Check setup and devices"/>
-                                                <ComboBox ItemsSource="{Binding SetupModes}" SelectedItem="{Binding SelectedSetupMode}" Classes="config"
+                                                <ComboBox ItemsSource="{Binding SetupModes}" SelectedItem="{Binding Compute.SelectedSetupMode}" Classes="config"
                                                           Margin="0,0,0,6" AutomationProperties.Name="Setup mode">
                                                     <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:NamedValue"><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
                                                 </ComboBox>
                                                 <StackPanel IsVisible="{Binding IsCustomSetup}" Margin="0,0,0,6">
-                                                    <CheckBox Content="WebGPU" IsChecked="{Binding SetupWebGpu}"/>
-                                                    <CheckBox Content="DirectML" IsChecked="{Binding SetupDirectMl}" IsVisible="{Binding IsWindowsSetup}"/>
+                                                    <CheckBox Content="WebGPU" IsChecked="{Binding Compute.SetupWebGpu}"/>
+                                                    <CheckBox Content="DirectML" IsChecked="{Binding Compute.SetupDirectMl}" IsVisible="{Binding IsWindowsSetup}"/>
                                                 </StackPanel>
                                                 <Button Content="Install optional support" Command="{Binding InstallSupportCommand}" Theme="{StaticResource SecondaryButton}"
                                                         HorizontalAlignment="Stretch" Margin="0,0,0,6" AutomationProperties.Name="Install optional acceleration support"/>
                                                 <Button Content="Use CPU" Command="{Binding UseCpuCommand}" Theme="{StaticResource SecondaryButton}"
                                                         HorizontalAlignment="Stretch" Margin="0,0,0,8" AutomationProperties.Name="Use CPU for detection and correction"/>
-                                                <TextBlock Text="{Binding SetupSummary}" IsVisible="{Binding HasSetupSummary}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                                <TextBlock Text="{Binding Compute.SetupSummary}" IsVisible="{Binding HasSetupSummary}" Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"/>
                                                 <ItemsControl ItemsSource="{Binding AccelRows}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="vm:AccelRow">
@@ -653,7 +653,7 @@
                                         <TextBlock Text="Chart" Classes="sectionLabel" VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
-                                    <TextBlock x:Name="ChartTypeLabel" Text="{Binding DetectSummary}" Classes="caption"
+                                    <TextBlock x:Name="ChartTypeLabel" Text="{Binding Compute.DetectSummary}" Classes="caption"
                                                Margin="0,0,0,6" TextWrapping="Wrap"/>
                                     <TextBlock x:Name="DetectStatus" Text="{Binding CurrentStage}" Classes="caption"
                                                Margin="0,0,0,6" IsVisible="{Binding Busy}"/>
@@ -848,9 +848,9 @@
                                     <StackPanel>
                                         <TextBlock Text="Engine unavailable" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource ErrorBrush}"/>
-                                        <TextBlock Text="{Binding WorkerStartupError}" Classes="caption"
+                                        <TextBlock Text="{Binding Compute.WorkerStartupError}" Classes="caption"
                                                    TextWrapping="Wrap" MaxHeight="50"
-                                                   ToolTip.Tip="{Binding WorkerStartupError}"/>
+                                                   ToolTip.Tip="{Binding Compute.WorkerStartupError}"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Content="Retry" Theme="{StaticResource SecondaryButton}"
                                             Command="{Binding ForceCpuRestartCommand}"
@@ -1682,7 +1682,7 @@
                             AutomationProperties.LiveSetting="Polite">
                     <TextBlock Text="{Binding StatusStateLabel}" Classes="caption" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding DetectionStatus}" Classes="caption" MaxWidth="260" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{Binding AccelHint}"/>
+                               ToolTip.Tip="{Binding Compute.AccelHint}"/>
                     <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                Classes.error="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
