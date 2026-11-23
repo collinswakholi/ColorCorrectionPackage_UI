@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Show an error notice instead of closing the app when a settings, help, reference-editor or plot-save dialog fails to open.
+- Confirmation prompts: Escape and Cancel dismiss, Enter confirms only non-destructive prompts, and screen readers announce the question.
+
 ## 0.3.0
 
 - Support reproducible chart fits with an exact random sample count per patch and a seed. Grid sampling remains available for existing recipes.
