@@ -164,16 +164,16 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async System.Threading.Tasks.Task RelinkImageAsync()
     {
-        if (Busy || IsSaving || Workspace.Active is not { } item || Dialogs is null) return;
+        if (Job.Busy || IsSaving || Workspace.Active is not { } item || Dialogs is null) return;
         var paths = await Dialogs.OpenImagesAsync();
-        if (paths.Count != 1) { if (paths.Count > 1) Status = "Choose one replacement image."; return; }
+        if (paths.Count != 1) { if (paths.Count > 1) Job.Status = "Choose one replacement image."; return; }
         var replacement = paths[0];
-        if (!Services.SupportedStillImage.IsSupportedFile(replacement)) { Status = "Choose a readable JPEG, PNG or TIFF image."; return; }
-        if (Session.Any(other => other != item && PathsEqual(other.Path, replacement))) { Status = "That image is already in this session."; return; }
+        if (!Services.SupportedStillImage.IsSupportedFile(replacement)) { Job.Status = "Choose a readable JPEG, PNG or TIFF image."; return; }
+        if (Session.Any(other => other != item && PathsEqual(other.Path, replacement))) { Job.Status = "That image is already in this session."; return; }
         var identity = item.SourceIdentity ?? item.CompletedContext?.Source;
         if (identity?.Matches(replacement) != true && !await Dialogs.ConfirmAsync("Use a different image?", "This file does not match the original. Detection and reference assignments will be cleared; saved output files remain on disk.", "Use image")) return;
         var same = item.Relink(replacement);
         Activate(item); RefreshSessionUi(); NotifyRunCommands(); ScheduleSave();
-        Status = same ? "Original image relinked. Saved detection and results retained." : "Image replaced. Detect its chart before fitting.";
+        Job.Status = same ? "Original image relinked. Saved detection and results retained." : "Image replaced. Detect its chart before fitting.";
     }
 }

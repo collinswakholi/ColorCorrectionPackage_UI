@@ -133,8 +133,8 @@ public partial class MainWindowViewModel
             return;
         }
         var cancel = BeginJob();
-        Busy = true;
-        Status = install ? "Saving setup preferences and checking devices…" : "Checking setup and devices…";
+        Job.Busy = true;
+        Job.Status = install ? "Saving setup preferences and checking devices…" : "Checking setup and devices…";
         try
         {
             var start = CreateSetupCheckStartInfo(helper, install, OperatingSystem.IsWindows(), OperatingSystem.IsMacOS());
@@ -157,11 +157,11 @@ public partial class MainWindowViewModel
             _detectionFailures.Clear();
             _engineGeneration++;
             await RefreshAccelAsync();
-            Status = install ? "Setup preferences saved." : "Setup check complete.";
+            Job.Status = install ? "Setup preferences saved." : "Setup check complete.";
         }
-        catch (OperationCanceledException) { Status = "Setup check cancelled."; }
-        catch (Exception ex) { Compute.SetupSummary = ConciseProcessingError(ex.Message); Status = "Setup needs attention."; }
-        finally { Busy = false; NotifyRunCommands(); }
+        catch (OperationCanceledException) { Job.Status = "Setup check cancelled."; }
+        catch (Exception ex) { Compute.SetupSummary = ConciseProcessingError(ex.Message); Job.Status = "Setup needs attention."; }
+        finally { Job.Busy = false; NotifyRunCommands(); }
     }
 
     internal static string FormatSetupReport(JsonElement report)

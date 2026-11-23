@@ -188,7 +188,7 @@ public partial class MainWindowViewModel
 
         if (CatalogFolders.Any(item => PathIdentity.Equal(item.Path, folder)))
         {
-            Status = "That folder is already in the catalog.";
+            Job.Status = "That folder is already in the catalog.";
             return;
         }
 
@@ -196,7 +196,7 @@ public partial class MainWindowViewModel
         Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
-        Status = $"Catalog + {Path.GetFileName(folder)}";
+        Job.Status = $"Catalog + {Path.GetFileName(folder)}";
         Log("Catalog", $"Added folder {folder}.", LogLevel.Success);
     }
 
@@ -212,8 +212,8 @@ public partial class MainWindowViewModel
         Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
-        Status = $"Removed catalog folder {folder.Name}";
-        Log("Catalog", Status);
+        Job.Status = $"Removed catalog folder {folder.Name}";
+        Log("Catalog", Job.Status);
     }
 
     public void UseWhitePath(string path)
@@ -224,8 +224,8 @@ public partial class MainWindowViewModel
         {
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path) && !IsImage(path))
             {
-                Status = "FFC white must be a still image.";
-                Log("FFC", Status, LogLevel.Warning);
+                Job.Status = "FFC white must be a still image.";
+                Log("FFC", Job.Status, LogLevel.Warning);
             }
 
             return;
@@ -235,8 +235,8 @@ public partial class MainWindowViewModel
         Settings.DoFfc = true;
         Workspace.HasWhiteRef = true;
         OnPropertyChanged(nameof(WhiteImageLabel));
-        Status = $"FFC white · {Path.GetFileName(Settings.WhiteImagePath)}";
-        Log("FFC", Status, LogLevel.Info, [Settings.WhiteImagePath]);
+        Job.Status = $"FFC white · {Path.GetFileName(Settings.WhiteImagePath)}";
+        Log("FFC", Job.Status, LogLevel.Info, [Settings.WhiteImagePath]);
         EnsureWhiteInSession(activate: false);
         RefreshOverlay();
         ScheduleSave();
@@ -270,11 +270,11 @@ public partial class MainWindowViewModel
         _usedDetect = _usedPlane = _usedApply = "";
         await OnUi(() =>
         {
-            Busy = true;
+            Job.Busy = true;
             Compute.WorkerReady = false;
             Compute.WorkerStartupComplete = false;
             Compute.WorkerStartupError = "";
-            Status = "Restarting worker…";
+            Job.Status = "Restarting worker…";
         }).ConfigureAwait(false);
         try
         {
@@ -291,7 +291,7 @@ public partial class MainWindowViewModel
                 Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
                     ? $"Warmed · {_worker.Device}"
                     : _worker.Title;
-                Status = Compute.WorkerLine;
+                Job.Status = Compute.WorkerLine;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
@@ -300,7 +300,7 @@ public partial class MainWindowViewModel
             {
                 Compute.WorkerStartupComplete = true;
                 Compute.WorkerStartupError = ex.Message;
-                Status = ex.Message;
+                Job.Status = ex.Message;
                 Compute.WorkerLine = "Worker failed";
             }).ConfigureAwait(false);
         }
@@ -308,7 +308,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 EndPipeline();
             }).ConfigureAwait(false);
         }
@@ -324,7 +324,7 @@ public partial class MainWindowViewModel
             : ConciseProcessingError(error);
         Compute.WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
         Compute.WorkerLine = "Detection unavailable";
-        Status = Compute.WorkerStartupError;
+        Job.Status = Compute.WorkerStartupError;
         Log("Engine", Compute.WorkerStartupError, LogLevel.Error);
         return true;
     }
@@ -380,7 +380,7 @@ public partial class MainWindowViewModel
         var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
         await OnUi(() =>
         {
-            Status = ok
+            Job.Status = ok
                 ? "Exported .cube (LUT does not include flat-field)."
                 : result.TryGetProperty("error", out var err) ? err.GetString() ?? "export failed" : "export failed";
         }).ConfigureAwait(false);

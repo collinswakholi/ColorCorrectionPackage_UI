@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Job.PropertyChanged += OnJobStateChanged;
         Stage.PropertyChanged += OnStageStateChanged;
         Compute.PropertyChanged += OnComputeStateChanged;
         Workspace.PropertyChanged += OnWorkspaceStateChanged;
@@ -142,9 +143,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<LogEntry> LogEntries { get; } = [];
     public ObservableCollection<PipelineStepViewModel> PipelineSteps { get; } = [];
 
-    [ObservableProperty] private string _status = "Starting ColorCorrect engine…";
-    [ObservableProperty] private string _errorMessage = "";
-    [ObservableProperty] private string _currentStage = "";
     [ObservableProperty] private string _savedModelSummary = "";
     [ObservableProperty] private bool _hasSavedModelSummary;
     [ObservableProperty] private string _modelLabel = "No model loaded";
@@ -152,23 +150,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _loadedModelPath = "";
     [ObservableProperty] private bool _useLoadedModel;
     [ObservableProperty] private string _outputDir = "";
-    [ObservableProperty] private string _batchLabel = "";
-    [ObservableProperty] private string _batchProgressPct = "0%";
     [ObservableProperty] private string _themeLabel = "Light";
     [ObservableProperty] private string _themeHint = "Switch to light theme";
     private FfcPlane? _loadedModelPlane;
     [ObservableProperty] private NamedValue _selectedOutputFormat = new("png", "PNG");
-    [ObservableProperty] private double _batchProgress;
-    [ObservableProperty] private bool _busy = true;
-    [ObservableProperty] private bool _isBatching;
-    [ObservableProperty] private bool _showBatchProgress;
-    [ObservableProperty] private bool _showPipeline;
-    [ObservableProperty] private bool _showJobProgress;
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private bool _showSaveProgress;
-    [ObservableProperty] private double _jobProgress;
     [ObservableProperty] private double _saveProgress;
-    [ObservableProperty] private string _jobProgressPct = "0%";
     [ObservableProperty] private string _saveProgressLabel = "";
 
     /// <summary>ΔE tiles, per-stage and per-patch rows, report and analysis panel states.</summary>
@@ -301,6 +289,22 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>The running operation: busy and batching flags, job and batch progress with their labels, the current stage, the status line and the last error.</summary>
+    public JobViewModel Job { get; } = new();
+
+    private void OnJobStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(JobViewModel.Busy): OnBusyChanged(Job.Busy); break;
+            case nameof(JobViewModel.IsBatching): OnIsBatchingChanged(Job.IsBatching); break;
+            case nameof(JobViewModel.JobProgress): OnJobProgressChanged(Job.JobProgress); break;
+            case nameof(JobViewModel.BatchProgress): OnBatchProgressChanged(Job.BatchProgress); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _isLightTheme;
@@ -353,17 +357,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => Compute.WorkerStartupComplete && !Compute.WorkerReady;
-    public bool CanOpenBatch => Compute.WorkerReady && !Busy && !IsSaving && Session.Count > 0;
+    public bool CanOpenBatch => Compute.WorkerReady && !Job.Busy && !IsSaving && Session.Count > 0;
     public string DetectActionLabel => Workspace.Active is not null && _detectionFailures.ContainsKey(Workspace.Active.Path) ? "Retry" : "Detect";
     public string RunActionHint => !Compute.WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
-        : Busy || IsSaving ? "Wait for the current operation, or cancel processing."
+        : Job.Busy || IsSaving ? "Wait for the current operation, or cancel processing."
         : Workspace.Active is null ? "Add an image to start."
         : !File.Exists(Workspace.Active.Path) ? "Relink the missing image to continue."
         : CachedOperationError(!WillUseLoadedModel) is { } error ? error
         : !WillUseLoadedModel && Workspace.Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
         : "Run the active workflow (F5).";
     public string BatchFitHint => !Compute.WorkerReady ? "The processing engine is not ready."
-        : Busy || IsSaving ? "Wait for the current operation."
+        : Job.Busy || IsSaving ? "Wait for the current operation."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
         : CachedOperationError(true) ?? "Detect a chart and fit each selected image.";
     public string BatchApplyHint => !File.Exists(LoadedModelPath) ? "Load or fit a model before applying it to a batch."
@@ -371,7 +375,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         : CachedOperationError(false) ?? "Apply the current model to each selected image.";
     public string StatusStateLabel => HasWorkerError
         ? "Engine error"
-        : Busy
+        : Job.Busy
             ? "Working"
             : Compute.WorkerReady
                 ? "Ready"
@@ -532,8 +536,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         if (skipped > 0)
         {
-            Status = $"Skipped {skipped} unsupported or unreadable file(s); video is not supported.";
-            Log("Import", Status, LogLevel.Warning);
+            Job.Status = $"Skipped {skipped} unsupported or unreadable file(s); video is not supported.";
+            Log("Import", Job.Status, LogLevel.Warning);
         }
     }
 
@@ -736,7 +740,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var sessionCount = Session.Count;
         if (dirs.Count == 0 && sessionCount == 0)
         {
-            Status = "No previous session to delete.";
+            Job.Status = "No previous session to delete.";
             return;
         }
 
@@ -781,8 +785,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         ClearSession();
-        Status = $"Deleted {deleted} run folder(s). Settings kept.";
-        Log("Session", Status, LogLevel.Warning, [$"{deleted} of {dirs.Count} folders removed"]);
+        Job.Status = $"Deleted {deleted} run folder(s). Settings kept.";
+        Log("Session", Job.Status, LogLevel.Warning, [$"{deleted} of {dirs.Count} folders removed"]);
         FlushPersist();
     }
 
@@ -855,7 +859,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var path = Workspace.Active?.ReportPath;
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
-            Status = "No report for the active image.";
+            Job.Status = "No report for the active image.";
             return;
         }
 
@@ -930,7 +934,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         if (Picker.LastPick is not { } pick || Dialogs is null)
         {
-            Status = "Right-click a point on the image first.";
+            Job.Status = "Right-click a point on the image first.";
             return;
         }
 
@@ -942,7 +946,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             _ => pick.CopyLine,
         };
         await Dialogs.SetClipboardAsync(text);
-        Status = part switch
+        Job.Status = part switch
         {
             "rgb" => "Copied RGB.",
             "lab" => "Copied Lab.",
@@ -1031,8 +1035,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         if (!File.Exists(item.CorrectedPath) && !await MaterializeCorrectedAsync(item))
         {
-            Status = "Could not write a full-resolution corrected still.";
-            ToastService.ShowWarning(Status);
+            Job.Status = "Could not write a full-resolution corrected still.";
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
@@ -1043,7 +1047,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         File.Copy(item.CorrectedPath, dest, overwrite: true);
-        Status = $"Saved {Path.GetFileName(dest)}";
+        Job.Status = $"Saved {Path.GetFileName(dest)}";
         Log("Save", dest);
     }
 
@@ -1053,16 +1057,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var items = Session.Where(item => item.IncludeInSave && item.HasSaveable).ToList();
         if (items.Count == 0)
         {
-            Status = "Nothing selected to save.";
-            ToastService.ShowWarning(Status);
+            Job.Status = "Nothing selected to save.";
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
         if (!SaveCorrected && !(SaveFfc && CanSaveFfc) && !(SaveGc && CanSaveGc)
             && !(SaveWb && CanSaveWb) && !(SaveCc && CanSaveCc) && !SaveReport)
         {
-            Status = "Choose at least one output to save.";
-            ToastService.ShowWarning(Status);
+            Job.Status = "Choose at least one output to save.";
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
@@ -1082,7 +1086,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ShowSaveProgress = true;
         SaveProgress = 0;
         SaveProgressLabel = $"Preparing {items.Count} image(s)…";
-        CurrentStage = "Save";
+        Job.CurrentStage = "Save";
         var jobs = new List<(string Src, string Dest)>();
         var failures = new ConcurrentQueue<string>();
         var artifactNames = CorrectionClient.BuildArtifactBases(items.Select(item => item.Path).ToArray());
@@ -1152,7 +1156,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 $"{collisions.Length} file(s) already exist in the selected folder:\n\n{string.Join("\n", collisions.Take(8).Select(Path.GetFileName))}"
                 + (collisions.Length > 8 ? "\n…" : "") + "\n\nReplace them with the selected exports?", "Replace files", danger: true)))
             {
-                Status = "Save cancelled. Existing files were kept.";
+                Job.Status = "Save cancelled. Existing files were kept.";
                 return;
             }
 
@@ -1188,29 +1192,29 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 }
             });
 
-            Status = failures.IsEmpty
+            Job.Status = failures.IsEmpty
                 ? copied == 0
                     ? "No matching stage files to copy."
                     : $"Saved {copied} file(s) as {format.ToUpperInvariant()} to {destDir}"
                 : copied == 0
                     ? $"Save failed: {failures.Count} file(s) could not be written."
                     : $"Saved {copied} file(s); {failures.Count} file(s) failed. Check the save log.";
-            Log("Save", Status, failures.IsEmpty && copied > 0 ? LogLevel.Success : LogLevel.Warning,
+            Log("Save", Job.Status, failures.IsEmpty && copied > 0 ? LogLevel.Success : LogLevel.Warning,
                 failures.IsEmpty ? null : failures.ToArray());
             if (copied > 0 && failures.IsEmpty)
             {
-                ToastService.ShowSuccess(Status);
+                ToastService.ShowSuccess(Job.Status);
             }
             else
             {
-                ToastService.ShowWarning(Status);
+                ToastService.ShowWarning(Job.Status);
             }
         }
         catch (Exception ex)
         {
-            Status = $"Save failed: {ex.Message}";
-            Log("Save", Status, LogLevel.Error);
-            ToastService.ShowError(Status);
+            Job.Status = $"Save failed: {ex.Message}";
+            Log("Save", Job.Status, LogLevel.Error);
+            ToastService.ShowError(Job.Status);
         }
         finally
         {
@@ -1218,7 +1222,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             ShowSaveProgress = false;
             SaveProgress = 0;
             SaveProgressLabel = "";
-            CurrentStage = "";
+            Job.CurrentStage = "";
         }
     }
 
@@ -1767,18 +1771,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool CanRemove() => Workspace.HasSelected;
     private bool CanOpenReport() => HasReport;
     private bool CanDetect() =>
-        Compute.WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
+        Compute.WorkerReady && !Job.Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
     private bool CanApply() =>
-        Compute.WorkerReady && !Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
+        Compute.WorkerReady && !Job.Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Workspace.Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => Compute.WorkerReady && !Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
+    private bool CanBatchFit() => Compute.WorkerReady && !Job.Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
-        Compute.WorkerReady && !Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
-    private bool CanRestartWorker() => !Busy && !IsSaving;
-    private bool CanCancel() => Busy;
-    private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);
-    private bool CanExportCube() => !Busy && File.Exists(LoadedModelPath);
+        Compute.WorkerReady && !Job.Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
+    private bool CanRestartWorker() => !Job.Busy && !IsSaving;
+    private bool CanCancel() => Job.Busy;
+    private bool CanSaveModel() => !Job.Busy && File.Exists(LoadedModelPath);
+    private bool CanExportCube() => !Job.Busy && File.Exists(LoadedModelPath);
 
     private CorrectionOptions BuildOptions()
     {
@@ -1990,7 +1994,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             LogEntries.RemoveAt(0);
         }
 
-        ErrorMessage = level == LogLevel.Error ? detail : "";
+        Job.ErrorMessage = level == LogLevel.Error ? detail : "";
         if (level == LogLevel.Error)
         {
             ToastService.ShowError(detail);
@@ -2062,14 +2066,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Status = ex.Message;
+            Job.Status = ex.Message;
             return Task.FromResult(false);
         }
 
         if (RunPaths.ContainsParentSegment(OutputDir))
         {
-            Status = "Output folder cannot contain '..'.";
-            Log("Output", Status, LogLevel.Error);
+            Job.Status = "Output folder cannot contain '..'.";
+            Log("Output", Job.Status, LogLevel.Error);
             return Task.FromResult(false);
         }
 
@@ -2260,7 +2264,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
             RestoreWorkingItemsCore(state);
             var skipped = state.Items.Count - Session.Count;
-            if (skipped > 0) Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
+            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
             return skipped;
         }
         finally
@@ -2501,8 +2505,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
                     ? (_worker.Warmed ? $"Warmed · {_worker.Device}" : $"Ready · {_worker.Device}")
                     : _worker.Title;
-                Status = "Ready.";
-                CurrentStage = "";
+                Job.Status = "Ready.";
+                Job.CurrentStage = "";
                 Log("Engine", _worker.Warmed ? $"Ready · {LabelStage(_worker.Device)}" : "Ready. Detection is checked when needed.", LogLevel.Info);
                 // Status bar already shows ready. A toast here covers the viewer.
             }).ConfigureAwait(false);
@@ -2516,7 +2520,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 Compute.WorkerStartupComplete = true;
                 Compute.WorkerStartupError = ex.Message;
                 Compute.WorkerLine = "Worker failed";
-                Status = ex.Message;
+                Job.Status = ex.Message;
                 Log("Worker", ex.Message, LogLevel.Error);
             }).ConfigureAwait(false);
         }
@@ -2524,7 +2528,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 EndPipeline();
                 NotifyRunCommands();
                 MaybeAutoDetect();
@@ -2874,12 +2878,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         return Dispatcher.UIThread.InvokeAsync(action).GetTask();
     }
 
-    partial void OnBusyChanged(bool value) => NotifyRunCommands();
+    private void OnBusyChanged(bool value) => NotifyRunCommands();
     partial void OnIsSavingChanged(bool value) => NotifyRunCommands();
     private void OnWorkerReadyChanged(bool value) => NotifyRunCommands();
     private void OnWorkerStartupCompleteChanged(bool value) => NotifyRunCommands();
     private void OnWorkerStartupErrorChanged(string value) => OnPropertyChanged(nameof(HasWorkerError));
-    partial void OnIsBatchingChanged(bool value) => CancelBatchCommand.NotifyCanExecuteChanged();
+    private void OnIsBatchingChanged(bool value) => CancelBatchCommand.NotifyCanExecuteChanged();
     partial void OnLoadedModelPathChanged(string value)
     {
         try { _loadedModelIdentity = File.Exists(value) ? AssetIdentity.Capture(value) : null; }
@@ -3060,8 +3064,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }, token);
     }
 
-    partial void OnBatchProgressChanged(double value) => BatchProgressPct = $"{value:0}%";
-    partial void OnJobProgressChanged(double value) => JobProgressPct = $"{value:0}%";
+    private void OnBatchProgressChanged(double value) => Job.BatchProgressPct = $"{value:0}%";
+    private void OnJobProgressChanged(double value) => Job.JobProgressPct = $"{value:0}%";
 
     private void OnFaceIndexChanged(int value)
     {

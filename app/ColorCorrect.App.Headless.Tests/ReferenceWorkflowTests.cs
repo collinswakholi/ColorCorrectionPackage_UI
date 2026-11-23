@@ -15,7 +15,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void SuccessfulRefitClearsReferenceStaleBadgeButFailedFitDoesNot()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy=false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy=false }};
         using var item = new SessionItemViewModel("reference-workflow-missing.png");
         item.ApplyHandshake(Handshake("refit"));
         vm.Session.Add(item);
@@ -31,7 +31,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void BuiltInFallbackCannotReuseImportedCustomProfileIdentity()
     {
-        var vm=new MainWindowViewModel(persistenceEnabled:false) {Busy=false};
+        var vm=new MainWindowViewModel(persistenceEnabled:false) {Job = { Busy=false }};
         using var item=new SessionItemViewModel("reference-workflow-missing.png");
         var node=System.Text.Json.Nodes.JsonNode.Parse(Handshake("collision").Json)!;
         var charts=node["charts"]!.AsArray();
@@ -57,7 +57,7 @@ public sealed class ReferenceWorkflowTests
         var directory=Path.Combine(Path.GetTempPath(),$"ccp-reference-stale-{Guid.NewGuid():N}");Directory.CreateDirectory(directory);
         var corrected=Path.Combine(directory,"corrected.png");File.WriteAllBytes(corrected,[]);
         var model=Path.Combine(directory,"model.json");File.WriteAllText(model,"{}");
-        var vm=new MainWindowViewModel(persistenceEnabled:false) {Busy=false};
+        var vm=new MainWindowViewModel(persistenceEnabled:false) {Job = { Busy=false }};
         using var item=new SessionItemViewModel("reference-workflow-missing.png");item.ApplyHandshake(Handshake("s"));
         vm.Session.Add(item);vm.Workspace.Active=item;
         item.IsCorrected=true;item.IncludeInSave=true;item.CorrectedPath=corrected;item.ModelPath=model;item.PreviewDir=directory;
@@ -79,7 +79,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void SameTypeChartsKeepSeparateProfilesAndSharedProfileRevisions()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-workflow-missing.png");
         item.ApplyHandshake(Handshake("s"));
         var first = Profile("card-a"); var second = Profile("card-b"); second.Values[0][0] -= 5;
@@ -103,7 +103,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void InvalidProfileDoesNotRemoveAssignmentAndEditsInvalidateFit()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-workflow-missing.png"); item.ApplyHandshake(Handshake("s"));
         vm.Session.Add(item);
         vm.AssignReference(item,"s:a",Profile("card"));
@@ -131,7 +131,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void NewDetectionInvalidatesAssignmentsButSameSnapshotDoesNot()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-workflow-missing.png"); item.ApplyHandshake(Handshake("old"));
         vm.AssignReference(item,"old:a",Profile("card"));
         item.ApplyHandshake(Handshake("old"));
@@ -151,7 +151,7 @@ public sealed class ReferenceWorkflowTests
     {
         var path=Path.Combine(Path.GetTempPath(),$"ccp-reference-session-{Guid.NewGuid():N}.png");File.WriteAllBytes(path,[]);
         var oldOutput=path+".corrected.png";File.WriteAllBytes(oldOutput,[]);
-        var vm=new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm=new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         try
         {
             var state=new SessionState { ActivePath=path,Items=[new SessionItemDto {Path=path,HandshakeJson=Handshake("saved").Json,CorrectedPath=oldOutput,
@@ -192,7 +192,7 @@ public sealed class ReferenceWorkflowTests
     [InlineData("digital-sg",140)]
     public void ReferenceEditorRendersAllCellsWithScrollableEntryAndNoSessionMutation(string chart,int cells)
     {
-        var vm=new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm=new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item=new SessionItemViewModel("reference-workflow-missing.png");item.ApplyHandshake(Handshake("render",chart));
         vm.Session.Add(item);vm.Workspace.Active=item;
         var dialog=new ReferenceEditorDialog(vm) {Width=760,Height=520};
@@ -222,7 +222,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void ImportedReferenceValuesRoundTripThroughTheEditableGridWithoutRounding()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-precision-missing.png");
         item.ApplyHandshake(Handshake("precision")); vm.Session.Add(item); vm.Workspace.Active = item;
         var profile = Profile("precise"); profile.Values[0] = [50.123456789012344, 180.12345678901235, -140.12345678901235];
@@ -245,7 +245,7 @@ public sealed class ReferenceWorkflowTests
     [InlineData("column-major", true)]
     public void ReusingAnEditorProfileKeepsItsRevisionUntilValuesChange(string order, bool edit)
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-reuse-missing.png");
         item.ApplyHandshake(Handshake("reuse")); vm.Session.Add(item); vm.Workspace.Active = item;
         var profile = Profile("shared"); profile.Revision = 4; profile.Name = "  Shared imported reference  ";
@@ -283,7 +283,7 @@ public sealed class ReferenceWorkflowTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"ccp-reference-export-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-export-missing.png");
         item.ApplyHandshake(Handshake("export")); vm.Session.Add(item); vm.Workspace.Active = item;
         var original = Profile("exported"); original.Revision = 4;
@@ -318,7 +318,7 @@ public sealed class ReferenceWorkflowTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"ccp-reference-source-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-import-missing.png");
         item.ApplyHandshake(Handshake("import")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("external"); source.Revision = 7; source.Name = "  External reference  ";
@@ -348,7 +348,7 @@ public sealed class ReferenceWorkflowTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"ccp-reference-import-edit-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-import-edit-missing.png");
         item.ApplyHandshake(Handshake("import-edit")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("external-edit"); source.Revision = 7;
@@ -377,7 +377,7 @@ public sealed class ReferenceWorkflowTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"ccp-reference-export-fail-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-export-fail-missing.png");
         item.ApplyHandshake(Handshake("fail")); vm.Session.Add(item); vm.Workspace.Active = item;
         var source = Profile("export-failure"); source.Revision = 4;
@@ -400,7 +400,7 @@ public sealed class ReferenceWorkflowTests
     [AvaloniaFact]
     public void AssigningChartsKeepsTheEditorOpenAndPreservesOtherChartDrafts()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled:false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled:false) { Job = { Busy = false }};
         using var item = new SessionItemViewModel("reference-multichart-drafts-missing.png");
         item.ApplyHandshake(Handshake("drafts")); vm.Session.Add(item); vm.Workspace.Active = item;
         var dialog = new ReferenceEditorDialog(vm);

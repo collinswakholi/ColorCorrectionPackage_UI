@@ -53,13 +53,13 @@ public sealed class WorkerRestartProgressTests
 
             if (scenario == "rejected-startup")
             {
-                vm.Busy = true; // Initial startup owns the same busy state as InitializeAsync.
+                vm.Job.Busy = true; // Initial startup owns the same busy state as InitializeAsync.
                 restart = (Task)typeof(MainWindowViewModel).GetMethod("StartWorkerAsync", flags)!.Invoke(vm, null)!;
             }
             else restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
-            await Until(() => vm.CurrentStage == "Warming Opt2 1280");
-            Assert.True(vm.Busy);
-            Assert.True(vm.JobProgress > 0);
+            await Until(() => vm.Job.CurrentStage == "Warming Opt2 1280");
+            Assert.True(vm.Job.Busy);
+            Assert.True(vm.Job.JobProgress > 0);
             ObserveWorker();
 
             if (mode == "cancel") vm.CancelBatchCommand.Execute(null);
@@ -67,15 +67,15 @@ public sealed class WorkerRestartProgressTests
             await restart.WaitAsync(TimeSpan.FromSeconds(15));
             Dispatcher.UIThread.RunJobs();
 
-            Assert.False(vm.Busy);
-            Assert.Empty(vm.CurrentStage);
-            Assert.False(vm.ShowJobProgress);
-            Assert.Equal(0, vm.JobProgress);
+            Assert.False(vm.Job.Busy);
+            Assert.Empty(vm.Job.CurrentStage);
+            Assert.False(vm.Job.ShowJobProgress);
+            Assert.Equal(0, vm.Job.JobProgress);
             Assert.Equal(mode == "success", vm.Compute.WorkerReady);
             Assert.True(vm.Compute.WorkerStartupComplete);
             if (mode == "success")
             {
-                Assert.Contains("Warmed", vm.Status);
+                Assert.Contains("Warmed", vm.Job.Status);
                 Assert.Empty(vm.Compute.WorkerStartupError);
                 Assert.Contains("optional adapter warning", worker.LastError);
             }
@@ -90,7 +90,7 @@ public sealed class WorkerRestartProgressTests
             {
                 Assert.Contains("Fixture inference runtime unavailable", vm.Compute.WorkerStartupError);
                 Assert.Contains("Check setup", vm.Compute.WorkerStartupError);
-                Assert.Equal(vm.Compute.WorkerStartupError, vm.Status);
+                Assert.Equal(vm.Compute.WorkerStartupError, vm.Job.Status);
                 Assert.DoesNotContain("not checked", vm.Compute.WorkerLine);
                 Assert.True(vm.HasWorkerError);
                 Assert.True(vm.ForceCpuRestartCommand.CanExecute(null));
@@ -103,7 +103,7 @@ public sealed class WorkerRestartProgressTests
                 File.Delete(Path.Combine(folder, "continue"));
                 vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == "cpu-inference");
                 restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
-                await Until(() => vm.CurrentStage == "Warming Opt2 1280");
+                await Until(() => vm.Job.CurrentStage == "Warming Opt2 1280");
                 ObserveWorker();
                 Assert.True(observers[0].HasExited);
                 File.WriteAllText(Path.Combine(folder, "continue"), "");
@@ -111,9 +111,9 @@ public sealed class WorkerRestartProgressTests
                 Assert.True(vm.Compute.WorkerReady);
                 Assert.False(vm.HasWorkerError);
                 Assert.Empty(vm.Compute.WorkerStartupError);
-                Assert.Empty(vm.CurrentStage);
-                Assert.False(vm.ShowJobProgress);
-                Assert.Equal(0, vm.JobProgress);
+                Assert.Empty(vm.Job.CurrentStage);
+                Assert.False(vm.Job.ShowJobProgress);
+                Assert.Equal(0, vm.Job.JobProgress);
                 Assert.True(item.IsCorrected);
                 Assert.Equal(model, item.ModelPath);
                 Assert.Equal(output, item.CorrectedPath);

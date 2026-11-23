@@ -74,7 +74,7 @@ public sealed class BitmapLifetimeTests
     public async Task RelinkingSavedCompletedResultAfterMissingSourceReloadKeepsRenderedImagesAlive()
     {
         var root = Path.Combine(Path.GetTempPath(), "ccp-bitmap-relink-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         var window = new MainWindow { DataContext = vm };
         try
         {

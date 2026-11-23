@@ -536,7 +536,7 @@ public sealed class MainWindowHeadlessTests
         {
             // The real main window appears after the splash has finished worker startup.
             // Render the post-splash idle state instead of the transient constructor state.
-            Busy = false,
+            Job = { Busy = false },
             IsLightTheme = light,
         };
         PublicFixtureCatalog.Install(vm);

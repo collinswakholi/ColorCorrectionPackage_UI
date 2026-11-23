@@ -655,8 +655,8 @@
                                     </DockPanel>
                                     <TextBlock x:Name="ChartTypeLabel" Text="{Binding Compute.DetectSummary}" Classes="caption"
                                                Margin="0,0,0,6" TextWrapping="Wrap"/>
-                                    <TextBlock x:Name="DetectStatus" Text="{Binding CurrentStage}" Classes="caption"
-                                               Margin="0,0,0,6" IsVisible="{Binding Busy}"/>
+                                    <TextBlock x:Name="DetectStatus" Text="{Binding Job.CurrentStage}" Classes="caption"
+                                               Margin="0,0,0,6" IsVisible="{Binding Job.Busy}"/>
                                     <TextBlock Text="Chart face" Classes="caption" Margin="0,0,0,4"
                                                IsVisible="{Binding Stage.ShowFacePicker}"/>
                                     <ComboBox x:Name="ChartFaceSelect" Classes="config"
@@ -857,13 +857,13 @@
                                             AutomationProperties.Name="Retry engine startup"/>
                                 </Grid>
                             </Border>
-                            <TextBlock x:Name="BatchCurrentImageLabel" Text="{Binding BatchCurrentImageLabel}"
-                                       IsVisible="{Binding ShowBatchProgress}" FontWeight="SemiBold"
+                            <TextBlock x:Name="BatchCurrentImageLabel" Text="{Binding Job.BatchCurrentImageLabel}"
+                                       IsVisible="{Binding Job.ShowBatchProgress}" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" Margin="0,0,0,6"
-                                       ToolTip.Tip="{Binding BatchCurrentImageLabel}"
+                                       ToolTip.Tip="{Binding Job.BatchCurrentImageLabel}"
                                        AutomationProperties.LiveSetting="Polite"/>
                             <ItemsControl x:Name="PipelineChips" ItemsSource="{Binding PipelineSteps}"
-                                          IsVisible="{Binding ShowPipeline}"
+                                          IsVisible="{Binding Job.ShowPipeline}"
                                           Margin="0,0,0,6" HorizontalAlignment="Stretch">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -885,10 +885,10 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <ProgressBar Value="{Binding JobProgress}" Minimum="0" Maximum="100"
+                            <ProgressBar Value="{Binding Job.JobProgress}" Minimum="0" Maximum="100"
                                          Theme="{StaticResource ModernProgressBar}" Margin="0,0,0,8"
-                                         IsVisible="{Binding ShowJobProgress}"
-                                         ToolTip.Tip="{Binding CurrentStage}"
+                                         IsVisible="{Binding Job.ShowJobProgress}"
+                                         ToolTip.Tip="{Binding Job.CurrentStage}"
                                          AutomationProperties.Name="Current image progress"/>
                             <Grid x:Name="ApplyRow" ColumnDefinitions="*,8,Auto">
                                 <Button x:Name="RunButton" Theme="{StaticResource RunButton}"
@@ -897,9 +897,9 @@
                                         AutomationProperties.AcceleratorKey="F5"
                                         AutomationProperties.Name="{Binding ApplyLabel}">
                                     <Grid>
-                                        <TextBlock Text="{Binding ApplyLabel}" IsVisible="{Binding !Busy}"
+                                        <TextBlock Text="{Binding ApplyLabel}" IsVisible="{Binding !Job.Busy}"
                                                    HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding CurrentStage}" IsVisible="{Binding Busy}"
+                                        <TextBlock Text="{Binding Job.CurrentStage}" IsVisible="{Binding Job.Busy}"
                                                    HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                     </Grid>
                                 </Button>
@@ -916,17 +916,17 @@
                                        TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
                             <Button Content="Cancel" Theme="{StaticResource DangerButton}"
                                     Command="{Binding CancelBatchCommand}" Margin="0,8,0,0"
-                                    HorizontalAlignment="Stretch" IsVisible="{Binding Busy}"
+                                    HorizontalAlignment="Stretch" IsVisible="{Binding Job.Busy}"
                                     AutomationProperties.Name="Cancel processing"/>
-                            <StackPanel x:Name="BatchProgress" Margin="0,10,0,0" IsVisible="{Binding ShowBatchProgress}">
+                            <StackPanel x:Name="BatchProgress" Margin="0,10,0,0" IsVisible="{Binding Job.ShowBatchProgress}">
                                 <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right" Text="{Binding BatchProgressPct}" Classes="caption"/>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Job.BatchProgressPct}" Classes="caption"/>
                                     <TextBlock Text="Batch progress" Classes="caption"/>
                                 </DockPanel>
-                                <ProgressBar Value="{Binding BatchProgress}" Minimum="0" Maximum="100"
+                                <ProgressBar Value="{Binding Job.BatchProgress}" Minimum="0" Maximum="100"
                                              Theme="{StaticResource ModernProgressBar}" Margin="0,6,0,0"
                                              AutomationProperties.Name="Overall batch progress"/>
-                                <TextBlock Text="{Binding BatchProgressSummary}" Classes="caption"
+                                <TextBlock Text="{Binding Job.BatchProgressSummary}" Classes="caption"
                                            TextWrapping="Wrap" Margin="0,4,0,0"/>
                             </StackPanel>
                         </StackPanel>
@@ -1623,7 +1623,7 @@
                             Padding="0,10,0,10">
                         <StackPanel>
                             <CheckBox x:Name="BatchPreviewResults" Content="Preview results"
-                                      IsChecked="{Binding BatchPreviewResults}" IsEnabled="{Binding !Busy}"
+                                      IsChecked="{Binding BatchPreviewResults}" IsEnabled="{Binding !Job.Busy}"
                                       AutomationProperties.Name="Preview batch results"/>
                             <TextBlock Text="Turn off to process full images without previews. Save exports them."
                                        Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"/>
@@ -1660,35 +1660,35 @@
                 BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,1,0,0" Padding="16,6">
             <DockPanel>
                 <ProgressBar DockPanel.Dock="Right" Classes="statusProgress" Width="140"
-                             Value="{Binding JobProgress}" Minimum="0" Maximum="100"
+                             Value="{Binding Job.JobProgress}" Minimum="0" Maximum="100"
                              Theme="{StaticResource ModernProgressBar}" VerticalAlignment="Center"
-                             IsVisible="{Binding ShowJobProgress}"
-                             ToolTip.Tip="{Binding CurrentStage}"/>
+                             IsVisible="{Binding Job.ShowJobProgress}"
+                             ToolTip.Tip="{Binding Job.CurrentStage}"/>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0">
-                    <TextBlock Text="{Binding CurrentStage}" Classes="caption" Foreground="{DynamicResource PrimaryBrush}"
+                    <TextBlock Text="{Binding Job.CurrentStage}" Classes="caption" Foreground="{DynamicResource PrimaryBrush}"
                                FontWeight="SemiBold"/>
                     <TextBlock x:Name="StatusDeltaE" Text="{Binding Analysis.StatusDeltaE}" Classes="caption" Margin="12,0,0,0"
                                Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding Analysis.HasMetrics}"/>
                 </StackPanel>
                 <Panel x:Name="StatusDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                        DockPanel.Dock="Left" IsHitTestVisible="False">
-                    <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Busy}"/>
-                    <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Busy}"/>
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Job.Busy}"/>
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Job.Busy}"/>
                     <!-- Drawn last so the last error stays visible over the busy/ready dot. -->
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource ErrorBrush}"
-                             IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                             IsVisible="{Binding Job.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </Panel>
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             AutomationProperties.LiveSetting="Polite">
                     <TextBlock Text="{Binding StatusStateLabel}" Classes="caption" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding DetectionStatus}" Classes="caption" MaxWidth="260" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding Compute.AccelHint}"/>
-                    <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
+                    <TextBlock x:Name="StatusBarText" Text="{Binding Job.Status}" Classes="caption"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                               Classes.error="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               ToolTip.Tip="{Binding ErrorMessage}"
+                               Classes.error="{Binding Job.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               ToolTip.Tip="{Binding Job.ErrorMessage}"
                                AutomationProperties.AutomationId="StatusBarText"
-                               AutomationProperties.Name="{Binding Status}"/>
+                               AutomationProperties.Name="{Binding Job.Status}"/>
                 </StackPanel>
             </DockPanel>
         </Border>

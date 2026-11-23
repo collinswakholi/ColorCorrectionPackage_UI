@@ -80,7 +80,7 @@ public sealed class SaveWorkflowTests
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
             await saving;
             Assert.False(dialogs.WasRequested); // The explicit destination needs no second approval.
-            Assert.StartsWith($"Saved {(stagesEnabled ? 5 : 1)} file(s) as", vm.Status);
+            Assert.StartsWith($"Saved {(stagesEnabled ? 5 : 1)} file(s) as", vm.Job.Status);
             Assert.Equal(stagesEnabled ? 5 : 1, Directory.GetFiles(output).Length);
             foreach (var stage in stagesEnabled ? new[] { "corrected", "ffc", "gc", "wb", "cc" } : new[] { "corrected" })
             {
@@ -145,7 +145,7 @@ public sealed class SaveWorkflowTests
             {
                 Assert.Equal(2, changes);
                 Assert.Equal("{\"ok\":true}", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
-                Assert.StartsWith("Saved 1 file(s)", vm.Status);
+                Assert.StartsWith("Saved 1 file(s)", vm.Job.Status);
             }
             else
             {
@@ -182,7 +182,7 @@ public sealed class SaveWorkflowTests
         try
         {
             await vm.ExecuteSaveCommand.ExecuteAsync(null);
-            Assert.StartsWith("Saved 1 file(s); 1 file(s) failed", vm.Status);
+            Assert.StartsWith("Saved 1 file(s); 1 file(s) failed", vm.Job.Status);
             Assert.Equal("{\"ok\":true}", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
             Assert.False(File.Exists(Path.Combine(output, "sample_corrected.jpg")));
             Assert.Contains(vm.LogEntries, entry => entry.Message.Contains("corrected image is unavailable"));
@@ -222,7 +222,7 @@ public sealed class SaveWorkflowTests
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
             await saving;
             Assert.False(dialogs.WasRequested);
-            Assert.StartsWith("Save failed:", vm.Status);
+            Assert.StartsWith("Save failed:", vm.Job.Status);
             Assert.False(vm.IsSaving);
             Assert.False(vm.ShowSaveProgress);
             Assert.Equal("keep", await File.ReadAllTextAsync(sentinel));
@@ -240,7 +240,7 @@ public sealed class SaveWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
-            Busy = false,
+            Job = { Busy = false },
             OutputDir = output,
             SaveCorrected = false,
             SaveFfc = false,

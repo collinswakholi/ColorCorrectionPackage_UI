@@ -54,8 +54,8 @@ public sealed class StillOnlyWorkflowTests
             var still = Sample();
             vm.AddPaths([clip, still, disguised]);
             Assert.Equal(still, Assert.Single(vm.Session).Path);
-            Assert.Contains("Skipped 2 unsupported", vm.Status);
-            Assert.Contains("video is not supported", vm.Status);
+            Assert.Contains("Skipped 2 unsupported", vm.Job.Status);
+            Assert.Contains("video is not supported", vm.Job.Status);
             Assert.False(SupportedStillImage.IsSupportedFile(clip));
             Assert.False(SupportedStillImage.IsSupportedFile(disguised));
             Assert.True(SupportedStillImage.IsSupportedFile(still));
@@ -93,8 +93,8 @@ public sealed class StillOnlyWorkflowTests
             Assert.Equal(still, item.Path);
             Assert.Same(item, vm.Workspace.Active);
             Assert.False(item.IncludeInBatch);
-            Assert.Contains("Skipped 2 unsupported session", vm.Status);
-            Assert.Contains("Video is not supported", vm.Status);
+            Assert.Contains("Skipped 2 unsupported session", vm.Job.Status);
+            Assert.Contains("Video is not supported", vm.Job.Status);
         }
         finally
         {
@@ -106,7 +106,7 @@ public sealed class StillOnlyWorkflowTests
     [AvaloniaFact]
     public void RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, Compute = { WorkerReady = true } };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }, Compute = { WorkerReady = true } };
         vm.AddPaths([Sample()]);
         Assert.True(vm.Workspace.HasImage);
         Assert.NotNull(vm.Workspace.Active);
@@ -123,7 +123,7 @@ public sealed class StillOnlyWorkflowTests
         Assert.Null(vm.Stage.OriginalPreview);
         Assert.False(vm.DetectCommand.CanExecute(null));
         Assert.False(vm.ApplyCommand.CanExecute(null));
-        Assert.Contains("Video is not supported", vm.Status);
+        Assert.Contains("Video is not supported", vm.Job.Status);
     }
 
     private static string Sample()

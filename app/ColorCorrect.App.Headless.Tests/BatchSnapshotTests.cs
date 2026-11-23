@@ -79,7 +79,7 @@ public sealed class BatchSnapshotTests
     [AvaloniaFact]
     public void RemovedItemCannotInstallAnArrivingModelOrOutput()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         using var removed = new SessionItemViewModel("removed-image.png");
         var model = Path.GetTempFileName();
         try

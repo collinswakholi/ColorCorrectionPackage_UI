@@ -38,7 +38,7 @@ public sealed class AutoDetectEligibilityTests
         {
             await gate.WaitAsync(); held = true;
             vm.Compute.WorkerReady = true;
-            vm.Busy = busy;
+            vm.Job.Busy = busy;
             vm.IsSaving = saving;
             var item = new SessionItemViewModel(imagePath);
             vm.Session.Add(item);
@@ -49,7 +49,7 @@ public sealed class AutoDetectEligibilityTests
             // Simulate the current batch/save completing. A semaphore barrier queues
             // after any erroneous automatic detection, so this observes its eventual
             // execution deterministically without waiting an arbitrary quiet interval.
-            vm.Busy = false;
+            vm.Job.Busy = false;
             vm.IsSaving = false;
             var afterQueuedWork = gate.WaitAsync();
             gate.Release(); held = false;

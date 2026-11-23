@@ -82,7 +82,7 @@ public partial class App : Application
                     ? "Engine ready"
                     : vm.Compute.WorkerStartupComplete
                         ? "Engine unavailable — opening recovery controls"
-                        : string.IsNullOrWhiteSpace(vm.CurrentStage) ? "Starting color engine…" : vm.CurrentStage);
+                        : string.IsNullOrWhiteSpace(vm.Job.CurrentStage) ? "Starting color engine…" : vm.Job.CurrentStage);
             });
             if (finished)
             {

@@ -21,7 +21,7 @@ public sealed class ProcessingSettingsLayoutTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                IsLightTheme = light, Busy = false, Status = "Ready",
+                IsLightTheme = light, Job = { Busy = false, Status = "Ready" },
                 Compute =
                 {
                     WorkerReady = true, WorkerStartupComplete = true, WorkerLine = "Ready",

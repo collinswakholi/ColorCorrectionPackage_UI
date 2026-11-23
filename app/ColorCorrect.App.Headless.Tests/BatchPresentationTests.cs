@@ -22,7 +22,7 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Busy = true, IsBatching = true, IsLightTheme = light,
+                Job = { Busy = true, IsBatching = true }, IsLightTheme = light,
                 Settings = { DoFfc = true, DoGc = true, DoWb = true, DoCc = true },
             };
             var window = new MainWindow { Width = 1000, Height = 640, DataContext = vm };
@@ -87,7 +87,7 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Busy = false, IsLightTheme = light, Settings = { DoFfc = true },
+                Job = { Busy = false }, IsLightTheme = light, Settings = { DoFfc = true },
             };
             for (var i = 0; i < 4; i++)
                 vm.Session.Add(new SessionItemViewModel($"batch-{i + 1}.jpg")
@@ -121,10 +121,10 @@ public sealed class BatchPresentationTests
                 Assert.True(window.BatchMenuScroll.Bounds.Height <= window.ClientSize.Height - 48);
                 window.BatchMenu.IsOpen = false;
 
-                vm.Busy = true;
-                vm.IsBatching = true;
-                vm.ShowBatchProgress = true;
-                vm.BatchCurrentImageLabel = "Image 80 of 80 · " + new string('W', 180) + ".jpg";
+                vm.Job.Busy = true;
+                vm.Job.IsBatching = true;
+                vm.Job.ShowBatchProgress = true;
+                vm.Job.BatchCurrentImageLabel = "Image 80 of 80 · " + new string('W', 180) + ".jpg";
                 typeof(MainWindowViewModel).GetMethod("BeginPipeline", BindingFlags.NonPublic | BindingFlags.Instance)!
                     .Invoke(vm, ["apply"]);
                 Dispatcher.UIThread.RunJobs();

@@ -33,7 +33,7 @@ public sealed class HelpWindowTests
         var window = new MainWindow
         {
             Width = 1002, Height = 672,
-            DataContext = new MainWindowViewModel(persistenceEnabled: false) { Busy = false }
+            DataContext = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }}
         };
         window.Show();
         Dispatcher.UIThread.RunJobs();

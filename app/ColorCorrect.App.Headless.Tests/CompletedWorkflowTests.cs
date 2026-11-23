@@ -11,7 +11,7 @@ public sealed class CompletedWorkflowTests
     [AvaloniaFact]
     public void RelinkButtonRequiresAnActiveMissingImage()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         var window = new ColorCorrect.App.Views.MainWindow { DataContext = vm };
         var available = Path.GetTempFileName();
         using var missing = new SessionItemViewModel(available + ".missing.jpg");
@@ -93,16 +93,16 @@ public sealed class CompletedWorkflowTests
     [AvaloniaFact]
     public void CancelIsAvailableDuringSingleImageWork()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = false }};
         Assert.True(vm.CancelBatchCommand.CanExecute(null)); vm.CancelBatchCommand.Execute(null);
-        Assert.Contains("Completed results are kept", vm.Status);
-        vm.Busy = false; Assert.False(vm.CancelBatchCommand.CanExecute(null));
+        Assert.Contains("Completed results are kept", vm.Job.Status);
+        vm.Job.Busy = false; Assert.False(vm.CancelBatchCommand.CanExecute(null));
     }
 
     [AvaloniaFact]
     public void CancelSignalsCurrentJobWithoutRemovingEarlierBatchResults()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var completed = new SessionItemViewModel("completed.jpg") { IsCorrected = true, ModelPath = "owned-B.json", CorrectedPath = "saved-B.jpg" };
         vm.Session.Add(completed);
         var token = (CancellationToken)typeof(MainWindowViewModel).GetMethod("BeginJob", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(vm, null)!;

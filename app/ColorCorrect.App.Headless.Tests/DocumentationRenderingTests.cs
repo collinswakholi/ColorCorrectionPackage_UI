@@ -21,7 +21,7 @@ public sealed class DocumentationRenderingTests
         var corpus = Path.Combine(root.FullName, "testdata", "acceptance");
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
-            Busy = false, IsLightTheme = true, ProcessExpanded = true,
+            Job = { Busy = false }, IsLightTheme = true, ProcessExpanded = true,
             ModelExpanded = false, LibraryExpanded = false,
         };
         PublicFixtureCatalog.Install(vm);
@@ -53,7 +53,7 @@ public sealed class DocumentationRenderingTests
             // Documentation must not expose build-machine paths from the normal
             // operational log. This is a UI illustration, not a completed fit.
             vm.LogEntries.Clear();
-            vm.Status = "Public samples · Blank.JPG is the FFC reference.";
+            vm.Job.Status = "Public samples · Blank.JPG is the FFC reference.";
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);

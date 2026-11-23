@@ -75,10 +75,10 @@ public partial class MainWindowViewModel
         var elapsed = Stopwatch.StartNew();
         await OnUi(() =>
         {
-            Busy = true;
+            Job.Busy = true;
             BeginPipeline("detect");
-            CurrentStage = "Detect";
-            Status = $"Detecting {item.Name}…";
+            Job.CurrentStage = "Detect";
+            Job.Status = $"Detecting {item.Name}…";
             Log("Detect", $"{item.Name}…");
         }).ConfigureAwait(false);
         try
@@ -102,7 +102,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Status = "Detect cancelled.";
+                Job.Status = "Detect cancelled.";
                 Log("Detect", $"{item.Name}: cancelled.", LogLevel.Warning);
             }).ConfigureAwait(false);
         }
@@ -117,7 +117,7 @@ public partial class MainWindowViewModel
                 if (!Session.Contains(item)) return;
                 if (item == Workspace.Active) OnPropertyChanged(nameof(ReferenceSummary));
                 RefreshDetectSummary();
-                Status = "Detection failed. Previous results are kept.";
+                Job.Status = "Detection failed. Previous results are kept.";
                 Log("Detect", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
                 RefreshOverlay();
             }).ConfigureAwait(false);
@@ -126,7 +126,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 EndPipeline();
                 NotifyRunCommands();
             }).ConfigureAwait(false);
@@ -148,7 +148,7 @@ public partial class MainWindowViewModel
         var fit = !WillUseLoadedModel;
         if (fit && item.Handshake is not { Ok: true })
         {
-            Status = "Detect the chart on this image before fitting.";
+            Job.Status = "Detect the chart on this image before fitting.";
             return;
         }
 
@@ -159,13 +159,13 @@ public partial class MainWindowViewModel
 
         if (await VerifyLoadedFilesAsync(fit) is { } changed)
         {
-            Status = changed;
+            Job.Status = changed;
             return;
         }
 
         if (!await EnsureOutputAllowedAsync())
         {
-            Status = "Output folder not confirmed.";
+            Job.Status = "Output folder not confirmed.";
             return;
         }
 
@@ -188,12 +188,12 @@ public partial class MainWindowViewModel
         var elapsed = Stopwatch.StartNew();
         await OnUi(() =>
         {
-            Busy = true;
+            Job.Busy = true;
             Analysis.IsApplying = true;
             Analysis.Failure = "";
             BeginPipeline(fit ? "fit" : "apply");
-            CurrentStage = fit ? "CC" : "Apply model";
-            Status = fit
+            Job.CurrentStage = fit ? "CC" : "Apply model";
+            Job.Status = fit
                 ? $"Applying {options.Summary()} to {item.Name}…"
                 : $"Applying saved model to {item.Name}…";
             Log("Apply",
@@ -221,7 +221,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Status = "Apply cancelled.";
+                Job.Status = "Apply cancelled.";
                 Log("Apply", $"{item.Name}: cancelled.", LogLevel.Warning);
             }).ConfigureAwait(false);
         }
@@ -229,7 +229,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Status = fit ? "Apply failed." : "Model apply failed.";
+                Job.Status = fit ? "Apply failed." : "Model apply failed.";
                 Analysis.Failure = Sentence(ex.Message);
                 Log("Apply", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
             }).ConfigureAwait(false);
@@ -238,7 +238,7 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 Analysis.IsApplying = false;
                 EndPipeline();
                 NotifyRunCommands();
@@ -267,9 +267,9 @@ public partial class MainWindowViewModel
     private void CancelBatch()
     {
         _jobCts?.Cancel();
-        Status = "Cancelling current operation… Completed results are kept.";
-        Log("Processing", Status, LogLevel.Warning);
-        ToastService.ShowWarning(Status);
+        Job.Status = "Cancelling current operation… Completed results are kept.";
+        Log("Processing", Job.Status, LogLevel.Warning);
+        ToastService.ShowWarning(Job.Status);
     }
 
     private async Task RunBatchAsync(bool applyModel)
@@ -281,29 +281,29 @@ public partial class MainWindowViewModel
 
         if (!await EnsureOutputAllowedAsync())
         {
-            Status = "Output folder not confirmed.";
+            Job.Status = "Output folder not confirmed.";
             return;
         }
 
         if (applyModel && !File.Exists(LoadedModelPath))
         {
-            Status = "Load or fit a model first.";
+            Job.Status = "Load or fit a model first.";
             return;
         }
 
         if (await VerifyLoadedFilesAsync(fit: !applyModel) is { } changed)
         {
-            Status = changed;
+            Job.Status = changed;
             return;
         }
 
         var items = Session.Where(item => item.IncludeInBatch).ToArray();
         if (items.Length == 0)
         {
-            Status = Session.Count > 0
+            Job.Status = Session.Count > 0
                 ? "Select at least one still in Batch. FFC whites and corrected outputs start unchecked."
                 : "Add images to the session before running a batch.";
-            ToastService.ShowWarning(Status);
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
@@ -318,12 +318,12 @@ public partial class MainWindowViewModel
         // images wait in the queue. Per-image results then own their own replay copies.
         await OnUi(() =>
         {
-            Busy = true;
+            Job.Busy = true;
             if (!applyModel)
                 fitSnapshots = items.ToDictionary(item => item, item => CaptureBatchFit(item, options, useAll));
             BeginCapturedPipeline(applyModel ? "apply" : "fit", options);
-            CurrentStage = "Preparing";
-            Status = "Preparing batch assets…";
+            Job.CurrentStage = "Preparing";
+            Job.Status = "Preparing batch assets…";
         }).ConfigureAwait(false);
         try
         {
@@ -337,32 +337,32 @@ public partial class MainWindowViewModel
             _run.Release();
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 EndPipeline();
-                Status = ex is OperationCanceledException ? "Batch cancelled. Previous results are kept." : $"Could not prepare batch assets: {ex.Message}";
-                Log("Batch", Status, ex is OperationCanceledException ? LogLevel.Warning : LogLevel.Error);
+                Job.Status = ex is OperationCanceledException ? "Batch cancelled. Previous results are kept." : $"Could not prepare batch assets: {ex.Message}";
+                Log("Batch", Job.Status, ex is OperationCanceledException ? LogLevel.Warning : LogLevel.Error);
                 NotifyRunCommands();
             }).ConfigureAwait(false);
             return;
         }
         await OnUi(() =>
         {
-            Busy = true;
-            IsBatching = true;
+            Job.Busy = true;
+            Job.IsBatching = true;
             BeginCapturedPipeline(applyModel ? "apply" : "fit", options);
             foreach (var queued in items)
             {
                 queued.HasProcessingProgress = true; queued.IsProcessing = false;
                 queued.ProcessingProgress = 0; queued.ProcessingStage = "Queued"; queued.ProcessingStatus = "Queued";
             }
-            BatchProgressSummary = $"0 complete · 0 failed · {items.Length} queued";
-            CurrentStage = applyModel ? "Apply model" : "Fit";
-            ShowBatchProgress = true;
-            ShowJobProgress = true;
-            BatchProgress = 0;
-            JobProgress = 0;
-            BatchLabel = applyModel ? "Apply current model" : "Fit from chart";
-            Status = applyModel ? "Batch apply model…" : "Batch fit from chart…";
+            Job.BatchProgressSummary = $"0 complete · 0 failed · {items.Length} queued";
+            Job.CurrentStage = applyModel ? "Apply model" : "Fit";
+            Job.ShowBatchProgress = true;
+            Job.ShowJobProgress = true;
+            Job.BatchProgress = 0;
+            Job.JobProgress = 0;
+            Job.BatchLabel = applyModel ? "Apply current model" : "Fit from chart";
+            Job.Status = applyModel ? "Batch apply model…" : "Batch fit from chart…";
             Log("Batch", applyModel
                 ? $"Apply current model · {items.Length} image(s) · {(options.BatchPreviewResults ? "previews on" : "previews off · full images kept for Save")}"
                 : $"Fit from chart · {items.Length} image(s) · {(options.BatchPreviewResults ? "previews on" : "previews off · full images kept for Save")} · {options.Summary()}",
@@ -380,9 +380,9 @@ public partial class MainWindowViewModel
             {
                 await OnUi(() =>
                 {
-                    BatchLabel = $"Apply · {items.Length} image(s) · memory-safe queue";
-                    Status = BatchLabel;
-                    CurrentStage = "Apply model";
+                    Job.BatchLabel = $"Apply · {items.Length} image(s) · memory-safe queue";
+                    Job.Status = Job.BatchLabel;
+                    Job.CurrentStage = "Apply model";
                 }).ConfigureAwait(false);
 
                 for (var i = 0; i < items.Length; i++)
@@ -418,8 +418,8 @@ public partial class MainWindowViewModel
                     }
                     await OnUi(() =>
                     {
-                        BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
-                        BatchProgress = 100.0 * (i + 1) / items.Length;
+                        Job.BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
+                        Job.BatchProgress = 100.0 * (i + 1) / items.Length;
                     }).ConfigureAwait(false);
                 }
             }
@@ -441,7 +441,7 @@ public partial class MainWindowViewModel
                         present = Session.Contains(item);
                         if (!present) return;
                         BeginBatchImage(item, i, items.Length, snapshot.Options ?? options, applyModel: false);
-                        Status = BatchLabel;
+                        Job.Status = Job.BatchLabel;
                     }).ConfigureAwait(false);
                     if (!present) continue;
 
@@ -510,8 +510,8 @@ public partial class MainWindowViewModel
                     }
                     await OnUi(() =>
                     {
-                        BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
-                        BatchProgress = 100.0 * (i + 1) / items.Length;
+                        Job.BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total";
+                        Job.BatchProgress = 100.0 * (i + 1) / items.Length;
                     }).ConfigureAwait(false);
                 }
             }
@@ -520,25 +520,25 @@ public partial class MainWindowViewModel
         {
             await OnUi(() =>
             {
-                if (!cancel.IsCancellationRequested) BatchProgress = 100;
+                if (!cancel.IsCancellationRequested) Job.BatchProgress = 100;
                 foreach (var queued in items.Where(item => item.ProcessingStatus == "Queued"))
                 {
                     queued.ProcessingStatus = cancel.IsCancellationRequested ? "Cancelled" : "Removed";
                     queued.ProcessingStage = queued.ProcessingStatus;
                 }
                 if (_batchCurrentItem is { } unfinished) FinishBatchImage(unfinished, false, cancel.IsCancellationRequested ? "Cancelled" : "Failed");
-                BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total" + (cancel.IsCancellationRequested ? " · Cancelled" : "");
-                IsBatching = false;
-                Busy = false;
+                Job.BatchProgressSummary = $"{done} complete · {failed} failed · {items.Length} total" + (cancel.IsCancellationRequested ? " · Cancelled" : "");
+                Job.IsBatching = false;
+                Job.Busy = false;
                 EndPipeline();
-                ShowBatchProgress = false;
-                Status = cancel.IsCancellationRequested
+                Job.ShowBatchProgress = false;
+                Job.Status = cancel.IsCancellationRequested
                     ? $"Batch cancelled · {done} done · {failed} failed."
                     : $"Batch complete · {done} done · {failed} failed.";
-                Log("Batch", Status, failed > 0 || cancel.IsCancellationRequested ? LogLevel.Warning : LogLevel.Success);
+                Log("Batch", Job.Status, failed > 0 || cancel.IsCancellationRequested ? LogLevel.Warning : LogLevel.Success);
                 if (failed == 0 && !cancel.IsCancellationRequested)
                 {
-                    ToastService.ShowSuccess(Status);
+                    ToastService.ShowSuccess(Job.Status);
                 }
                 NotifyRunCommands();
                 RefreshSessionUi();
@@ -552,7 +552,7 @@ public partial class MainWindowViewModel
         if (!Session.Contains(item)) return;
         if (!result.Ok && item.Handshake is { Ok: true })
         {
-            Status = "Detection did not complete. Previous detection and results are kept.";
+            Job.Status = "Detection did not complete. Previous detection and results are kept.";
             Log("Detect", WithWorkerStderr(result.Error), LogLevel.Warning);
             NotifyRunCommands();
             return;
@@ -587,7 +587,7 @@ public partial class MainWindowViewModel
 
             if (!quiet)
             {
-                Status = "Detect complete.";
+                Job.Status = "Detect complete.";
                 ToastService.ShowSuccess(summary);
             }
 
@@ -607,7 +607,7 @@ public partial class MainWindowViewModel
 
             if (!quiet)
             {
-                Status = "No chart found.";
+                Job.Status = "No chart found.";
                 ToastService.ShowWarning($"{item.Name}: no chart found.");
             }
 
@@ -626,7 +626,7 @@ public partial class MainWindowViewModel
 
             if (!quiet)
             {
-                Status = "Detect failed.";
+                Job.Status = "Detect failed.";
             }
 
             var details = new List<string>(DetectDetails(item, result, null));
@@ -674,7 +674,7 @@ public partial class MainWindowViewModel
             var error = string.IsNullOrWhiteSpace(outcome.Error) ? "Correction failed." : outcome.Error.Trim();
             Analysis.Failure = Sentence(error);
 
-            Status = fitted ? "Apply failed." : "Model apply failed.";
+            Job.Status = fitted ? "Apply failed." : "Model apply failed.";
             var details = new List<string>(CorrectionSettingsDetails(item.Handshake, applyOnly: !fitted));
             var stderr = WorkerErrorDetails();
             if (stderr is not null)
@@ -757,8 +757,8 @@ public partial class MainWindowViewModel
         var detail = $"{item.Name} · {(fitted ? "fit complete" : "model applied")}";
         if (!fromBatch)
         {
-            Status = fitted ? "Apply complete." : "Model applied.";
-            ToastService.ShowSuccess(Status);
+            Job.Status = fitted ? "Apply complete." : "Model applied.";
+            ToastService.ShowSuccess(Job.Status);
         }
 
         RememberJobAccel(outcome.PlaneBackend, outcome.ApplyBackend, outcome.DetectBackend);

@@ -34,7 +34,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void EachImageResetsStagesAndCombinedLutDoesNotInventSequentialStages()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true, Settings = { DoFfc = false, DoWb = true } };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }, Settings = { DoFfc = false, DoWb = true } };
         using var first = new SessionItemViewModel("first.jpg");
         using var second = new SessionItemViewModel("second.jpg");
         var captured = new CorrectionOptions { DoFfc = true, DoGc = true, DoWb = false, DoCc = true };
@@ -49,7 +49,7 @@ public sealed class BatchProgressTests
         Call(vm, "ApplyEngineProgress", "Combined LUT · GC + CC");
         Assert.All(vm.PipelineSteps.Where(x => x.Key is "gc" or "cc"), step => { Assert.True(step.IsActive); Assert.False(step.IsDone); });
         Assert.False(vm.PipelineSteps.Single(x => x.Key == "wb").IsActive);
-        Assert.InRange(first.ProcessingProgress, 1, 99); Assert.Equal(first.ProcessingProgress / 2, vm.BatchProgress, 6);
+        Assert.InRange(first.ProcessingProgress, 1, 99); Assert.Equal(first.ProcessingProgress / 2, vm.Job.BatchProgress, 6);
         Call(vm, "ApplyEngineProgress", "Combined LUT complete");
         Assert.All(vm.PipelineSteps.Where(x => x.Key is "gc" or "cc"), step => Assert.Equal("Complete", step.StatusText));
         Call(vm, "ApplyEngineProgress", "Writing outputs complete");
@@ -57,7 +57,7 @@ public sealed class BatchProgressTests
         Call(vm, "FinishBatchImage", first, true, null);
         Assert.Equal(100, first.ProcessingProgress); Assert.Equal("Complete", first.ProcessingStatus);
         Call(vm, "BeginBatchImage", second, 1, 2, captured, true);
-        Assert.Equal(0, vm.JobProgress); Assert.Equal(50, vm.BatchProgress);
+        Assert.Equal(0, vm.Job.JobProgress); Assert.Equal(50, vm.Job.BatchProgress);
         Assert.All(vm.PipelineSteps.Where(x => x.IsEnabled), step => Assert.Equal("Pending", step.StatusText));
         Call(vm, "ApplyEngineProgress", "FFC");
         Call(vm, "FinishBatchImage", second, false, "Cancelled");
@@ -68,7 +68,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void IdentityApplyAndFailureNeverMarkUnreportedColorStagesComplete()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var item = new SessionItemViewModel("identity.jpg");
         Call(vm, "BeginBatchImage", item, 0, 1, new CorrectionOptions { DoGc = false, DoWb = false, DoCc = false }, true);
         Call(vm, "ApplyEngineProgress", "Loading image");
@@ -82,7 +82,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void StartingFusedGcDoesNotCompleteFfcBeforeWorkerConfirmation()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var item = new SessionItemViewModel("fused.jpg");
         Call(vm, "BeginBatchImage", item, 0, 1, new CorrectionOptions { DoFfc = true }, false);
         Call(vm, "ApplyEngineProgress", "FFC");
@@ -124,7 +124,7 @@ public sealed class BatchProgressTests
     public async Task PreviewOffSurvivesSessionReloadAndOnlyExplicitRequestDisplaysResult()
     {
         var root = Path.Combine(Path.GetTempPath(), "ccp-preview-off-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         try
         {
             var source = Path.Combine(root, "source.png"); var corrected = Path.Combine(root, "corrected.png");
