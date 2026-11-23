@@ -45,8 +45,11 @@ public partial class CatalogItemViewModel : ObservableObject, IDisposable
     {
         var gen = ++_loadGen;
         Bitmap? bmp;
+        var gate = ColorCorrect.App.Services.StillImageDecoder.ThumbnailGate;
+        await gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (gen != _loadGen) return;
             bmp = await Task.Run(() =>
             {
                 return ColorCorrect.App.Services.StillImageDecoder.Decode(Path, 72);
@@ -55,6 +58,10 @@ public partial class CatalogItemViewModel : ObservableObject, IDisposable
         catch
         {
             return;
+        }
+        finally
+        {
+            gate.Release();
         }
 
         if (bmp is null || gen != _loadGen)

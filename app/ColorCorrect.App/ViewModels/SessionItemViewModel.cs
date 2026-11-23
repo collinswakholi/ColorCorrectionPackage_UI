@@ -20,6 +20,11 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _includeInBatch = true;
     [ObservableProperty] private string _detectLabel = "";
     [ObservableProperty] private Bitmap? _thumb;
+    /// <summary>Why the thumbnail could not be decoded; empty while loading or after success.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThumbFailed))]
+    private string _thumbError = "";
+    public bool ThumbFailed => ThumbError.Length > 0;
     [ObservableProperty] private bool _previewSuppressed;
     [ObservableProperty] private bool _hasProcessingProgress;
     [ObservableProperty] private bool _isProcessing;
@@ -148,17 +153,28 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         var path = Path;
         AssetIdentity? identity = null;
         Bitmap? bmp;
+        var gate = ColorCorrect.App.Services.StillImageDecoder.ThumbnailGate;
+        await gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (gen != _loadGen) return; // replaced or relinked while queued
             bmp = await Task.Run(() =>
             {
                 if (SourceIdentity is null && File.Exists(path)) identity = AssetIdentity.Capture(path);
                 return ColorCorrect.App.Services.StillImageDecoder.Decode(path, 96);
             }).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
+            var reason = ex is FileNotFoundException or DirectoryNotFoundException
+                ? "File not found."
+                : ex is InvalidDataException ? "Unsupported or damaged image." : ex.Message;
+            await Dispatcher.UIThread.InvokeAsync(() => { if (gen == _loadGen) ThumbError = reason; });
             return;
+        }
+        finally
+        {
+            gate.Release();
         }
 
         if (bmp is null || gen != _loadGen)
@@ -176,6 +192,7 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
             }
 
             SourceIdentity ??= identity;
+            ThumbError = "";
             var old = Thumb;
             Thumb = bmp;
             old?.Dispose();

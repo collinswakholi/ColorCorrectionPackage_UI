@@ -496,8 +496,18 @@
                                                         <Border Classes="thumbTile"
                                                                 Classes.Active="{Binding IsActive}"
                                                                 Classes.Selected="{Binding IsSelected}">
-                                                            <Image Source="{Binding Thumb}" Stretch="UniformToFill"
-                                                                   AutomationProperties.Name="{Binding SessionAutomationName}"/>
+                                                            <Panel>
+                                                                <Image Source="{Binding Thumb}" Stretch="UniformToFill"
+                                                                       AutomationProperties.Name="{Binding SessionAutomationName}"/>
+                                                                <!-- Decode failure: say so instead of leaving a blank tile. -->
+                                                                <TextBlock Text="No preview" Classes="caption" TextWrapping="Wrap"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           TextAlignment="Center" Margin="4"
+                                                                           Foreground="{DynamicResource ErrorBrush}"
+                                                                           IsVisible="{Binding ThumbFailed}"
+                                                                           ToolTip.Tip="{Binding ThumbError}"
+                                                                           AutomationProperties.Name="{Binding ThumbError, StringFormat='No preview: {0}'}"/>
+                                                            </Panel>
                                                         </Border>
                                                         <Border Width="8" Height="8" CornerRadius="{DynamicResource RadiusSm}" Margin="4,4,0,0"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Top"
