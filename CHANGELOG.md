@@ -9,6 +9,7 @@
 - Fix a crash when fitting linear, PLS or NN corrections with polynomial degree 7.
 - Reject out-of-range flat-field settings (bins 2–1000, odd smoothing window 1–255, degree 1–10, NN iterations 1–100000) instead of running unbounded fits. Every value the app offers stays valid.
 - Refuse images above 200 megapixels (configurable with `CCP_MAX_IMAGE_MEGAPIXELS`) before decoding them, reject empty images, and report 16-bit PNG input as PNG rather than TIFF. Embedded-profile conversion no longer needs a second full-size copy of the image.
+- Chart detection reports an oversized image with code `image_too_large` (it previously used `image_decode_failed`), using the same `CCP_MAX_IMAGE_MEGAPIXELS` limit as the other commands.
 - Leave chart samples with non-finite values out of correction fits, and fail fits that would produce non-finite coefficients.
 - The engine keeps serving after a request line with invalid UTF-8, rejects non-path entries in apply image lists, reports unwritable output and preview folders, bounds its detection cache and removes its temporary detection files on exit.
 - Preview PNGs are complete before a request returns, failed preview writes are reported, and at most four preview encodes run at once.
