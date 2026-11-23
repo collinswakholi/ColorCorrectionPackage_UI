@@ -1,6 +1,6 @@
 //! GPU-only fallback for WSL's Vulkan/D3D12 translation driver. It does not
 //! emulate missing graphics features or register a CPU tensor backend.
-use burn::tensor::wgpu::{wgpu, WgpuSetup};
+use burn::tensor::wgpu::{WgpuSetup, wgpu};
 use burn::tensor::{Device, Tensor, TensorData};
 use sha2::{Digest, Sha256};
 use std::{

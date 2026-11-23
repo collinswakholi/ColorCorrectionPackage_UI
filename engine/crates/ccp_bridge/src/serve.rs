@@ -64,7 +64,10 @@ fn with_accel(mut value: Value) -> Value {
         }
         if let Some(plane) = last_plane_ep() {
             obj.insert("plane_backend".into(), json!(plane));
-            obj.insert("inference".into(),json!({"plane":ccp_detect::plane::last_plane_inference()}));
+            obj.insert(
+                "inference".into(),
+                json!({"plane":ccp_detect::plane::last_plane_inference()}),
+            );
         }
     }
     value
@@ -119,9 +122,7 @@ fn detect_settings(state: &ServeState, req: &Value) -> DetectSettings {
 
 fn detect_cache_key(path: &Path, settings: &DetectSettings) -> String {
     use ccp_detect::cache_key::{model_cache_identity, runtime_cache_identity};
-    use ccp_detect::paths::{
-        primary_onnx_path, recall_onnx_path,
-    };
+    use ccp_detect::paths::{primary_onnx_path, recall_onnx_path};
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let metadata = std::fs::metadata(path).ok();
     let deploy = if settings.deploy_dir.as_os_str().is_empty() {
@@ -129,13 +130,10 @@ fn detect_cache_key(path: &Path, settings: &DetectSettings) -> String {
     } else {
         settings.deploy_dir.clone()
     };
-    let models = [
-        primary_onnx_path(&deploy),
-        recall_onnx_path(&deploy),
-    ]
-    .iter()
-    .map(|p| model_cache_identity(p))
-    .collect::<Vec<_>>();
+    let models = [primary_onnx_path(&deploy), recall_onnx_path(&deploy)]
+        .iter()
+        .map(|p| model_cache_identity(p))
+        .collect::<Vec<_>>();
     format!(
         "{}|{:?}|{:?}|{}|{:?}|{}",
         canonical.display(),
@@ -171,9 +169,11 @@ fn identify_detection_handshake(mut handshake: Value) -> Value {
 }
 
 fn ready_title(warmed: bool, policy: &str) -> String {
-    #[cfg(feature="ort-plane")]
+    #[cfg(feature = "ort-plane")]
     if warmed {
-        if let Some(actual)=ccp_detect::last_detect_ep() {return format!("Warmed · {actual} inference");}
+        if let Some(actual) = ccp_detect::last_detect_ep() {
+            return format!("Warmed · {actual} inference");
+        }
     }
     let report = probe_accelerators(policy);
     let warm = if warmed { "Warmed" } else { "Ready" };
@@ -205,11 +205,15 @@ fn cmd_devices(state: &ServeState, req: &Value) -> Value {
     let mut v = serde_json::to_value(&report).unwrap_or_else(|_| json!({}));
     if let Some(obj) = v.as_object_mut() {
         obj.insert("ok".into(), json!(true));
-        #[cfg(feature="ort-plane")]
+        #[cfg(feature = "ort-plane")]
         if state.warmed {
-            let inference=ccp_detect::infer_ort::inference_records(false);
-            if inference.pointer("/detect/requested_policy").and_then(Value::as_str)==Some(policy.as_str()) {
-                obj.insert("verified_inference".into(),inference);
+            let inference = ccp_detect::infer_ort::inference_records(false);
+            if inference
+                .pointer("/detect/requested_policy")
+                .and_then(Value::as_str)
+                == Some(policy.as_str())
+            {
+                obj.insert("verified_inference".into(), inference);
             }
         }
     }
@@ -249,19 +253,27 @@ fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
 }
 
 fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
-    let inference=cmd_warmup(state,req);
-    let mut lut=Vec::new();
-    for b in 0..2 {for g in 0..2 {for r in 0..2 {lut.extend_from_slice(&[r as f32,g as f32,b as f32]);}}}
-    let mut pixels=vec![0.25,0.5,0.75];
-    let cpu=json_bool(req,&["force_cpu"],false);
-    let correction=if cpu {
-        ccp_detect::lut_chunks::apply_chunks(&mut pixels,&lut,2,1,|_|Err("CPU requested".into()))
-            .map(|_|json!({"status":"verified","backend":"cpu","fallback":null}))
+    let inference = cmd_warmup(state, req);
+    let mut lut = Vec::new();
+    for b in 0..2 {
+        for g in 0..2 {
+            for r in 0..2 {
+                lut.extend_from_slice(&[r as f32, g as f32, b as f32]);
+            }
+        }
+    }
+    let mut pixels = vec![0.25, 0.5, 0.75];
+    let cpu = json_bool(req, &["force_cpu"], false);
+    let correction = if cpu {
+        ccp_detect::lut_chunks::apply_chunks(&mut pixels, &lut, 2, 1, |_| {
+            Err("CPU requested".into())
+        })
+        .map(|_| json!({"status":"verified","backend":"cpu","fallback":null}))
     } else {
         ccp_detect::lut_wgpu::apply(&mut pixels,&lut,2)
             .map(|actual|json!({"status":"verified","backend":actual.backend,"fallback":actual.chunks.fallback_reason}))
     };
-    let correction=correction.unwrap_or_else(|reason|json!({"status":"failed","error":reason}));
+    let correction = correction.unwrap_or_else(|reason| json!({"status":"failed","error":reason}));
     let verified = inference["ok"] == true && correction["status"] == "verified";
     let mut reply = json!({"ok":verified, "setup_verified":verified,
         "inference":inference,"correction":correction});
@@ -310,7 +322,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     sync_runtime(state, req);
     let settings = detect_settings(state, req);
     if json_bool(req, &["retry_inference"], false) {
-        #[cfg(feature="ort-plane")]
+        #[cfg(feature = "ort-plane")]
         ccp_detect::reset_inference_sessions();
         clear_detect_cache(state);
     }
@@ -614,7 +626,14 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
                 .and_then(|s| s.to_str())
                 .unwrap_or(img)
         ));
-        match apply_saved_to_image_ex_with_progress(&saved, Path::new(img), out, preview, &apply, &mut emit_progress) {
+        match apply_saved_to_image_ex_with_progress(
+            &saved,
+            Path::new(img),
+            out,
+            preview,
+            &apply,
+            &mut emit_progress,
+        ) {
             Ok(report) => {
                 let mut row = json!({
                     "ok": true,
@@ -737,7 +756,14 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
         "cc" | "corrected" => {}
         other => return fail(ErrorCode::InvalidRequest, format!("unknown stage: {other}")),
     }
-    match apply_saved_to_image_ex_with_progress(&saved, &image, &dummy, Some(&preview_dir), &apply, &mut emit_progress) {
+    match apply_saved_to_image_ex_with_progress(
+        &saved,
+        &image,
+        &dummy,
+        Some(&preview_dir),
+        &apply,
+        &mut emit_progress,
+    ) {
         Ok(report) => {
             let mut row = json!({
                 "ok": true,
@@ -1172,8 +1198,14 @@ mod tests {
         assert_eq!(reply["ok"], false);
         assert_eq!(state.policy, "cpu");
         assert_eq!(ccp_detect::runtime_policy().as_str(), "cpu");
-        assert_eq!(ccp_detect::runtime_assignment().detect, auto.assignment.detect);
-        assert_eq!(ccp_detect::runtime_assignment().plane, auto.assignment.plane);
+        assert_eq!(
+            ccp_detect::runtime_assignment().detect,
+            auto.assignment.detect
+        );
+        assert_eq!(
+            ccp_detect::runtime_assignment().plane,
+            auto.assignment.plane
+        );
         assert_eq!(ccp_detect::runtime_assignment().apply, "cpu");
     }
 

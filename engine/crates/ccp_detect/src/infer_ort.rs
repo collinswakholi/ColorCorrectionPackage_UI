@@ -19,18 +19,33 @@ static DETECT_PRIMARY: Mutex<Option<CachedInference>> = Mutex::new(None);
 static DETECT_RECALL: Mutex<Option<CachedInference>> = Mutex::new(None);
 
 pub fn inference_records(include_recall: bool) -> serde_json::Value {
-    let detect=last_record(false);
-    let recall=if include_recall {last_record(true)} else {None};
+    let detect = last_record(false);
+    let recall = if include_recall {
+        last_record(true)
+    } else {
+        None
+    };
     serde_json::json!({"detect":detect,"recall":recall})
 }
 fn last_record(recall: bool) -> Option<ExecutionRecord> {
-    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
-    cache.lock().ok().and_then(|c|c.as_ref().map(|active|active.record.clone()))
+    let cache = if recall {
+        &DETECT_RECALL
+    } else {
+        &DETECT_PRIMARY
+    };
+    cache
+        .lock()
+        .ok()
+        .and_then(|c| c.as_ref().map(|active| active.record.clone()))
 }
 
 pub(crate) fn clear_sessions() {
-    if let Ok(mut cache) = DETECT_PRIMARY.lock() { *cache = None; }
-    if let Ok(mut cache) = DETECT_RECALL.lock() { *cache = None; }
+    if let Ok(mut cache) = DETECT_PRIMARY.lock() {
+        *cache = None;
+    }
+    if let Ok(mut cache) = DETECT_RECALL.lock() {
+        *cache = None;
+    }
 }
 
 pub fn last_detect_ep() -> Option<String> {
@@ -50,11 +65,16 @@ fn last_detect_ep_for(recall: bool) -> Option<String> {
 }
 
 fn with_detect_session<F, T>(model_path: &Path, recall: bool, f: F) -> Result<T, String>
-where F: FnMut(&mut InferenceSession, &str) -> Result<T, String>,
+where
+    F: FnMut(&mut InferenceSession, &str) -> Result<T, String>,
 {
-    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
-    let mut guard=cache.lock().map_err(|e|e.to_string())?;
-    crate::gpu_inference::execute(&mut guard,model_path,f)
+    let cache = if recall {
+        &DETECT_RECALL
+    } else {
+        &DETECT_PRIMARY
+    };
+    let mut guard = cache.lock().map_err(|e| e.to_string())?;
+    crate::gpu_inference::execute(&mut guard, model_path, f)
 }
 
 fn letterbox_to_nchw(canvas: &[u8], imgsz: i32) -> Vec<f32> {
@@ -146,28 +166,30 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
     let imgsz = PRIMARY_SIZE;
     let chw = vec![0.0f32; (3 * imgsz * imgsz) as usize];
     match with_detect_session(&primary, false, |session, ep| {
-            let (dims,data)=session.forward(chw.clone(),imgsz as usize)?;
-            validate_output(&dims,&data)?;
-            Ok(ep.to_string())
-        }) {
-            Ok(ep) => {
-                result.ok = true;
-                result.device = ep;
-                if result.device.contains(":wgpu:") { result.runtime="burn-wgpu".into(); }
-                result.json = warmup_json(&result.device);
-                result.inference = inference_records(false);
-                result
+        let (dims, data) = session.forward(chw.clone(), imgsz as usize)?;
+        validate_output(&dims, &data)?;
+        Ok(ep.to_string())
+    }) {
+        Ok(ep) => {
+            result.ok = true;
+            result.device = ep;
+            if result.device.contains(":wgpu:") {
+                result.runtime = "burn-wgpu".into();
             }
-            Err(err) if is_oom(&err) => {
-                result.error = format!("failed: oom_on_warmup ({err})");
-                result.error_code = "inference_failed".into();
-                result
-            }
-            Err(err) => {
-                result.error = err;
-                result.error_code = "inference_failed".into();
-                result
-            }
+            result.json = warmup_json(&result.device);
+            result.inference = inference_records(false);
+            result
+        }
+        Err(err) if is_oom(&err) => {
+            result.error = format!("failed: oom_on_warmup ({err})");
+            result.error_code = "inference_failed".into();
+            result
+        }
+        Err(err) => {
+            result.error = err;
+            result.error_code = "inference_failed".into();
+            result
+        }
     }
 }
 
@@ -238,7 +260,9 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
         }
     };
     result.device = last_detect_ep_for(false).unwrap_or_else(|| "unknown".into());
-    if result.device.contains(":wgpu:") { result.runtime="burn-wgpu".into(); }
+    if result.device.contains(":wgpu:") {
+        result.runtime = "burn-wgpu".into();
+    }
     result.recall_source = "primary".into();
     let mut charts = assemble_charts(&dets, &settings.prefer, crop, width, height);
     if charts.is_empty() && settings.allow_recall {
@@ -265,7 +289,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
                     result.recall_source = "recall_1536".into();
                     charts = assemble_charts(&dets, &settings.prefer, crop, width, height);
                 }
-                Err(err) => return failed_recall(result,err),
+                Err(err) => return failed_recall(result, err),
             }
         }
     }
@@ -298,12 +322,12 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
 /// Recall only runs after primary produced no usable chart. An unavailable
 /// recall engine is not evidence that the photograph contains no chart.
 fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
-    result.ok=false;
+    result.ok = false;
     result.error=format!("Recall chart detection failed: {reason}. Check setup, choose Auto or CPU, and retry detection.");
-    result.recall_source="failed".into();
-    result.error_code="inference_failed".into();
-    result.inference=inference_records(false);
-    result.inference["recall_error"]=serde_json::json!(reason);
+    result.recall_source = "failed".into();
+    result.error_code = "inference_failed".into();
+    result.inference = inference_records(false);
+    result.inference["recall_error"] = serde_json::json!(reason);
     result
 }
 
@@ -311,12 +335,18 @@ fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
 mod recall_failure_tests {
     #[test]
     fn failed_recall_is_not_reported_as_a_no_chart_result() {
-        let result=super::failed_recall(crate::DetectResult::default(),"CPU execution failed after GPU was unavailable".into());
+        let result = super::failed_recall(
+            crate::DetectResult::default(),
+            "CPU execution failed after GPU was unavailable".into(),
+        );
         assert!(!result.ok);
         assert!(result.error.contains("Recall chart detection failed"));
         assert!(result.error.contains("CPU execution failed"));
-        assert_ne!(result.error,"no lattice");
-        assert_eq!(result.recall_source,"failed");
-        assert_eq!(result.inference["recall_error"],"CPU execution failed after GPU was unavailable");
+        assert_ne!(result.error, "no lattice");
+        assert_eq!(result.recall_source, "failed");
+        assert_eq!(
+            result.inference["recall_error"],
+            "CPU execution failed after GPU was unavailable"
+        );
     }
 }

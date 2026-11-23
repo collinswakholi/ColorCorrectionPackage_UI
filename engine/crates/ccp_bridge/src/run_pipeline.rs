@@ -41,9 +41,7 @@ use ccp_core::stages::{
 };
 use ccp_core::{parse_rgb_color_space, parse_white_point, RIDGE_LAMBDA};
 use ccp_detect::plane::detect_plane_or_full;
-use ccp_detect::{
-    runtime_policy, DevicePolicy,
-};
+use ccp_detect::{runtime_policy, DevicePolicy};
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder, RgbImage as Rgb8};
 use jpeg_encoder::{ColorType as JpegColorType, Encoder as JpegEncoder, SamplingFactor};
@@ -62,12 +60,18 @@ const PREVIEW_RGB_MAGIC: &[u8; 8] = b"CCPRGB8\n";
 thread_local! { static CPU_LUT_REQUEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 thread_local! { static AUTO_LUT_REQUEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 
-pub fn set_cpu_lut_request(cpu: bool) { CPU_LUT_REQUEST.set(cpu); }
-pub fn set_auto_lut_request(auto: bool) { AUTO_LUT_REQUEST.set(auto); }
+pub fn set_cpu_lut_request(cpu: bool) {
+    CPU_LUT_REQUEST.set(cpu);
+}
+pub fn set_auto_lut_request(auto: bool) {
+    AUTO_LUT_REQUEST.set(auto);
+}
 
 // Small previews do not amortize GPU startup and transfer overhead. This is a
 // conservative size policy, not a claim to benchmark the user's hardware.
-fn auto_uses_cpu(pixels: usize) -> bool { pixels < 1_048_576 }
+fn auto_uses_cpu(pixels: usize) -> bool {
+    pixels < 1_048_576
+}
 
 /// Concurrent background preview PNG encoders. Further spawns wait for one to
 /// finish so a large batch cannot start an unbounded number of threads.
@@ -392,8 +396,12 @@ fn apply_cc_accel(
 
 fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Result<()> {
     // LUT selection is independent of GPU inference. Keep the legacy CPU policy.
-    let small_auto = AUTO_LUT_REQUEST.get() && auto_uses_cpu(img.len()/3);
-    if runtime_policy() != DevicePolicy::Cpu && ccp_detect::probe::gpu_correction_enabled() && !CPU_LUT_REQUEST.get() && !small_auto {
+    let small_auto = AUTO_LUT_REQUEST.get() && auto_uses_cpu(img.len() / 3);
+    if runtime_policy() != DevicePolicy::Cpu
+        && ccp_detect::probe::gpu_correction_enabled()
+        && !CPU_LUT_REQUEST.get()
+        && !small_auto
+    {
         if img.as_slice_mut().is_none() {
             let dim = img.raw_dim();
             let owned: Vec<f32> = img.iter().copied().collect();
@@ -403,8 +411,10 @@ fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) 
             let execution = ccp_detect::lut_wgpu::apply(slice, lut, gs)
                 .map_err(|e| Error::coded(ErrorCode::ProcessingFailed, e))?;
             if let Some(reason) = &execution.chunks.fallback_reason {
-                eprintln!("LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
-                    execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels);
+                eprintln!(
+                    "LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
+                    execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels
+                );
             }
             remember_apply_backend(&execution.backend);
             remember_apply_execution(json!({
@@ -1637,7 +1647,9 @@ impl PreviewMode {
 
     fn wants_intermediate(&self, name: &str) -> bool {
         (self.is_all() || matches!(self, Self::Stage(stage) if stage == name))
-            && name != "original" && name != "corrected" && name != "cc"
+            && name != "original"
+            && name != "corrected"
+            && name != "cc"
     }
 }
 
@@ -1856,18 +1868,32 @@ fn maybe_preview_with_progress(
 
 /// Write a processed image with the same quantization, codec and color metadata
 /// used by the app. Useful for measuring alternate math without changing IO.
-pub fn write_corrected_image(work: &Array3<f32>, output: &Path, space: &RgbColorSpace) -> Result<()> {
+pub fn write_corrected_image(
+    work: &Array3<f32>,
+    output: &Path,
+    space: &RgbColorSpace,
+) -> Result<()> {
     finish_image_writes(work, output, None, true, &PreviewMode::None, space)
 }
 
 /// White-image crop used for FFC: manual rect, YOLO plane, or full frame.
 fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4], &'static str)> {
     if let Some(s) = crop_rect {
-        let r=ccp_detect::plane::parse_crop_rect(s).ok_or_else(||Error::Message("Invalid FFC crop: use x0,y0,x1,y1 coordinates.".into()))?;
-        if r.width<=0 || r.height<=0 || r.x<0 || r.y<0 || i64::from(r.x)+i64::from(r.width)>i64::from(white.width) || i64::from(r.y)+i64::from(r.height)>i64::from(white.height) {
-            return Err(Error::Message("FFC crop must have positive dimensions and lie inside the white image.".into()));
+        let r = ccp_detect::plane::parse_crop_rect(s).ok_or_else(|| {
+            Error::Message("Invalid FFC crop: use x0,y0,x1,y1 coordinates.".into())
+        })?;
+        if r.width <= 0
+            || r.height <= 0
+            || r.x < 0
+            || r.y < 0
+            || i64::from(r.x) + i64::from(r.width) > i64::from(white.width)
+            || i64::from(r.y) + i64::from(r.height) > i64::from(white.height)
+        {
+            return Err(Error::Message(
+                "FFC crop must have positive dimensions and lie inside the white image.".into(),
+            ));
         }
-        return Ok(([r.x,r.y,r.width,r.height],"crop_rect"));
+        return Ok(([r.x, r.y, r.width, r.height], "crop_rect"));
     }
     let rgb8: Vec<u8> = white
         .rgb
@@ -1877,7 +1903,7 @@ fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4]
     let plane = ccp_detect::paths::plane_onnx_path().ok_or_else(||Error::coded(ErrorCode::InferenceFailed,
         "White-plane detection model is missing. Repair the application setup or provide a manual FFC crop."))?;
     {
-        let path=plane.as_path();
+        let path = plane.as_path();
         if let Some(r) = ccp_detect::plane::detect_plane(&rgb8, white.width, white.height, path)
             .map_err(|e| Error::coded(ErrorCode::InferenceFailed, format!("White-plane detection failed: {e}. Check the detection engine or provide a manual FFC crop.")))?
         {
@@ -2127,7 +2153,10 @@ pub fn run_from_json_ex(
     let fast_source = fast_mode.then(|| {
         let mut source = work.clone();
         if defer_fused_ffc_gc {
-            apply_ffc_inplace(&mut source, ffc_gain.as_deref().expect("deferred FFC has gain"));
+            apply_ffc_inplace(
+                &mut source,
+                ffc_gain.as_deref().expect("deferred FFC has gain"),
+            );
         }
         source
     });
@@ -2168,7 +2197,9 @@ pub fn run_from_json_ex(
                 ffc_gain.as_deref().expect("deferred FFC has gain"),
                 &gc,
             );
-            if !fast_mode { progress("FFC complete"); }
+            if !fast_mode {
+                progress("FFC complete");
+            }
         } else {
             apply_gc_inplace(&mut work, &gc)?;
         }
@@ -2253,7 +2284,9 @@ pub fn run_from_json_ex(
         let t = Instant::now();
         let model = fit_correction_model(&patches, kind, &settings, RIDGE_LAMBDA, &mapping)?;
         feature_count = model.feature_count;
-        if !fast_mode { apply_cc_accel(&mut work, &model, &settings)?; }
+        if !fast_mode {
+            apply_cc_accel(&mut work, &model, &settings)?;
+        }
         saved.correction = Some(model);
         cc_elapsed = t.elapsed().as_secs_f64();
         progress("CC complete");
@@ -2266,11 +2299,19 @@ pub fn run_from_json_ex(
         options.fast_mode = true;
         let (pipeline, _) = saved.lut_pipeline()?;
         let combined = combined_progress_label(&pipeline, &options);
-        if let Some(label) = &combined { progress(label); }
+        if let Some(label) = &combined {
+            progress(label);
+        }
         apply_combined(&mut work, &saved, &options)?;
-        if combined.is_some() { progress("Combined LUT complete"); }
+        if combined.is_some() {
+            progress("Combined LUT complete");
+        }
     }
-    let combined_render_secs = if fast_mode { render_start.elapsed().as_secs_f64() } else { 0.0 };
+    let combined_render_secs = if fast_mode {
+        render_start.elapsed().as_secs_f64()
+    } else {
+        0.0
+    };
     cc_elapsed += combined_render_secs;
 
     progress("Writing outputs");
@@ -2326,8 +2367,9 @@ pub fn run_from_json_ex(
     );
     report_json["apply_execution"] = json!(last_apply_execution());
     report_json["inference"] = json!(saved.inference);
-    if saved.ffc_plane_source.as_deref()==Some("full") {
-        report_json["ffc_warning"]=json!("No white plane was found; the full white image was used.");
+    if saved.ffc_plane_source.as_deref() == Some("full") {
+        report_json["ffc_warning"] =
+            json!("No white plane was found; the full white image was used.");
     }
     report_json["fast_mode"] = json!(fast_mode);
     report_json["combined_render_secs"] = json!(combined_render_secs);
@@ -2437,7 +2479,7 @@ pub fn run_from_json_ex(
 }
 
 pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
-    let path=path.as_ref();
+    let path = path.as_ref();
     let text = std::fs::read_to_string(path).map_err(|error|Error::coded(ErrorCode::IoError, format!("Cannot load calibration model {}: {error}. Locate the saved model or fit a new calibration.",path.display())))?;
     let invalid =
         |error: &dyn std::fmt::Display| Error::coded(ErrorCode::InvalidModel, error.to_string());
@@ -2599,7 +2641,9 @@ pub fn apply_saved_to_work(
     }
     remember_apply_backend("cpu");
     if apply.fast_mode {
-        if apply.do_ffc { apply_ffc_inplace(work, gain.expect("validated gain")); }
+        if apply.do_ffc {
+            apply_ffc_inplace(work, gain.expect("validated gain"));
+        }
         return apply_combined(work, saved, apply);
     }
     let (lut, _) = saved.lut_pipeline()?;
@@ -2720,87 +2764,107 @@ pub fn apply_saved_to_image_ex_with_progress(
         if apply.preview_mode.wants_intermediate("ffc") && gain.is_some() {
             maybe_preview_with_progress(preview_dir, "ffc", &work, progress)?;
         }
-        if apply.preview_mode.wants_intermediate("gc") || apply.preview_mode.wants_intermediate("wb") {
+        if apply.preview_mode.wants_intermediate("gc")
+            || apply.preview_mode.wants_intermediate("wb")
+        {
             let mut intermediate = work.clone();
             if apply.do_gc {
                 if let Some(gc) = &lut.gc {
                     apply_gc_inplace(&mut intermediate, gc)?;
-                    if apply.preview_mode.wants_intermediate("gc") { maybe_preview_with_progress(preview_dir, "gc", &intermediate, progress)?; }
+                    if apply.preview_mode.wants_intermediate("gc") {
+                        maybe_preview_with_progress(preview_dir, "gc", &intermediate, progress)?;
+                    }
                 }
             }
             if apply.do_wb {
                 if let Some(wb) = &lut.wb {
                     apply_wb_inplace(&mut intermediate, wb);
-                    if apply.preview_mode.wants_intermediate("wb") { maybe_preview_with_progress(preview_dir, "wb", &intermediate, progress)?; }
+                    if apply.preview_mode.wants_intermediate("wb") {
+                        maybe_preview_with_progress(preview_dir, "wb", &intermediate, progress)?;
+                    }
                 }
             }
         }
         let combined = combined_progress_label(&lut, apply);
-        if let Some(label) = &combined { progress(label); }
+        if let Some(label) = &combined {
+            progress(label);
+        }
         apply_combined(&mut work, saved, apply)?;
-        if combined.is_some() { progress("Combined LUT complete"); }
-    } else {
-    let can_fuse = apply.do_ffc
-        && apply.do_gc
-        && gain.is_some()
-        && lut.gc.is_some()
-        && !apply.preview_mode.wants_intermediate("ffc");
-    if can_fuse {
-        progress("GC");
-        apply_ffc_gc_fused_inplace(
-            &mut work,
-            gain.as_ref().expect("fuse requires gain"),
-            lut.gc.as_ref().expect("fuse requires gc"),
-        );
-        progress("FFC complete");
-        progress("GC complete");
-        if apply.preview_mode.wants_intermediate("gc") {
-            maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
+        if combined.is_some() {
+            progress("Combined LUT complete");
         }
     } else {
-        if let Some(g) = &gain {
-            apply_ffc_inplace(&mut work, g);
+        let can_fuse = apply.do_ffc
+            && apply.do_gc
+            && gain.is_some()
+            && lut.gc.is_some()
+            && !apply.preview_mode.wants_intermediate("ffc");
+        if can_fuse {
+            progress("GC");
+            apply_ffc_gc_fused_inplace(
+                &mut work,
+                gain.as_ref().expect("fuse requires gain"),
+                lut.gc.as_ref().expect("fuse requires gc"),
+            );
             progress("FFC complete");
-            if apply.preview_mode.wants_intermediate("ffc") {
-                maybe_preview_with_progress(preview_dir, "ffc", &work, progress)?;
+            progress("GC complete");
+            if apply.preview_mode.wants_intermediate("gc") {
+                maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
             }
-        }
-        if apply.do_gc {
-            if let Some(gc) = &lut.gc {
-                progress("GC");
-                apply_gc_inplace(&mut work, gc)?;
-                progress("GC complete");
-                if apply.preview_mode.wants_intermediate("gc") {
-                    maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
+        } else {
+            if let Some(g) = &gain {
+                apply_ffc_inplace(&mut work, g);
+                progress("FFC complete");
+                if apply.preview_mode.wants_intermediate("ffc") {
+                    maybe_preview_with_progress(preview_dir, "ffc", &work, progress)?;
+                }
+            }
+            if apply.do_gc {
+                if let Some(gc) = &lut.gc {
+                    progress("GC");
+                    apply_gc_inplace(&mut work, gc)?;
+                    progress("GC complete");
+                    if apply.preview_mode.wants_intermediate("gc") {
+                        maybe_preview_with_progress(preview_dir, "gc", &work, progress)?;
+                    }
                 }
             }
         }
-    }
-    if apply.do_wb {
-        if let Some(wb) = &lut.wb {
-            progress("WB");
-            apply_wb_inplace(&mut work, wb);
-            progress("WB complete");
-            if apply.preview_mode.wants_intermediate("wb") {
-                maybe_preview_with_progress(preview_dir, "wb", &work, progress)?;
+        if apply.do_wb {
+            if let Some(wb) = &lut.wb {
+                progress("WB");
+                apply_wb_inplace(&mut work, wb);
+                progress("WB complete");
+                if apply.preview_mode.wants_intermediate("wb") {
+                    maybe_preview_with_progress(preview_dir, "wb", &work, progress)?;
+                }
+            }
+        }
+        if apply.do_cc {
+            if let Some((model, settings)) = &lut.cc {
+                progress("CC");
+                apply_cc_accel(&mut work, model, settings)?;
+                progress("CC complete");
             }
         }
     }
-    if apply.do_cc {
-        if let Some((model, settings)) = &lut.cc {
-            progress("CC");
-            apply_cc_accel(&mut work, model, settings)?;
-            progress("CC complete");
-        }
+    let writes_final_preview = preview_dir.is_some()
+        && matches!(
+            &apply.preview_mode,
+            PreviewMode::Corrected | PreviewMode::All
+        )
+        || (preview_dir.is_some()
+            && matches!(&apply.preview_mode, PreviewMode::Stage(stage) if stage == "corrected" || stage == "cc"));
+    let write_message = if apply.write_output {
+        Some("Writing outputs")
+    } else if writes_final_preview {
+        Some("Writing preview")
+    } else {
+        None
+    };
+    if let Some(message) = write_message {
+        progress(message);
     }
-    }
-    let writes_final_preview = preview_dir.is_some() && matches!(
-        &apply.preview_mode,
-        PreviewMode::Corrected | PreviewMode::All
-    ) || (preview_dir.is_some() && matches!(&apply.preview_mode, PreviewMode::Stage(stage) if stage == "corrected" || stage == "cc"));
-    let write_message = if apply.write_output { Some("Writing outputs") }
-        else if writes_final_preview { Some("Writing preview") } else { None };
-    if let Some(message) = write_message { progress(message); }
     let processed = Instant::now();
     finish_image_writes(
         &work,
@@ -2814,7 +2878,9 @@ pub fn apply_saved_to_image_ex_with_progress(
             &settings.input_space
         },
     )?;
-    if let Some(message) = write_message { progress(&format!("{message} complete")); }
+    if let Some(message) = write_message {
+        progress(&format!("{message} complete"));
+    }
     Ok(ApplyImageReport {
         ffc_skipped,
         decode_seconds: decoded.duration_since(started).as_secs_f64(),
@@ -2825,9 +2891,15 @@ pub fn apply_saved_to_image_ex_with_progress(
 
 fn combined_progress_label(lut: &LutPipeline, apply: &ApplyOptions) -> Option<String> {
     let mut stages = Vec::new();
-    if apply.do_gc && lut.gc.is_some() { stages.push("GC"); }
-    if apply.do_wb && lut.wb.is_some() { stages.push("WB"); }
-    if apply.do_cc && lut.cc.is_some() { stages.push("CC"); }
+    if apply.do_gc && lut.gc.is_some() {
+        stages.push("GC");
+    }
+    if apply.do_wb && lut.wb.is_some() {
+        stages.push("WB");
+    }
+    if apply.do_cc && lut.cc.is_some() {
+        stages.push("CC");
+    }
     (!stages.is_empty()).then(|| format!("Combined LUT · {}", stages.join(" + ")))
 }
 
@@ -2925,8 +2997,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let image = dir.join("image.png");
         let white = dir.join("white.png");
-        Rgb8::from_pixel(48, 32, image::Rgb([110, 120, 130])).save(&image).unwrap();
-        Rgb8::from_pixel(48, 32, image::Rgb([180; 3])).save(&white).unwrap();
+        Rgb8::from_pixel(48, 32, image::Rgb([110, 120, 130]))
+            .save(&image)
+            .unwrap();
+        Rgb8::from_pixel(48, 32, image::Rgb([180; 3]))
+            .save(&white)
+            .unwrap();
         let saved = progress_fixture();
         let mut options = ApplyOptions::from_saved(&saved);
         options.fast_mode = true;
@@ -2937,24 +3013,65 @@ mod tests {
         options.ffc.method = FfcFitMethod::Linear;
         let output = dir.join("must-not-write.png");
         let mut events = Vec::new();
-        apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
-            &mut |message| events.push(message.to_owned())).unwrap();
-        assert_eq!(events, ["Loading image", "FFC", "FFC complete", "Combined LUT · GC + WB + CC", "Combined LUT complete"]);
+        apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &output,
+            None,
+            &options,
+            &mut |message| events.push(message.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            [
+                "Loading image",
+                "FFC",
+                "FFC complete",
+                "Combined LUT · GC + WB + CC",
+                "Combined LUT complete"
+            ]
+        );
         assert!(!output.exists());
 
         options.do_ffc = false;
         options.do_gc = false;
         options.do_cc = false;
         events.clear();
-        apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
-            &mut |message| events.push(message.to_owned())).unwrap();
-        assert_eq!(events, ["Loading image", "Combined LUT · WB", "Combined LUT complete"]);
+        apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &output,
+            None,
+            &options,
+            &mut |message| events.push(message.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            [
+                "Loading image",
+                "Combined LUT · WB",
+                "Combined LUT complete"
+            ]
+        );
         let mut absent = saved.clone();
         absent.wb_diag = None;
         events.clear();
-        apply_saved_to_image_ex_with_progress(&absent, &image, &output, None, &options,
-            &mut |message| events.push(message.to_owned())).unwrap();
-        assert_eq!(events, ["Loading image"], "identity rendering must not claim absent stages or writes");
+        apply_saved_to_image_ex_with_progress(
+            &absent,
+            &image,
+            &output,
+            None,
+            &options,
+            &mut |message| events.push(message.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            ["Loading image"],
+            "identity rendering must not claim absent stages or writes"
+        );
         set_cpu_lut_request(false);
     }
 
@@ -2964,7 +3081,9 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ccp-progress-errors-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let image = dir.join("image.png");
-        Rgb8::from_pixel(48, 32, image::Rgb([110; 3])).save(&image).unwrap();
+        Rgb8::from_pixel(48, 32, image::Rgb([110; 3]))
+            .save(&image)
+            .unwrap();
         let saved = progress_fixture();
         let mut options = ApplyOptions::from_saved(&saved);
         options.fast_mode = true;
@@ -2976,29 +3095,61 @@ mod tests {
         let retained = output.join("previous-result.txt");
         std::fs::write(&retained, b"retain previous artifact").unwrap();
         let mut events = Vec::new();
-        assert!(apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
-            &mut |message| events.push(message.to_owned())).is_err());
+        assert!(apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &output,
+            None,
+            &options,
+            &mut |message| events.push(message.to_owned())
+        )
+        .is_err());
         assert_eq!(events, ["Loading image", "FFC"]);
         options.do_ffc = false;
         events.clear();
-        assert!(apply_saved_to_image_ex_with_progress(&saved, &image, &output, None, &options,
-            &mut |message| events.push(message.to_owned())).is_err());
+        assert!(apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &output,
+            None,
+            &options,
+            &mut |message| events.push(message.to_owned())
+        )
+        .is_err());
         assert_eq!(events.last().unwrap(), "Writing outputs");
-        assert!(!events.iter().any(|value| value == "Writing outputs complete"));
-        assert_eq!(std::fs::read(&retained).unwrap(), b"retain previous artifact");
+        assert!(!events
+            .iter()
+            .any(|value| value == "Writing outputs complete"));
+        assert_eq!(
+            std::fs::read(&retained).unwrap(),
+            b"retain previous artifact"
+        );
         let successful = dir.join("successful.png");
         events.clear();
-        apply_saved_to_image_ex_with_progress(&saved, &image, &successful, None, &options,
+        apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &successful,
+            None,
+            &options,
             &mut |message| {
                 if message == "Writing outputs complete" {
-                    assert_eq!(image::open(&successful).unwrap().to_rgb8().dimensions(), (48, 32));
+                    assert_eq!(
+                        image::open(&successful).unwrap().to_rgb8().dimensions(),
+                        (48, 32)
+                    );
                 }
                 events.push(message.to_owned());
-            }).unwrap();
+            },
+        )
+        .unwrap();
         assert_eq!(events.last().unwrap(), "Writing outputs complete");
         let legacy = dir.join("legacy.png");
         apply_saved_to_image_ex(&saved, &image, &legacy, None, &options).unwrap();
-        assert_eq!(std::fs::read(successful).unwrap(), std::fs::read(legacy).unwrap());
+        assert_eq!(
+            std::fs::read(successful).unwrap(),
+            std::fs::read(legacy).unwrap()
+        );
         set_cpu_lut_request(false);
     }
 
@@ -3008,7 +3159,9 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ccp-progress-preview-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let image = dir.join("image.png");
-        Rgb8::from_pixel(48, 32, image::Rgb([110; 3])).save(&image).unwrap();
+        Rgb8::from_pixel(48, 32, image::Rgb([110; 3]))
+            .save(&image)
+            .unwrap();
         let output = dir.join("must-not-write.png");
         let previews = dir.join("previews");
         let saved = progress_fixture();
@@ -3018,14 +3171,33 @@ mod tests {
         options.write_output = false;
         options.preview_mode = PreviewMode::Stage("gc".into());
         let mut events = Vec::new();
-        apply_saved_to_image_ex_with_progress(&saved, &image, &output, Some(&previews), &options,
+        apply_saved_to_image_ex_with_progress(
+            &saved,
+            &image,
+            &output,
+            Some(&previews),
+            &options,
             &mut |message| {
                 if message == "Writing preview complete" {
-                    assert!(previews.join("gc.rgb").is_file(), "done requires the usable RGB sidecar, not asynchronous PNG completion");
+                    assert!(
+                        previews.join("gc.rgb").is_file(),
+                        "done requires the usable RGB sidecar, not asynchronous PNG completion"
+                    );
                 }
                 events.push(message.to_owned());
-            }).unwrap();
-        assert_eq!(events, ["Loading image", "GC", "GC complete", "Writing preview", "Writing preview complete"]);
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            events,
+            [
+                "Loading image",
+                "GC",
+                "GC complete",
+                "Writing preview",
+                "Writing preview complete"
+            ]
+        );
         assert!(!output.exists());
         flush_preview_encodes().unwrap();
         set_cpu_lut_request(false);
@@ -3039,7 +3211,9 @@ mod tests {
         let image = dir.join("chart.png");
         let white = dir.join("white.png");
         write_cast_classic(&image, 120, 80);
-        Rgb8::from_pixel(120, 80, image::Rgb([180; 3])).save(&white).unwrap();
+        Rgb8::from_pixel(120, 80, image::Rgb([180; 3]))
+            .save(&white)
+            .unwrap();
         for fast in [false, true] {
             let output = dir.join(format!("output-{fast}.png"));
             let report = dir.join(format!("report-{fast}.json"));
@@ -3054,17 +3228,33 @@ mod tests {
                     assert!(output.is_file() && model.is_file() && report.is_file());
                 }
                 events.push(message.to_owned());
-            }).unwrap();
+            })
+            .unwrap();
             for stage in ["FFC", "GC", "WB", "CC"] {
                 let start = events.iter().position(|value| value == stage).unwrap();
-                let done = events.iter().position(|value| value == &format!("{stage} complete")).unwrap();
+                let done = events
+                    .iter()
+                    .position(|value| value == &format!("{stage} complete"))
+                    .unwrap();
                 assert!(done > start);
             }
             assert_eq!(events.last().unwrap(), "Writing outputs complete");
-            assert_eq!(events.iter().filter(|value| value.starts_with("Combined LUT ·")).count(), usize::from(fast));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|value| value.starts_with("Combined LUT ·"))
+                    .count(),
+                usize::from(fast)
+            );
             if !fast {
-                assert!(events.iter().position(|value| value == "FFC complete").unwrap()
-                    > events.iter().position(|value| value == "GC").unwrap(), "fused FFC cannot finish before its actual GC pass");
+                assert!(
+                    events
+                        .iter()
+                        .position(|value| value == "FFC complete")
+                        .unwrap()
+                        > events.iter().position(|value| value == "GC").unwrap(),
+                    "fused FFC cannot finish before its actual GC pass"
+                );
             }
         }
         set_cpu_lut_request(false);
@@ -3075,24 +3265,36 @@ mod tests {
         set_cpu_lut_request(true);
         let dir = std::env::temp_dir().join(format!("ccp-fast-ffc-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let image = dir.join("chart.png"); let white = dir.join("white.png");
-        write_cast_classic(&image,120,80);
-        Rgb8::from_fn(120,80,|x,y| image::Rgb([180+((x+y)/5) as u8;3])).save(&white).unwrap();
+        let image = dir.join("chart.png");
+        let white = dir.join("white.png");
+        write_cast_classic(&image, 120, 80);
+        Rgb8::from_fn(120, 80, |x, y| image::Rgb([180 + ((x + y) / 5) as u8; 3]))
+            .save(&white)
+            .unwrap();
         let mut request = json!({"image":image,"white":white,"crop_rect":"0,0,120,80",
             "handshake":classic_handshake(120,80),"output":dir.join("corrected.png"),
             "report":dir.join("report.json"),"model_out":dir.join("model.json"),
             "do_ffc":true,"do_gc":true,"do_wb":true,"do_cc":true,"model":"rpcc2",
             "cross_validate":false,"ffc":{"method":"linear"},"preview_mode":"corrected"});
-        let normal = run_from_json(&request,&mut |_|{}).unwrap();
+        let normal = run_from_json(&request, &mut |_| {}).unwrap();
         request["fast_mode"] = json!(true);
-        let fast = run_from_json(&request,&mut |_|{}).unwrap();
-        assert_eq!(serde_json::to_value(&normal.saved).unwrap(),serde_json::to_value(&fast.saved).unwrap());
+        let fast = run_from_json(&request, &mut |_| {}).unwrap();
+        assert_eq!(
+            serde_json::to_value(&normal.saved).unwrap(),
+            serde_json::to_value(&fast.saved).unwrap()
+        );
         let mut options = ApplyOptions::from_saved(&fast.saved);
-        options.fast_mode = true; options.do_ffc = true; options.white = Some(white);
-        options.crop_rect = Some("0,0,120,80".into()); options.ffc = fast.saved.ffc_params.clone().unwrap();
+        options.fast_mode = true;
+        options.do_ffc = true;
+        options.white = Some(white);
+        options.crop_rect = Some("0,0,120,80".into());
+        options.ffc = fast.saved.ffc_params.clone().unwrap();
         let reload = dir.join("reload.png");
-        apply_saved_to_image_ex(&fast.saved,&image,&reload,None,&options).unwrap();
-        assert_eq!(image::open(&fast.output).unwrap().to_rgb8(),image::open(reload).unwrap().to_rgb8());
+        apply_saved_to_image_ex(&fast.saved, &image, &reload, None, &options).unwrap();
+        assert_eq!(
+            image::open(&fast.output).unwrap().to_rgb8(),
+            image::open(reload).unwrap().to_rgb8()
+        );
         set_cpu_lut_request(false);
     }
 
@@ -3102,10 +3304,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ccp-fast-models-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let image = dir.join("chart.png");
-        write_cast_classic(&image,120,80);
-        for kind in ["ccm","rpcc2","rpcc3","linear","pls","nn"] {
+        write_cast_classic(&image, 120, 80);
+        for kind in ["ccm", "rpcc2", "rpcc3", "linear", "pls", "nn"] {
             let mut saved_json = None;
-            for fast in [false,true] {
+            for fast in [false, true] {
                 let output = dir.join(format!("{kind}-{fast}.png"));
                 let previews = dir.join(format!("{kind}-{fast}-previews"));
                 let request = json!({"image":image,"handshake":classic_handshake(120,80),
@@ -3113,35 +3315,62 @@ mod tests {
                     "model":kind,"do_ffc":false,"do_gc":true,"do_wb":true,"do_cc":true,
                     "nn_epochs":40,"hidden_size":8,"cross_validate":false,"fast_mode":fast,
                     "preview_dir":previews,"preview_mode":"all"});
-                let fitted = run_from_json(&request,&mut |_|{}).unwrap();
+                let fitted = run_from_json(&request, &mut |_| {}).unwrap();
                 let current = serde_json::to_value(&fitted.saved).unwrap();
-                if let Some(normal) = &saved_json { assert_eq!(&current,normal,"{kind} fit changed"); }
-                else { saved_json = Some(current); }
-                assert_eq!(fitted.report_json["fast_mode"],fast);
+                if let Some(normal) = &saved_json {
+                    assert_eq!(&current, normal, "{kind} fit changed");
+                } else {
+                    saved_json = Some(current);
+                }
+                assert_eq!(fitted.report_json["fast_mode"], fast);
                 if fast {
-                    assert_eq!(fitted.report_json["apply_execution"]["method"],"combined-lut65");
+                    assert_eq!(
+                        fitted.report_json["apply_execution"]["method"],
+                        "combined-lut65"
+                    );
                     let loaded = load_saved(&fitted.model_out).unwrap();
-                    let mut options = ApplyOptions::from_saved(&loaded); options.fast_mode = true;
+                    let mut options = ApplyOptions::from_saved(&loaded);
+                    options.fast_mode = true;
                     let reapplied = dir.join(format!("{kind}-reloaded.png"));
-                    apply_saved_to_image_ex(&loaded,&image,&reapplied,None,&options).unwrap();
-                    assert_eq!(image::open(&output).unwrap().to_rgb8(), image::open(&reapplied).unwrap().to_rgb8());
+                    apply_saved_to_image_ex(&loaded, &image, &reapplied, None, &options).unwrap();
+                    assert_eq!(
+                        image::open(&output).unwrap().to_rgb8(),
+                        image::open(&reapplied).unwrap().to_rgb8()
+                    );
                     flush_preview_encodes().unwrap();
-                    for stage in ["gc","wb"] {
-                        let before = dir.join(format!("{kind}-false-previews")).join(format!("{stage}.png"));
+                    for stage in ["gc", "wb"] {
+                        let before = dir
+                            .join(format!("{kind}-false-previews"))
+                            .join(format!("{stage}.png"));
                         let after = previews.join(format!("{stage}.png"));
-                        assert_eq!(image::open(before).unwrap().to_rgb8(),image::open(after).unwrap().to_rgb8());
+                        assert_eq!(
+                            image::open(before).unwrap().to_rgb8(),
+                            image::open(after).unwrap().to_rgb8()
+                        );
                         let lazy = dir.join(format!("{kind}-lazy-{stage}"));
                         let mut preview_options = options.clone();
                         preview_options.write_output = false;
                         preview_options.preview_mode = PreviewMode::Stage(stage.into());
                         preview_options.do_cc = false;
                         preview_options.do_wb = stage == "wb";
-                        apply_saved_to_image_ex(&loaded,&image,&reapplied,Some(&lazy),&preview_options).unwrap();
+                        apply_saved_to_image_ex(
+                            &loaded,
+                            &image,
+                            &reapplied,
+                            Some(&lazy),
+                            &preview_options,
+                        )
+                        .unwrap();
                         flush_preview_encodes().unwrap();
                         assert_eq!(
-                            image::open(previews.join(format!("{stage}.png"))).unwrap().to_rgb8(),
-                            image::open(lazy.join(format!("{stage}.png"))).unwrap().to_rgb8(),
-                            "{kind} lazy {stage} must preserve stage math");
+                            image::open(previews.join(format!("{stage}.png")))
+                                .unwrap()
+                                .to_rgb8(),
+                            image::open(lazy.join(format!("{stage}.png")))
+                                .unwrap()
+                                .to_rgb8(),
+                            "{kind} lazy {stage} must preserve stage math"
+                        );
                     }
                 }
             }
@@ -3181,11 +3410,16 @@ mod tests {
         );
         for index in 0..100u8 {
             let path = dir.join(format!("unique-{index}.png"));
-            encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([index, 17, 219])), path.clone());
+            encoders.spawn(
+                Rgb8::from_pixel(8, 8, image::Rgb([index, 17, 219])),
+                path.clone(),
+            );
             let deadline = Instant::now() + std::time::Duration::from_secs(5);
             loop {
                 let pending = encoders.pending.lock().unwrap();
-                if pending.get(&path).unwrap().is_finished() { break; }
+                if pending.get(&path).unwrap().is_finished() {
+                    break;
+                }
                 drop(pending);
                 assert!(Instant::now() < deadline, "preview encoder did not finish");
                 std::thread::sleep(std::time::Duration::from_millis(1));
@@ -3201,7 +3435,9 @@ mod tests {
         encoders.flush().unwrap();
         assert!(encoders.pending.lock().unwrap().is_empty());
         for index in 0..100u8 {
-            let image = image::open(dir.join(format!("unique-{index}.png"))).unwrap().to_rgb8();
+            let image = image::open(dir.join(format!("unique-{index}.png")))
+                .unwrap()
+                .to_rgb8();
             assert_eq!(image.dimensions(), (8, 8));
             assert!(image.pixels().all(|pixel| pixel.0 == [index, 17, 219]));
         }
@@ -3210,7 +3446,8 @@ mod tests {
 
     #[test]
     fn preview_encoders_reap_failed_encodes_and_recover_for_later_outputs() {
-        let dir = std::env::temp_dir().join(format!("ccp-preview-reap-errors-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ccp-preview-reap-errors-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let blocker = dir.join("not-a-directory");
         std::fs::write(&blocker, b"preserve this file").unwrap();
@@ -3218,19 +3455,32 @@ mod tests {
         let encoders = PreviewPngEncoders::default();
         encoders.spawn(Rgb8::new(8, 8), failed.clone());
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
-        while !encoders.pending.lock().unwrap().get(&failed).unwrap().is_finished() {
+        while !encoders
+            .pending
+            .lock()
+            .unwrap()
+            .get(&failed)
+            .unwrap()
+            .is_finished()
+        {
             assert!(Instant::now() < deadline, "failed encoder did not finish");
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         let recovered = dir.join("recovered.png");
-        encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([7, 8, 9])), recovered.clone());
+        encoders.spawn(
+            Rgb8::from_pixel(8, 8, image::Rgb([7, 8, 9])),
+            recovered.clone(),
+        );
         assert!(!encoders.pending.lock().unwrap().contains_key(&failed));
         // The reaped failure is still reported once, by the next flush.
         assert!(encoders.flush().is_err());
         encoders.flush().unwrap();
         assert!(encoders.pending.lock().unwrap().is_empty());
         assert_eq!(std::fs::read(&blocker).unwrap(), b"preserve this file");
-        assert_eq!(image::open(recovered).unwrap().to_rgb8().get_pixel(0, 0).0, [7, 8, 9]);
+        assert_eq!(
+            image::open(recovered).unwrap().to_rgb8().get_pixel(0, 0).0,
+            [7, 8, 9]
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -3336,7 +3586,8 @@ mod tests {
         let flush = std::thread::spawn(move || flushing.flush());
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         while encoders.pending.try_lock().is_ok() {
-            assert!(Instant::now()<deadline);std::thread::yield_now();
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
         }
         let reading = Arc::clone(&encoders);
         let (done, done_rx) = std::sync::mpsc::channel();
@@ -3379,18 +3630,26 @@ mod tests {
             second_encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([4, 5, 6])), second_path);
             submitted.send(()).unwrap();
         });
-        assert!(submitted_rx.recv_timeout(std::time::Duration::from_millis(20)).is_err());
+        assert!(submitted_rx
+            .recv_timeout(std::time::Duration::from_millis(20))
+            .is_err());
         release.send(()).unwrap();
         replacement.join().unwrap();
         encoders.flush().unwrap();
-        assert_eq!(image::open(&path).unwrap().to_rgb8().get_pixel(0, 0).0, [4, 5, 6]);
+        assert_eq!(
+            image::open(&path).unwrap().to_rgb8().get_pixel(0, 0).0,
+            [4, 5, 6]
+        );
         assert!(encoders.pending.lock().unwrap().is_empty());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
     fn preview_required_sidecar_failure_propagates_without_replacing_previous_png() {
-        let dir = std::env::temp_dir().join(format!("ccp-preview-required-errors-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ccp-preview-required-errors-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("corrected.png");
         let previous = Rgb8::from_pixel(8, 8, image::Rgb([21, 43, 65]));
@@ -3400,7 +3659,11 @@ mod tests {
         let error = write_preview(&Array3::from_elem((8, 8, 3), 0.8), &path).unwrap_err();
         assert!(matches!(error, Error::Io(_)));
         assert_eq!(std::fs::read(&path).unwrap(), old_bytes);
-        assert!(!pending_preview_pngs().pending.lock().unwrap().contains_key(&path));
+        assert!(!pending_preview_pngs()
+            .pending
+            .lock()
+            .unwrap()
+            .contains_key(&path));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -4319,8 +4582,12 @@ mod tests {
             ..FfcFitParams::default()
         };
         let cache = FfcGainCache::new();
-        let a = cache.get_or_compute(&image, Some("0,0,40,30"), &params).unwrap();
-        let b = cache.get_or_compute(&image, Some("0,0,40,30"), &params).unwrap();
+        let a = cache
+            .get_or_compute(&image, Some("0,0,40,30"), &params)
+            .unwrap();
+        let b = cache
+            .get_or_compute(&image, Some("0,0,40,30"), &params)
+            .unwrap();
         assert!(Arc::ptr_eq(&a, &b));
         assert!(Arc::ptr_eq(&a.gain, &b.gain));
         assert_eq!(a.gain, b.gain);

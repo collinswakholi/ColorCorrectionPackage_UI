@@ -28,8 +28,16 @@ pub fn runtime_cache_identity() -> String {
         std::env::var("CCP_ORT_DEVICE_ID").unwrap_or_default(),
         std::env::var("CCP_WEBGPU_LIBRARY").unwrap_or_default(),
         std::env::var("CCP_WGPU_INFERENCE_ADAPTER").unwrap_or_default(),
-        { #[cfg(feature="ort-plane")] {crate::gpu_inference::component_policy_identity()}
-          #[cfg(not(feature="ort-plane"))] {String::new()} }
+        {
+            #[cfg(feature = "ort-plane")]
+            {
+                crate::gpu_inference::component_policy_identity()
+            }
+            #[cfg(not(feature = "ort-plane"))]
+            {
+                String::new()
+            }
+        }
     )
 }
 

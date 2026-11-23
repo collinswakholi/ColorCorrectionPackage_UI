@@ -18,8 +18,12 @@ pub mod probe;
 
 /// Explicit retry drops sessions without unregistering native plugins still owned by ORT.
 pub fn reset_inference_sessions() {
-    #[cfg(feature="ort-plane")]
-    {infer_ort::clear_sessions(); plane::clear_session(); gpu_inference::reset_failures();}
+    #[cfg(feature = "ort-plane")]
+    {
+        infer_ort::clear_sessions();
+        plane::clear_session();
+        gpu_inference::reset_failures();
+    }
 }
 
 /// Release native sessions and GPU plugin resources before process teardown.

@@ -72,7 +72,12 @@ pub fn parse_crop_rect(s: &str) -> Option<Rect> {
     }
     let nums: Result<Vec<i32>, _> = parts.iter().map(|p| p.parse::<i32>()).collect();
     let nums = nums.ok()?;
-    Some(Rect {x:nums[0],y:nums[1],width:nums[2].checked_sub(nums[0])?,height:nums[3].checked_sub(nums[1])?})
+    Some(Rect {
+        x: nums[0],
+        y: nums[1],
+        width: nums[2].checked_sub(nums[0])?,
+        height: nums[3].checked_sub(nums[1])?,
+    })
 }
 
 /// Manual crop wins; else detected box; miss → full frame.
@@ -284,13 +289,19 @@ static PLANE_SESSION: std::sync::Mutex<Option<CachedInference>> = std::sync::Mut
 
 #[cfg(feature = "ort-plane")]
 pub(crate) fn clear_session() {
-    if let Ok(mut cache) = PLANE_SESSION.lock() { *cache = None; }
+    if let Ok(mut cache) = PLANE_SESSION.lock() {
+        *cache = None;
+    }
 }
 
 pub fn last_plane_inference() -> Option<serde_json::Value> {
-    #[cfg(feature="ort-plane")]
+    #[cfg(feature = "ort-plane")]
     if last_plane_ep().is_some() {
-        return PLANE_SESSION.lock().ok().and_then(|cache|cache.as_ref().and_then(|c|serde_json::to_value(&c.record).ok()));
+        return PLANE_SESSION.lock().ok().and_then(|cache| {
+            cache
+                .as_ref()
+                .and_then(|c| serde_json::to_value(&c.record).ok())
+        });
     }
     None
 }
@@ -298,7 +309,9 @@ pub fn last_plane_inference() -> Option<serde_json::Value> {
 static PLANE_EXECUTION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 pub fn reset_plane_execution() {
-    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = None; }
+    if let Ok(mut used) = PLANE_EXECUTION.lock() {
+        *used = None;
+    }
 }
 
 /// Provider that actually completed inference in the current processing request.
@@ -314,13 +327,19 @@ fn detect_plane_ort(
     model_path: &std::path::Path,
 ) -> Result<Option<Rect>, PlaneError> {
     let chw = resize_rgb_to_nchw(rgb, width, height, PLANE_INPUT);
-    let mut guard=PLANE_SESSION.lock().map_err(|e|PlaneError::Message(e.to_string()))?;
-    let (dims,data,backend)=crate::gpu_inference::execute(&mut guard,model_path,|session,backend| {
-        let (dims,data)=session.forward(chw.clone(),PLANE_INPUT as usize)?;
-        validate_output(&dims,&data).map_err(|e|e.to_string())?;
-        Ok((dims,data,backend.to_string()))
-    }).map_err(PlaneError::Message)?;
-    if let Ok(mut used) = PLANE_EXECUTION.lock() { *used = Some(backend); }
+    let mut guard = PLANE_SESSION
+        .lock()
+        .map_err(|e| PlaneError::Message(e.to_string()))?;
+    let (dims, data, backend) =
+        crate::gpu_inference::execute(&mut guard, model_path, |session, backend| {
+            let (dims, data) = session.forward(chw.clone(), PLANE_INPUT as usize)?;
+            validate_output(&dims, &data).map_err(|e| e.to_string())?;
+            Ok((dims, data, backend.to_string()))
+        })
+        .map_err(PlaneError::Message)?;
+    if let Ok(mut used) = PLANE_EXECUTION.lock() {
+        *used = Some(backend);
+    }
     Ok(plane_box_from_output(
         &data,
         &dims,
@@ -371,7 +390,7 @@ mod crop_validation_tests {
     #[test]
     fn extreme_manual_crop_does_not_overflow() {
         assert!(super::parse_crop_rect("-2147483648,0,2147483647,1").is_none());
-        let crop=super::parse_crop_rect("2,3,12,13").unwrap();
-        assert_eq!((crop.x,crop.y,crop.width,crop.height),(2,3,10,10));
+        let crop = super::parse_crop_rect("2,3,12,13").unwrap();
+        assert_eq!((crop.x, crop.y, crop.width, crop.height), (2, 3, 10, 10));
     }
 }
