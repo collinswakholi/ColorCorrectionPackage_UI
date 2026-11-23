@@ -4,6 +4,10 @@
 
 - Show an error notice instead of closing the app when a settings, help, reference-editor or plot-save dialog fails to open.
 - Confirmation prompts: Escape and Cancel dismiss, Enter confirms only non-destructive prompts, and screen readers announce the question.
+- Text and status colors meet WCAG AA contrast in both themes (muted text, light focus ring, error/warning/success, ΔE quality ramp), and the "fair" and "warning" ΔE bands are distinct in the dark theme.
+- New design tokens for type sizes, corner radii and spacing; views use them instead of fixed values.
+- The ΔE, Color Analysis and Chart rendition panels say whether the session is empty, a fit is running, or the last fit failed and why.
+- The status bar turns red while the last message is an error.
 
 ## 0.3.0
 
