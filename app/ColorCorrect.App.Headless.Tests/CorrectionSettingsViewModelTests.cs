@@ -17,14 +17,13 @@ public sealed class CorrectionSettingsViewModelTests
             var shellChanges = new List<string?>();
             ((INotifyPropertyChanged)vm).PropertyChanged += (_, e) => shellChanges.Add(e.PropertyName);
 
-            vm.WhiteImagePath = "";
+            vm.Settings.WhiteImagePath = "";
             vm.Settings.DoFfc = true; // FFC without a white reference is invalid
-            Assert.True(vm.DoFfc); // forwarder reads the same state
             Assert.Contains("white reference", vm.ValidationMessage);
-            Assert.Contains(nameof(MainWindowViewModel.DoFfc), shellChanges);
+            Assert.Contains("DoFfc", shellChanges); // re-raised on the shell under the same name
             Assert.Contains(nameof(MainWindowViewModel.ValidationMessage), shellChanges);
 
-            vm.DoFfc = false; // writes through the forwarder
+            vm.Settings.DoFfc = false; 
             Assert.False(vm.Settings.DoFfc);
             Assert.DoesNotContain("white reference", vm.ValidationMessage);
         }

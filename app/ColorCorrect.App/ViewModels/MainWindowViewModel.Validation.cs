@@ -32,7 +32,7 @@ public partial class MainWindowViewModel
         new(model is not null && !model.Matches(modelPath), white is not null && !white.Matches(whitePath));
 
     private LoadedFileState CheckLoadedFilesNow() =>
-        CheckLoadedFiles(_loadedModelIdentity, LoadedModelPath, DoFfc ? _loadedWhiteIdentity : null, WhiteImagePath);
+        CheckLoadedFiles(_loadedModelIdentity, LoadedModelPath, Settings.DoFfc ? _loadedWhiteIdentity : null, Settings.WhiteImagePath);
     private string NumericText(string name, decimal value) => _numericText.GetValueOrDefault(name) ?? value.ToString(CultureInfo.CurrentCulture);
     private void SetNumericText(string name, string text, Action<decimal> set)
     {
@@ -40,18 +40,18 @@ public partial class MainWindowViewModel
         if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)) set(value);
         RefreshValidation();
     }
-    public string FitSamplesText { get => NumericText(nameof(FitSamples), FitSamples); set => SetNumericText(nameof(FitSamples), value, v => FitSamples = v); }
-    public string PlsComponentsText { get => NumericText(nameof(PlsComponents), PlsComponents); set => SetNumericText(nameof(PlsComponents), value, v => PlsComponents = v); }
-    public string NnDropoutText { get => NumericText(nameof(NnDropout), NnDropout); set => SetNumericText(nameof(NnDropout), value, v => NnDropout = v); }
-    public string NnLrText { get => NumericText(nameof(NnLr), NnLr); set => SetNumericText(nameof(NnLr), value, v => NnLr = v); }
-    public string NnEpochsText { get => NumericText(nameof(NnEpochs), NnEpochs); set => SetNumericText(nameof(NnEpochs), value, v => NnEpochs = v); }
-    public string NnPatienceText { get => NumericText(nameof(NnPatience), NnPatience); set => SetNumericText(nameof(NnPatience), value, v => NnPatience = v); }
-    public string NnTolText { get => NumericText(nameof(NnTol), NnTol); set => SetNumericText(nameof(NnTol), value, v => NnTol = v); }
-    public string FfcBinsText { get => NumericText(nameof(FfcBins), FfcBins); set => SetNumericText(nameof(FfcBins), value, v => FfcBins = v); }
-    public string FfcSmoothWindowText { get => NumericText(nameof(FfcSmoothWindow), FfcSmoothWindow); set => SetNumericText(nameof(FfcSmoothWindow), value, v => FfcSmoothWindow = v); }
-    public string FfcDegreeText { get => NumericText(nameof(FfcDegree), FfcDegree); set => SetNumericText(nameof(FfcDegree), value, v => FfcDegree = v); }
-    public string FfcNnMaxIterText { get => NumericText(nameof(FfcNnMaxIter), FfcNnMaxIter); set => SetNumericText(nameof(FfcNnMaxIter), value, v => FfcNnMaxIter = v); }
-    public string FfcTolText { get => NumericText(nameof(FfcTol), FfcTol); set => SetNumericText(nameof(FfcTol), value, v => FfcTol = v); }
+    public string FitSamplesText { get => NumericText(nameof(CorrectionSettingsViewModel.FitSamples), Settings.FitSamples); set => SetNumericText(nameof(CorrectionSettingsViewModel.FitSamples), value, v => Settings.FitSamples = v); }
+    public string PlsComponentsText { get => NumericText(nameof(CorrectionSettingsViewModel.PlsComponents), Settings.PlsComponents); set => SetNumericText(nameof(CorrectionSettingsViewModel.PlsComponents), value, v => Settings.PlsComponents = v); }
+    public string NnDropoutText { get => NumericText(nameof(CorrectionSettingsViewModel.NnDropout), Settings.NnDropout); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnDropout), value, v => Settings.NnDropout = v); }
+    public string NnLrText { get => NumericText(nameof(CorrectionSettingsViewModel.NnLr), Settings.NnLr); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnLr), value, v => Settings.NnLr = v); }
+    public string NnEpochsText { get => NumericText(nameof(CorrectionSettingsViewModel.NnEpochs), Settings.NnEpochs); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnEpochs), value, v => Settings.NnEpochs = v); }
+    public string NnPatienceText { get => NumericText(nameof(CorrectionSettingsViewModel.NnPatience), Settings.NnPatience); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnPatience), value, v => Settings.NnPatience = v); }
+    public string NnTolText { get => NumericText(nameof(CorrectionSettingsViewModel.NnTol), Settings.NnTol); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnTol), value, v => Settings.NnTol = v); }
+    public string FfcBinsText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcBins), Settings.FfcBins); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcBins), value, v => Settings.FfcBins = v); }
+    public string FfcSmoothWindowText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), Settings.FfcSmoothWindow); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), value, v => Settings.FfcSmoothWindow = v); }
+    public string FfcDegreeText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcDegree), Settings.FfcDegree); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcDegree), value, v => Settings.FfcDegree = v); }
+    public string FfcNnMaxIterText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), Settings.FfcNnMaxIter); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), value, v => Settings.FfcNnMaxIter = v); }
+    public string FfcTolText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcTol), Settings.FfcTol); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcTol), value, v => Settings.FfcTol = v); }
 
     private string? NumberError(string name, decimal value, string label, decimal min, decimal max, bool integer = false)
     {
@@ -72,32 +72,32 @@ public partial class MainWindowViewModel
     {
         if (!fit && files.ModelChanged)
             return "The loaded model changed or moved. Load it again before applying it.";
-        if (DoFfc)
+        if (Settings.DoFfc)
         {
-            if (!File.Exists(WhiteImagePath)) return "Choose a readable white reference before using FFC.";
+            if (!File.Exists(Settings.WhiteImagePath)) return "Choose a readable white reference before using FFC.";
             if (!fit && files.WhiteChanged)
                 return "The model's white reference changed. Choose the intended white image again before applying it.";
-            var error = NumberError(nameof(FfcBins), FfcBins, "FFC bins", 4, 200, true)
-                ?? NumberError(nameof(FfcSmoothWindow), FfcSmoothWindow, "FFC smooth window", 1, 51, true);
+            var error = NumberError(nameof(CorrectionSettingsViewModel.FfcBins), Settings.FfcBins, "FFC bins", 4, 200, true)
+                ?? NumberError(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), Settings.FfcSmoothWindow, "FFC smooth window", 1, 51, true);
             if (error is not null) return error;
-            if (FfcSmoothWindow % 2 == 0) return "FFC smooth window must be an odd whole number.";
-            if (SelectedFfcFitMethod.Value != "linear" && NumberError(nameof(FfcDegree), FfcDegree, "FFC degree", 1, 7, true) is { } degree) return degree;
-            if (SelectedFfcFitMethod.Value is "nn" or "pls" && NumberError(nameof(FfcTol), FfcTol, "FFC tolerance", 0.000000000001m, 0.01m) is { } tolerance) return tolerance;
-            if (SelectedFfcFitMethod.Value == "nn" && NumberError(nameof(FfcNnMaxIter), FfcNnMaxIter, "FFC iterations", 50, 20000, true) is { } iterations) return iterations;
+            if (Settings.FfcSmoothWindow % 2 == 0) return "FFC smooth window must be an odd whole number.";
+            if (Settings.SelectedFfcFitMethod.Value != "linear" && NumberError(nameof(CorrectionSettingsViewModel.FfcDegree), Settings.FfcDegree, "FFC degree", 1, 7, true) is { } degree) return degree;
+            if (Settings.SelectedFfcFitMethod.Value is "nn" or "pls" && NumberError(nameof(CorrectionSettingsViewModel.FfcTol), Settings.FfcTol, "FFC tolerance", 0.000000000001m, 0.01m) is { } tolerance) return tolerance;
+            if (Settings.SelectedFfcFitMethod.Value == "nn" && NumberError(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), Settings.FfcNnMaxIter, "FFC iterations", 50, 20000, true) is { } iterations) return iterations;
         }
         if (!fit) return null;
-        if ((DoFfc || DoGc || DoWb) && (SelectedInputSpace.Value != "srgb" || SelectedInputWhite.Value != "d65"))
+        if ((Settings.DoFfc || Settings.DoGc || Settings.DoWb) && (Settings.SelectedInputSpace.Value != "srgb" || Settings.SelectedInputWhite.Value != "d65"))
             return "FFC, tone response and white balance require sRGB / D65 input. Convert the image first or turn these stages off.";
-        if (NumberError(nameof(FitSamples), FitSamples, "Samples per side", 1, 200, true) is { } samples) return samples;
-        if (!DoCc) return null;
-        if (ShowPls && NumberError(nameof(PlsComponents), PlsComponents, "PLS components", 0, 64, true) is { } components) return components;
-        if (ShowCcIterParams && NumberError(nameof(NnTol), NnTol, "Convergence tolerance", 0.000000000001m, 0.01m) is { } tol) return tol;
+        if (NumberError(nameof(CorrectionSettingsViewModel.FitSamples), Settings.FitSamples, "Samples per side", 1, 200, true) is { } samples) return samples;
+        if (!Settings.DoCc) return null;
+        if (ShowPls && NumberError(nameof(CorrectionSettingsViewModel.PlsComponents), Settings.PlsComponents, "PLS components", 0, 64, true) is { } components) return components;
+        if (ShowCcIterParams && NumberError(nameof(CorrectionSettingsViewModel.NnTol), Settings.NnTol, "Convergence tolerance", 0.000000000001m, 0.01m) is { } tol) return tol;
         if (!ShowNn) return null;
         if (!NnSettingsValid) return HiddenLayersError;
-        return NumberError(nameof(NnDropout), NnDropout, "Dropout rate", 0, 0.8m)
-            ?? NumberError(nameof(NnLr), NnLr, "Learning rate", 0.000000000000001m, 1)
-            ?? NumberError(nameof(NnEpochs), NnEpochs, "Epochs", 50, 20000, true)
-            ?? NumberError(nameof(NnPatience), NnPatience, "Patience", 1, 5000, true);
+        return NumberError(nameof(CorrectionSettingsViewModel.NnDropout), Settings.NnDropout, "Dropout rate", 0, 0.8m)
+            ?? NumberError(nameof(CorrectionSettingsViewModel.NnLr), Settings.NnLr, "Learning rate", 0.000000000000001m, 1)
+            ?? NumberError(nameof(CorrectionSettingsViewModel.NnEpochs), Settings.NnEpochs, "Epochs", 50, 20000, true)
+            ?? NumberError(nameof(CorrectionSettingsViewModel.NnPatience), Settings.NnPatience, "Patience", 1, 5000, true);
     }
     public string ValidationMessage => CachedOperationError(!WillUseLoadedModel) ?? "";
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationMessage);
@@ -135,8 +135,8 @@ public partial class MainWindowViewModel
 
         var model = _loadedModelIdentity;
         var modelPath = LoadedModelPath;
-        var white = DoFfc ? _loadedWhiteIdentity : null;
-        var whitePath = WhiteImagePath;
+        var white = Settings.DoFfc ? _loadedWhiteIdentity : null;
+        var whitePath = Settings.WhiteImagePath;
         _ = Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath)).ContinueWith(task => Dispatcher.UIThread.Post(() =>
         {
             Volatile.Write(ref _fileCheckRunning, 0);
@@ -158,8 +158,8 @@ public partial class MainWindowViewModel
         if (fit) return null;
         var model = _loadedModelIdentity;
         var modelPath = LoadedModelPath;
-        var white = DoFfc ? _loadedWhiteIdentity : null;
-        var whitePath = WhiteImagePath;
+        var white = Settings.DoFfc ? _loadedWhiteIdentity : null;
+        var whitePath = Settings.WhiteImagePath;
         var state = await Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath));
         if (state != _cachedFileState) { _cachedFileState = state; NotifyValidation(); }
         return OperationError(fit, state);
@@ -182,8 +182,8 @@ public partial class MainWindowViewModel
     private bool ResultStageEnabled(SessionItemViewModel? item, string stage)
     {
         var options = item?.CompletedContext?.Options();
-        return stage switch { "ffc" => options?.DoFfc ?? DoFfc, "gc" => options?.DoGc ?? DoGc,
-            "wb" => options?.DoWb ?? DoWb, "cc" => options?.DoCc ?? DoCc, _ => true };
+        return stage switch { "ffc" => options?.DoFfc ?? Settings.DoFfc, "gc" => options?.DoGc ?? Settings.DoGc,
+            "wb" => options?.DoWb ?? Settings.DoWb, "cc" => options?.DoCc ?? Settings.DoCc, _ => true };
     }
 
     internal void RestoreLoadedModelSettings(string path)
@@ -195,24 +195,24 @@ public partial class MainWindowViewModel
             _loadedModelIdentity = AssetIdentity.Capture(path);
             _loadedWhiteIdentity = null;
             static bool Enabled(JsonElement model, string name, bool fallback) => model.TryGetProperty(name, out var field) && field.ValueKind is JsonValueKind.True or JsonValueKind.False ? field.GetBoolean() : fallback;
-            DoFfc = Enabled(model, "do_ffc", false);
-            DoGc = Enabled(model, "do_gc", model.TryGetProperty("gc_model", out var gc) && gc.ValueKind != JsonValueKind.Null);
-            DoWb = Enabled(model, "do_wb", model.TryGetProperty("wb_diag", out var wb) && wb.ValueKind != JsonValueKind.Null);
-            DoCc = Enabled(model, "do_cc", true);
+            Settings.DoFfc = Enabled(model, "do_ffc", false);
+            Settings.DoGc = Enabled(model, "do_gc", model.TryGetProperty("gc_model", out var gc) && gc.ValueKind != JsonValueKind.Null);
+            Settings.DoWb = Enabled(model, "do_wb", model.TryGetProperty("wb_diag", out var wb) && wb.ValueKind != JsonValueKind.Null);
+            Settings.DoCc = Enabled(model, "do_cc", true);
             if (model.TryGetProperty("ffc_params", out var ffc) && ffc.ValueKind == JsonValueKind.Object)
             {
                 decimal Number(string name, decimal fallback) => ffc.TryGetProperty(name, out var value) && value.TryGetDecimal(out var number) ? number : fallback;
-                if (ffc.TryGetProperty("method", out var method)) SelectedFfcFitMethod = Pick(FfcFitMethods, method.GetString() ?? "poly");
-                FfcBins = Number("bins", 50); FfcSmoothWindow = Number("smooth_window", 5); FfcDegree = Number("degree", 3);
-                FfcNnMaxIter = Number("nn_max_iter", 10000); FfcTol = Number("tol", 0.00000001m);
-                FfcCutOff = Number("cut_off", 1.3m); FfcMaxVal = Number("max_val", 1.8m);
+                if (ffc.TryGetProperty("method", out var method)) Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, method.GetString() ?? "poly");
+                Settings.FfcBins = Number("bins", 50); Settings.FfcSmoothWindow = Number("smooth_window", 5); Settings.FfcDegree = Number("degree", 3);
+                Settings.FfcNnMaxIter = Number("nn_max_iter", 10000); Settings.FfcTol = Number("tol", 0.00000001m);
+                Settings.FfcCutOff = Number("cut_off", 1.3m); Settings.FfcMaxVal = Number("max_val", 1.8m);
             }
             CropRect = "";
             if (model.TryGetProperty("python_api", out var metadata) && metadata.ValueKind == JsonValueKind.Object)
             {
-                if (metadata.TryGetProperty("white", out var white) && white.ValueKind == JsonValueKind.String) WhiteImagePath = white.GetString() ?? "";
-                if (metadata.TryGetProperty("white_sha256", out var hash) && hash.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(WhiteImagePath))
-                    _loadedWhiteIdentity = new(WhiteImagePath, hash.GetString() ?? "");
+                if (metadata.TryGetProperty("white", out var white) && white.ValueKind == JsonValueKind.String) Settings.WhiteImagePath = white.GetString() ?? "";
+                if (metadata.TryGetProperty("white_sha256", out var hash) && hash.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(Settings.WhiteImagePath))
+                    _loadedWhiteIdentity = new(Settings.WhiteImagePath, hash.GetString() ?? "");
                 if (metadata.TryGetProperty("crop_rect", out var crop) && crop.ValueKind == JsonValueKind.String) CropRect = crop.GetString() ?? "";
             }
             ClearNumericDrafts();

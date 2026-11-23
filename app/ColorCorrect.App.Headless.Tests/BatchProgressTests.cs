@@ -34,7 +34,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void EachImageResetsStagesAndCombinedLutDoesNotInventSequentialStages()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true, DoFfc = false, DoWb = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true, Settings = { DoFfc = false, DoWb = true } };
         using var first = new SessionItemViewModel("first.jpg");
         using var second = new SessionItemViewModel("second.jpg");
         var captured = new CorrectionOptions { DoFfc = true, DoGc = true, DoWb = false, DoCc = true };

@@ -65,7 +65,7 @@ public sealed class SaveWorkflowTests
         using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) BitmapExport.Save(bitmap, corrected);
         var vm = CreateViewModel(Path.Combine(scratch, "unused-report.json"), output);
         vm.SaveCorrected = vm.SaveFfc = vm.SaveGc = vm.SaveWb = vm.SaveCc = true;
-        vm.DoFfc = vm.DoGc = vm.DoWb = vm.DoCc = stagesEnabled;
+        vm.Settings.DoFfc = vm.Settings.DoGc = vm.Settings.DoWb = vm.Settings.DoCc = stagesEnabled;
         vm.SaveReport = false;
         vm.SelectedOutputFormat = vm.OutputFormats.Single(option => option.Value == format);
         vm.Session[0].PreviewDir = previews;

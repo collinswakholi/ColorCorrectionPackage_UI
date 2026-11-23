@@ -102,11 +102,11 @@ public partial class MainWindowViewModel
         }
 
         PipelineSteps.Clear();
-        AddStep("ffc", "FFC", DoFfc);
-        AddStep("sat", "SAT", !SkipSaturated);
-        AddStep("gc", "GC", DoGc);
-        AddStep("wb", "WB", DoWb);
-        AddStep("cc", CcChipLabel(), DoCc);
+        AddStep("ffc", "FFC", Settings.DoFfc);
+        AddStep("sat", "SAT", !Settings.SkipSaturated);
+        AddStep("gc", "GC", Settings.DoGc);
+        AddStep("wb", "WB", Settings.DoWb);
+        AddStep("cc", CcChipLabel(), Settings.DoCc);
         ShowPipeline = true;
     }
 

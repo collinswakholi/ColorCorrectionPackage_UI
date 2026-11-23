@@ -44,7 +44,7 @@ public sealed class CompletedWorkflowTests
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(photo), b, new() { DoGc = false, DoWb = true, FastMode = false });
             var apply = typeof(MainWindowViewModel).GetMethod("ApplyOutcome", BindingFlags.Instance | BindingFlags.NonPublic)!;
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = true, ModelPath = b, CompletedContext = context }, false, false]);
-            vm.LoadedModelPath = c; vm.DoGc = true; vm.DoWb = false; vm.FastMode = true;
+            vm.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.FastMode = true;
             Assert.Equal(b, item.ModelPath); Assert.Equal(b, item.CompletedContext!.Model.Path);
             Assert.False(vm.ReplayOptions(item)!.DoGc); Assert.True(vm.ReplayOptions(item)!.DoWb); Assert.False(vm.ReplayOptions(item)!.FastMode);
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = false, ModelPath = c, Error = "cancelled" }, false, false]);
@@ -81,13 +81,13 @@ public sealed class CompletedWorkflowTests
     public void NumericDraftsAreValidatedOnlyForTheRequestedOperation()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.NnEpochsText = "bad";
+        vm.Settings.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.NnEpochsText = "bad";
         Assert.Contains("Epochs", vm.OperationError(true)); Assert.Null(vm.OperationError(false));
         vm.NnEpochsText = "50.5"; Assert.Contains("whole number", vm.OperationError(true));
         vm.NnEpochsText = "50"; Assert.Null(vm.OperationError(true));
         vm.FfcBinsText = "bad"; Assert.Null(vm.OperationError(true));
-        vm.DoFfc = true; Assert.Contains("white reference", vm.OperationError(true));
-        vm.DoFfc = false; vm.DoCc = false; vm.HiddenLayersText = "bad"; Assert.Null(vm.OperationError(true));
+        vm.Settings.DoFfc = true; Assert.Contains("white reference", vm.OperationError(true));
+        vm.Settings.DoFfc = false; vm.Settings.DoCc = false; vm.Settings.HiddenLayersText = "bad"; Assert.Null(vm.OperationError(true));
     }
 
     [AvaloniaFact]
@@ -172,9 +172,9 @@ public sealed class CompletedWorkflowTests
                 python_api = new { white, white_sha256 = AssetIdentity.Capture(white).Sha256.ToLowerInvariant(), crop_rect = "1,2,30,40" } }));
             var vm = new MainWindowViewModel(persistenceEnabled: false) { LoadedModelPath = model };
             vm.RestoreLoadedModelSettings(model);
-            Assert.Equal(method, vm.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.FfcBins); Assert.Equal(3m, vm.FfcSmoothWindow);
-            Assert.Equal(4m, vm.FfcDegree); Assert.Equal(90m, vm.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.FfcTol);
-            Assert.Equal("1,2,30,40", vm.CropRect); Assert.False(vm.DoGc); Assert.True(vm.DoFfc);
+            Assert.Equal(method, vm.Settings.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.Settings.FfcBins); Assert.Equal(3m, vm.Settings.FfcSmoothWindow);
+            Assert.Equal(4m, vm.Settings.FfcDegree); Assert.Equal(90m, vm.Settings.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.Settings.FfcTol);
+            Assert.Equal("1,2,30,40", vm.CropRect); Assert.False(vm.Settings.DoGc); Assert.True(vm.Settings.DoFfc);
             Assert.Null(vm.OperationError(false));
             File.WriteAllText(white, "white B"); Assert.Contains("white reference changed", vm.OperationError(false));
             File.WriteAllText(white, "white A"); File.WriteAllText(model, "{}"); Assert.Contains("model changed", vm.OperationError(false));

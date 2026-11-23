@@ -85,13 +85,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             new NamedValue("rmsprop", "RMSProp"),
         ];
         OutputFormats = [new NamedValue("png", "PNG"), new NamedValue("jpg", "JPEG")];
-        SelectedMethod = Methods[0];
-        SelectedFfcFitMethod = Pick(FfcFitMethods, "poly");
-        SelectedNnOptimizer = NnOptimizers[0];
-        SelectedInputSpace = Pick(RgbSpaces, "srgb");
-        SelectedInputWhite = Pick(WhitePoints, "d65");
-        SelectedTargetSpace = Pick(RgbSpaces, "srgb");
-        SelectedTargetWhite = Pick(WhitePoints, "d65");
+        Settings.SelectedMethod = Methods[0];
+        Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, "poly");
+        Settings.SelectedNnOptimizer = NnOptimizers[0];
+        Settings.SelectedInputSpace = Pick(RgbSpaces, "srgb");
+        Settings.SelectedInputWhite = Pick(WhitePoints, "d65");
+        Settings.SelectedTargetSpace = Pick(RgbSpaces, "srgb");
+        Settings.SelectedTargetWhite = Pick(WhitePoints, "d65");
         SelectedOutputFormat = OutputFormats[1];
         SyncDegreeAndAdvanced();
         HookWorkerProgress();
@@ -228,40 +228,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     /// <summary>Correction settings (stages, FFC, color spaces, CC model and its parameters).</summary>
     public CorrectionSettingsViewModel Settings { get; } = new();
 
-    // Compatibility forwarders for shell code and tests; bindings use Settings.* directly.
-    public bool DoFfc { get => Settings.DoFfc; set => Settings.DoFfc = value; }
-    public bool DoGc { get => Settings.DoGc; set => Settings.DoGc = value; }
-    public bool DoWb { get => Settings.DoWb; set => Settings.DoWb = value; }
-    public bool DoCc { get => Settings.DoCc; set => Settings.DoCc = value; }
-    public string WhiteImagePath { get => Settings.WhiteImagePath; set => Settings.WhiteImagePath = value; }
-    public NamedValue SelectedFfcFitMethod { get => Settings.SelectedFfcFitMethod; set => Settings.SelectedFfcFitMethod = value; }
-    public decimal FfcBins { get => Settings.FfcBins; set => Settings.FfcBins = value; }
-    public decimal FfcSmoothWindow { get => Settings.FfcSmoothWindow; set => Settings.FfcSmoothWindow = value; }
-    public decimal FfcDegree { get => Settings.FfcDegree; set => Settings.FfcDegree = value; }
-    public decimal FfcNnMaxIter { get => Settings.FfcNnMaxIter; set => Settings.FfcNnMaxIter = value; }
-    public decimal FfcTol { get => Settings.FfcTol; set => Settings.FfcTol = value; }
-    public decimal FfcCutOff { get => Settings.FfcCutOff; set => Settings.FfcCutOff = value; }
-    public decimal FfcMaxVal { get => Settings.FfcMaxVal; set => Settings.FfcMaxVal = value; }
-    public decimal ClipLo { get => Settings.ClipLo; set => Settings.ClipLo = value; }
-    public decimal ClipHi { get => Settings.ClipHi; set => Settings.ClipHi = value; }
-    public NamedValue SelectedMethod { get => Settings.SelectedMethod; set => Settings.SelectedMethod = value; }
-    public NamedValue? SelectedDegree { get => Settings.SelectedDegree; set => Settings.SelectedDegree = value; }
-    public NamedValue SelectedInputSpace { get => Settings.SelectedInputSpace; set => Settings.SelectedInputSpace = value; }
-    public NamedValue SelectedInputWhite { get => Settings.SelectedInputWhite; set => Settings.SelectedInputWhite = value; }
-    public NamedValue SelectedTargetSpace { get => Settings.SelectedTargetSpace; set => Settings.SelectedTargetSpace = value; }
-    public NamedValue SelectedTargetWhite { get => Settings.SelectedTargetWhite; set => Settings.SelectedTargetWhite = value; }
-    public decimal FitSamples { get => Settings.FitSamples; set => Settings.FitSamples = value; }
-    public decimal PlsComponents { get => Settings.PlsComponents; set => Settings.PlsComponents = value; }
-    public string HiddenLayersText { get => Settings.HiddenLayersText; set => Settings.HiddenLayersText = value; }
-    public NamedValue SelectedNnOptimizer { get => Settings.SelectedNnOptimizer; set => Settings.SelectedNnOptimizer = value; }
-    public bool NnBatchNormalization { get => Settings.NnBatchNormalization; set => Settings.NnBatchNormalization = value; }
-    public decimal NnDropout { get => Settings.NnDropout; set => Settings.NnDropout = value; }
-    public decimal NnLr { get => Settings.NnLr; set => Settings.NnLr = value; }
-    public decimal NnEpochs { get => Settings.NnEpochs; set => Settings.NnEpochs = value; }
-    public decimal NnPatience { get => Settings.NnPatience; set => Settings.NnPatience = value; }
-    public decimal NnTol { get => Settings.NnTol; set => Settings.NnTol = value; }
-    public bool IncludeCombinations { get => Settings.IncludeCombinations; set => Settings.IncludeCombinations = value; }
-    public bool SkipSaturated { get => Settings.SkipSaturated; set => Settings.SkipSaturated = value; }
 
     private void OnSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -344,9 +310,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     public string WorkerChip => ShortenWorkerLine(WorkerLine);
-    public bool NnSettingsValid => !ShowNn || CorrectionOptions.TryParseHiddenLayers(HiddenLayersText, out _, out _);
-    public bool HasHiddenLayersError => ShowNn && !CorrectionOptions.TryParseHiddenLayers(HiddenLayersText, out _, out _);
-    public string HiddenLayersError => CorrectionOptions.TryParseHiddenLayers(HiddenLayersText, out _, out var error) ? "" : error;
+    public bool NnSettingsValid => !ShowNn || CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
+    public bool HasHiddenLayersError => ShowNn && !CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
+    public string HiddenLayersError => CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out var error) ? "" : error;
     public bool ShowSessionNavigation => Session.Count > 1;
     public bool CanNavigatePrevious => Active is not null && Session.IndexOf(Active) > 0;
     public bool CanNavigateNext => Active is not null && Session.IndexOf(Active) >= 0 && Session.IndexOf(Active) < Session.Count - 1;
@@ -476,9 +442,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public void AddPaths(IEnumerable<string> paths, bool collapseLibrary = true)
     {
         var incoming = paths.ToArray();
-        if (!string.IsNullOrWhiteSpace(WhiteImagePath) && !File.Exists(WhiteImagePath))
+        if (!string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && !File.Exists(Settings.WhiteImagePath))
         {
-            var staleName = Path.GetFileName(WhiteImagePath);
+            var staleName = Path.GetFileName(Settings.WhiteImagePath);
             var replacements = incoming
                 .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path) && IsImage(path))
                 .Select(Path.GetFullPath)
@@ -518,7 +484,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             last = new SessionItemViewModel(full);
-            if (!string.IsNullOrWhiteSpace(WhiteImagePath) && PathsEqual(full, WhiteImagePath))
+            if (!string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && PathsEqual(full, Settings.WhiteImagePath))
             {
                 last.IncludeInBatch = false;
             }
@@ -1334,40 +1300,40 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand]
     private void ResetSettings()
     {
-        SelectedMethod = Methods[0];
+        Settings.SelectedMethod = Methods[0];
         SyncDegreeAndAdvanced();
-        SelectedDegree = DegreeOptions.FirstOrDefault(x => x.Value == "2") ?? DegreeOptions.FirstOrDefault();
-        SelectedInputSpace = Pick(RgbSpaces, "srgb");
-        SelectedInputWhite = Pick(WhitePoints, "d65");
-        SelectedTargetSpace = Pick(RgbSpaces, "srgb");
-        SelectedTargetWhite = Pick(WhitePoints, "d65");
+        Settings.SelectedDegree = DegreeOptions.FirstOrDefault(x => x.Value == "2") ?? DegreeOptions.FirstOrDefault();
+        Settings.SelectedInputSpace = Pick(RgbSpaces, "srgb");
+        Settings.SelectedInputWhite = Pick(WhitePoints, "d65");
+        Settings.SelectedTargetSpace = Pick(RgbSpaces, "srgb");
+        Settings.SelectedTargetWhite = Pick(WhitePoints, "d65");
         SelectedOutputFormat = OutputFormats[1];
-        FitSamples = 1;
-        PlsComponents = 0;
-        HiddenLayersText = "100";
-        SelectedNnOptimizer = NnOptimizers[0];
-        NnBatchNormalization = false;
-        NnDropout = 0;
-        NnLr = 0.001m;
-        NnEpochs = 10000;
-        NnPatience = 1500;
-        NnTol = 0.000001m;
-        SkipSaturated = false;
-        IncludeCombinations = true;
-        DoFfc = false;
-        DoGc = true;
-        DoWb = true;
-        DoCc = true;
-        SelectedFfcFitMethod = Pick(FfcFitMethods, "poly");
-        FfcBins = 50;
-        FfcSmoothWindow = 5;
-        FfcDegree = 3;
-        FfcNnMaxIter = 10000;
-        FfcTol = 0.00000001m;
-        FfcCutOff = 1.3m;
-        FfcMaxVal = 1.8m;
-        ClipLo = -0.2m;
-        ClipHi = 1.3m;
+        Settings.FitSamples = 1;
+        Settings.PlsComponents = 0;
+        Settings.HiddenLayersText = "100";
+        Settings.SelectedNnOptimizer = NnOptimizers[0];
+        Settings.NnBatchNormalization = false;
+        Settings.NnDropout = 0;
+        Settings.NnLr = 0.001m;
+        Settings.NnEpochs = 10000;
+        Settings.NnPatience = 1500;
+        Settings.NnTol = 0.000001m;
+        Settings.SkipSaturated = false;
+        Settings.IncludeCombinations = true;
+        Settings.DoFfc = false;
+        Settings.DoGc = true;
+        Settings.DoWb = true;
+        Settings.DoCc = true;
+        Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, "poly");
+        Settings.FfcBins = 50;
+        Settings.FfcSmoothWindow = 5;
+        Settings.FfcDegree = 3;
+        Settings.FfcNnMaxIter = 10000;
+        Settings.FfcTol = 0.00000001m;
+        Settings.FfcCutOff = 1.3m;
+        Settings.FfcMaxVal = 1.8m;
+        Settings.ClipLo = -0.2m;
+        Settings.ClipHi = 1.3m;
         Phase2Teacher = true;
         ClearNumericDrafts();
         UpdateCcSummary();
@@ -1615,24 +1581,24 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private bool ActiveIsWhiteRef()
     {
-        if (Active is null || string.IsNullOrWhiteSpace(WhiteImagePath) || !File.Exists(WhiteImagePath))
+        if (Active is null || string.IsNullOrWhiteSpace(Settings.WhiteImagePath) || !File.Exists(Settings.WhiteImagePath))
         {
             return false;
         }
 
-        return PathsEqual(Active.Path, WhiteImagePath);
+        return PathsEqual(Active.Path, Settings.WhiteImagePath);
     }
 
     private void EnsureWhiteInSession(bool activate)
     {
         RefreshWhiteBadges();
-        if (string.IsNullOrWhiteSpace(WhiteImagePath) || !File.Exists(WhiteImagePath))
+        if (string.IsNullOrWhiteSpace(Settings.WhiteImagePath) || !File.Exists(Settings.WhiteImagePath))
         {
             RefreshOverlay();
             return;
         }
 
-        var existing = Session.FirstOrDefault(item => PathsEqual(item.Path, WhiteImagePath));
+        var existing = Session.FirstOrDefault(item => PathsEqual(item.Path, Settings.WhiteImagePath));
         if (existing is not null)
         {
             // A flat-field capture is calibration input, never a correction target unless
@@ -1712,7 +1678,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "wb"));
         CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "cc"));
         CanSaveReport = Session.Any(item => item.IncludeInSave && File.Exists(item.ReportPath));
-        HasWhiteRef = !string.IsNullOrWhiteSpace(WhiteImagePath) && File.Exists(WhiteImagePath);
+        HasWhiteRef = !string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && File.Exists(Settings.WhiteImagePath);
         RefreshWhiteBadges();
         HasReport = Active is not null && File.Exists(Active.ReportPath);
         RefreshSessionNavigation();
@@ -1726,8 +1692,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         foreach (var item in Session)
         {
-            item.IsWhiteRef = !string.IsNullOrWhiteSpace(WhiteImagePath)
-                && PathsEqual(item.Path, WhiteImagePath);
+            item.IsWhiteRef = !string.IsNullOrWhiteSpace(Settings.WhiteImagePath)
+                && PathsEqual(item.Path, Settings.WhiteImagePath);
         }
     }
 
@@ -1797,7 +1763,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private CorrectionOptions BuildOptions()
     {
-        var hiddenLayers = CorrectionOptions.TryParseHiddenLayers(HiddenLayersText, out var parsedLayers, out _)
+        var hiddenLayers = CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out var parsedLayers, out _)
             ? parsedLayers
             : [100];
         return new CorrectionOptions
@@ -1806,60 +1772,60 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             LutDevice = SelectedProcessingDevice.Value,
             FastMode = FastMode,
             BatchPreviewResults = BatchPreviewResults,
-            Method = SelectedMethod.Value,
-            Degree = int.TryParse(SelectedDegree?.Value, out var degree) ? degree : 2,
-            IncludeCombinations = IncludeCombinations,
-            FitSamples = (int)Math.Clamp(FitSamples, 1, 200),
-            SkipSaturated = SkipSaturated,
-            InputSpace = SelectedInputSpace.Value,
-            InputWhite = SelectedInputWhite.Value,
-            TargetSpace = SelectedTargetSpace.Value,
-            TargetWhite = SelectedTargetWhite.Value,
+            Method = Settings.SelectedMethod.Value,
+            Degree = int.TryParse(Settings.SelectedDegree?.Value, out var degree) ? degree : 2,
+            IncludeCombinations = Settings.IncludeCombinations,
+            FitSamples = (int)Math.Clamp(Settings.FitSamples, 1, 200),
+            SkipSaturated = Settings.SkipSaturated,
+            InputSpace = Settings.SelectedInputSpace.Value,
+            InputWhite = Settings.SelectedInputWhite.Value,
+            TargetSpace = Settings.SelectedTargetSpace.Value,
+            TargetWhite = Settings.SelectedTargetWhite.Value,
             OutputFormat = SelectedOutputFormat.Value,
             OutputDir = OutputDir,
-            PlsComponents = (int)Math.Clamp(PlsComponents, 0, 64),
+            PlsComponents = (int)Math.Clamp(Settings.PlsComponents, 0, 64),
             HiddenSize = hiddenLayers[0],
             HiddenLayers = hiddenLayers,
-            NnOptimizer = SelectedNnOptimizer.Value,
-            NnBatchNormalization = NnBatchNormalization,
-            NnDropout = (double)Math.Clamp(NnDropout, 0, 0.8m),
-            NnLr = (double)NnLr,
-            NnEpochs = (int)Math.Clamp(NnEpochs, 50, 20000),
-            NnPatience = (int)Math.Clamp(NnPatience, 1, 5000),
-            NnTol = ClampTol((double)NnTol, 1e-6),
+            NnOptimizer = Settings.SelectedNnOptimizer.Value,
+            NnBatchNormalization = Settings.NnBatchNormalization,
+            NnDropout = (double)Math.Clamp(Settings.NnDropout, 0, 0.8m),
+            NnLr = (double)Settings.NnLr,
+            NnEpochs = (int)Math.Clamp(Settings.NnEpochs, 50, 20000),
+            NnPatience = (int)Math.Clamp(Settings.NnPatience, 1, 5000),
+            NnTol = ClampTol((double)Settings.NnTol, 1e-6),
             LoadedModelPath = LoadedModelPath,
             ModelInPath = LoadedModelPath,
             UseLoadedModel = UseLoadedModel,
-            DoFfc = DoFfc,
-            DoGc = DoGc,
-            DoWb = DoWb,
-            DoCc = DoCc,
-            WhiteImagePath = WhiteImagePath,
+            DoFfc = Settings.DoFfc,
+            DoGc = Settings.DoGc,
+            DoWb = Settings.DoWb,
+            DoCc = Settings.DoCc,
+            WhiteImagePath = Settings.WhiteImagePath,
             CropRect = CropRect,
-            FfcFitMethod = SelectedFfcFitMethod?.Value ?? "poly",
-            FfcBins = (int)Math.Clamp(FfcBins, 4, 200),
-            FfcSmoothWindow = (int)Math.Clamp(FfcSmoothWindow, 1, 51),
-            FfcDegree = (int)Math.Clamp(FfcDegree, 1, 7),
-            FfcNnMaxIter = (int)Math.Clamp(FfcNnMaxIter, 50, 20000),
-            FfcTol = ClampTol((double)FfcTol, 1e-8),
-            FfcCutOff = ClampFfcCutOff((double)FfcCutOff),
-            FfcMaxVal = ClampFfcMaxVal((double)FfcMaxVal, ClampFfcCutOff((double)FfcCutOff)),
-            ClipLo = ClampClipLo((double)ClipLo),
-            ClipHi = ClampClipHi((double)ClipHi, ClampClipLo((double)ClipLo)),
+            FfcFitMethod = Settings.SelectedFfcFitMethod?.Value ?? "poly",
+            FfcBins = (int)Math.Clamp(Settings.FfcBins, 4, 200),
+            FfcSmoothWindow = (int)Math.Clamp(Settings.FfcSmoothWindow, 1, 51),
+            FfcDegree = (int)Math.Clamp(Settings.FfcDegree, 1, 7),
+            FfcNnMaxIter = (int)Math.Clamp(Settings.FfcNnMaxIter, 50, 20000),
+            FfcTol = ClampTol((double)Settings.FfcTol, 1e-8),
+            FfcCutOff = ClampFfcCutOff((double)Settings.FfcCutOff),
+            FfcMaxVal = ClampFfcMaxVal((double)Settings.FfcMaxVal, ClampFfcCutOff((double)Settings.FfcCutOff)),
+            ClipLo = ClampClipLo((double)Settings.ClipLo),
+            ClipHi = ClampClipHi((double)Settings.ClipHi, ClampClipLo((double)Settings.ClipLo)),
             Phase2Teacher = Phase2Teacher,
         }.Normalize();
     }
 
     private void SyncDegreeAndAdvanced()
     {
-        var method = CorrectionOptions.CanonicalMethod(SelectedMethod.Value);
+        var method = CorrectionOptions.CanonicalMethod(Settings.SelectedMethod.Value);
         ShowDegree = method != "ccm";
         ShowPolyCombinations = method == "linear";
         ShowPls = method == "pls";
         ShowNn = method == "nn";
         ShowCcIterParams = method is "pls" or "nn";
         DegreeLabel = method == "rpcc" ? "Root degree" : "Polynomial degree";
-        var keep = SelectedDegree?.Value ?? "2";
+        var keep = Settings.SelectedDegree?.Value ?? "2";
         DegreeOptions.Clear();
         if (method == "rpcc")
         {
@@ -1875,7 +1841,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
         }
 
-        SelectedDegree = DegreeOptions.FirstOrDefault(item => item.Value == keep) ?? DegreeOptions.FirstOrDefault();
+        Settings.SelectedDegree = DegreeOptions.FirstOrDefault(item => item.Value == keep) ?? DegreeOptions.FirstOrDefault();
         OnPropertyChanged(nameof(NnSettingsValid));
         OnPropertyChanged(nameof(HasHiddenLayersError));
         OnPropertyChanged(nameof(HiddenLayersError));
@@ -2016,7 +1982,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         var options = BuildOptions();
         return [BuildProcessSummary(options),
-            $"{SelectedInputSpace.Label} / {SelectedInputWhite.Label} → {SelectedTargetSpace.Label} / {SelectedTargetWhite.Label}"];
+            $"{Settings.SelectedInputSpace.Label} / {Settings.SelectedInputWhite.Label} → {Settings.SelectedTargetSpace.Label} / {Settings.SelectedTargetWhite.Label}"];
     }
 
     private IReadOnlyList<string> DetectDetails(SessionItemViewModel item, DetectOutcome result, HandshakeDocument? handshake)
@@ -2392,43 +2358,43 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         FastMode = options.FastMode;
         BatchPreviewResults = options.BatchPreviewResults;
         options.Normalize();
-        SelectedMethod = Pick(Methods, options.Method);
+        Settings.SelectedMethod = Pick(Methods, options.Method);
         SyncDegreeAndAdvanced();
-        SelectedDegree = DegreeOptions.FirstOrDefault(item => item.Value == options.Degree.ToString()) ?? SelectedDegree;
-        SelectedInputSpace = Pick(RgbSpaces, options.InputSpace);
-        SelectedInputWhite = Pick(WhitePoints, options.InputWhite);
-        SelectedTargetSpace = Pick(RgbSpaces, options.TargetSpace);
-        SelectedTargetWhite = Pick(WhitePoints, options.TargetWhite);
+        Settings.SelectedDegree = DegreeOptions.FirstOrDefault(item => item.Value == options.Degree.ToString()) ?? Settings.SelectedDegree;
+        Settings.SelectedInputSpace = Pick(RgbSpaces, options.InputSpace);
+        Settings.SelectedInputWhite = Pick(WhitePoints, options.InputWhite);
+        Settings.SelectedTargetSpace = Pick(RgbSpaces, options.TargetSpace);
+        Settings.SelectedTargetWhite = Pick(WhitePoints, options.TargetWhite);
         SelectedOutputFormat = Pick(OutputFormats, options.OutputFormat);
-        FitSamples = Math.Clamp(options.FitSamples, 1, 200);
-        PlsComponents = Math.Clamp(options.PlsComponents, 0, 64);
-        HiddenLayersText = CorrectionOptions.FormatHiddenLayers(options.HiddenLayers);
-        SelectedNnOptimizer = Pick(NnOptimizers, options.NnOptimizer);
-        NnBatchNormalization = options.NnBatchNormalization;
-        NnDropout = (decimal)Math.Clamp(options.NnDropout, 0, 0.8);
-        NnLr = (decimal)options.NnLr;
-        NnEpochs = Math.Clamp(options.NnEpochs, 50, 20000);
-        NnPatience = Math.Clamp(options.NnPatience, 1, 5000);
-        NnTol = (decimal)ClampTol(options.NnTol, 1e-6);
-        SkipSaturated = options.SkipSaturated;
-        IncludeCombinations = options.IncludeCombinations;
+        Settings.FitSamples = Math.Clamp(options.FitSamples, 1, 200);
+        Settings.PlsComponents = Math.Clamp(options.PlsComponents, 0, 64);
+        Settings.HiddenLayersText = CorrectionOptions.FormatHiddenLayers(options.HiddenLayers);
+        Settings.SelectedNnOptimizer = Pick(NnOptimizers, options.NnOptimizer);
+        Settings.NnBatchNormalization = options.NnBatchNormalization;
+        Settings.NnDropout = (decimal)Math.Clamp(options.NnDropout, 0, 0.8);
+        Settings.NnLr = (decimal)options.NnLr;
+        Settings.NnEpochs = Math.Clamp(options.NnEpochs, 50, 20000);
+        Settings.NnPatience = Math.Clamp(options.NnPatience, 1, 5000);
+        Settings.NnTol = (decimal)ClampTol(options.NnTol, 1e-6);
+        Settings.SkipSaturated = options.SkipSaturated;
+        Settings.IncludeCombinations = options.IncludeCombinations;
         OutputDir = options.OutputDir;
-        DoFfc = options.DoFfc;
-        DoGc = options.DoGc;
-        DoWb = options.DoWb;
-        DoCc = options.DoCc;
-        WhiteImagePath = options.WhiteImagePath;
+        Settings.DoFfc = options.DoFfc;
+        Settings.DoGc = options.DoGc;
+        Settings.DoWb = options.DoWb;
+        Settings.DoCc = options.DoCc;
+        Settings.WhiteImagePath = options.WhiteImagePath;
         CropRect = options.CropRect;
-        SelectedFfcFitMethod = Pick(FfcFitMethods, string.IsNullOrWhiteSpace(options.FfcFitMethod) ? "poly" : options.FfcFitMethod);
-        FfcBins = Math.Clamp(options.FfcBins, 4, 200);
-        FfcSmoothWindow = Math.Clamp(options.FfcSmoothWindow, 1, 51);
-        FfcDegree = Math.Clamp(options.FfcDegree, 1, 7);
-        FfcNnMaxIter = Math.Clamp(options.FfcNnMaxIter <= 0 ? 10000 : options.FfcNnMaxIter, 50, 20000);
-        FfcTol = (decimal)ClampTol(options.FfcTol, 1e-8);
-        FfcCutOff = (decimal)ClampFfcCutOff(options.FfcCutOff);
-        FfcMaxVal = (decimal)ClampFfcMaxVal(options.FfcMaxVal, ClampFfcCutOff(options.FfcCutOff));
-        ClipLo = (decimal)ClampClipLo(options.ClipLo);
-        ClipHi = (decimal)ClampClipHi(options.ClipHi, ClampClipLo(options.ClipLo));
+        Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, string.IsNullOrWhiteSpace(options.FfcFitMethod) ? "poly" : options.FfcFitMethod);
+        Settings.FfcBins = Math.Clamp(options.FfcBins, 4, 200);
+        Settings.FfcSmoothWindow = Math.Clamp(options.FfcSmoothWindow, 1, 51);
+        Settings.FfcDegree = Math.Clamp(options.FfcDegree, 1, 7);
+        Settings.FfcNnMaxIter = Math.Clamp(options.FfcNnMaxIter <= 0 ? 10000 : options.FfcNnMaxIter, 50, 20000);
+        Settings.FfcTol = (decimal)ClampTol(options.FfcTol, 1e-8);
+        Settings.FfcCutOff = (decimal)ClampFfcCutOff(options.FfcCutOff);
+        Settings.FfcMaxVal = (decimal)ClampFfcMaxVal(options.FfcMaxVal, ClampFfcCutOff(options.FfcCutOff));
+        Settings.ClipLo = (decimal)ClampClipLo(options.ClipLo);
+        Settings.ClipHi = (decimal)ClampClipHi(options.ClipHi, ClampClipLo(options.ClipLo));
         Phase2Teacher = options.Phase2Teacher;
         var model = File.Exists(options.LoadedModelPath) ? options.LoadedModelPath
             : File.Exists(options.ModelInPath) ? options.ModelInPath : "";

@@ -48,7 +48,7 @@ public sealed class DocumentationRenderingTests
             Assert.True(window.FfcSettingsButton.IsEffectivelyVisible);
             Assert.True(window.GcSettingsButton.IsEffectivelyVisible);
             Assert.True(window.CcSettingsButton.IsEffectivelyVisible);
-            Assert.True(vm.DoFfc);
+            Assert.True(vm.Settings.DoFfc);
             Assert.True(vm.HasWhiteRef);
             // Documentation must not expose build-machine paths from the normal
             // operational log. This is a UI illustration, not a completed fit.

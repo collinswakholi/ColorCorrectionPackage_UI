@@ -14,17 +14,17 @@ public sealed class SessionIoTests
         var root = Path.Combine(Path.GetTempPath(), "ccp-session-io-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var path = Path.Combine(root, "saved.json");
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, DoGc = true, Dialogs = new SessionDialogs(path) };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, Settings = { DoGc = true }, Dialogs = new SessionDialogs(path) };
         try
         {
             var pending = vm.SaveSessionAsCommand.ExecuteAsync(null);
-            vm.DoGc = false;
+            vm.Settings.DoGc = false;
             await pending;
             Assert.True(File.Exists(path));
             var (saved, error) = SessionStore.TryLoadFrom(path);
             Assert.Null(error);
             Assert.True(saved.Options.DoGc);
-            Assert.False(vm.DoGc);
+            Assert.False(vm.Settings.DoGc);
             Assert.False(vm.IsSaving);
             Assert.StartsWith("Session saved", vm.Status);
             Assert.True(vm.LoadSessionCommand.CanExecute(null));

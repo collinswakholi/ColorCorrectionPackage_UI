@@ -104,11 +104,11 @@ public partial class MainWindowViewModel
     public bool HasStageCc => ResultStageEnabled(Active, "cc") && (Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
     public bool HasStageCorrected => HasCorrected || Active?.IsCorrected == true || StageFileExists("corrected.jpg");
 
-    public string WhiteImageLabel => string.IsNullOrWhiteSpace(WhiteImagePath)
+    public string WhiteImageLabel => string.IsNullOrWhiteSpace(Settings.WhiteImagePath)
         ? "Choose a white reference to use FFC"
-        : Path.GetFileName(WhiteImagePath);
+        : Path.GetFileName(Settings.WhiteImagePath);
 
-    public bool ShowFfcDegree => SelectedFfcFitMethod.Value != "linear";
+    public bool ShowFfcDegree => Settings.SelectedFfcFitMethod.Value != "linear";
 
     private bool StageFileExists(string file) =>
         ResolvePreviewFile(LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
@@ -181,7 +181,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void ClearWhite()
     {
-        WhiteImagePath = "";
+        Settings.WhiteImagePath = "";
         HasWhiteRef = false;
         OnPropertyChanged(nameof(WhiteImageLabel));
         ScheduleSave();
@@ -246,12 +246,12 @@ public partial class MainWindowViewModel
             return;
         }
 
-        WhiteImagePath = Path.GetFullPath(path);
-        DoFfc = true;
+        Settings.WhiteImagePath = Path.GetFullPath(path);
+        Settings.DoFfc = true;
         HasWhiteRef = true;
         OnPropertyChanged(nameof(WhiteImageLabel));
-        Status = $"FFC white · {Path.GetFileName(WhiteImagePath)}";
-        Log("FFC", Status, LogLevel.Info, [WhiteImagePath]);
+        Status = $"FFC white · {Path.GetFileName(Settings.WhiteImagePath)}";
+        Log("FFC", Status, LogLevel.Info, [Settings.WhiteImagePath]);
         EnsureWhiteInSession(activate: false);
         RefreshOverlay();
         ScheduleSave();

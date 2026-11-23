@@ -708,7 +708,7 @@ public partial class MainWindowViewModel
                 EnsureWhiteInSession(activate: false);
                 foreach (var sessionItem in Session)
                 {
-                    if (PathsEqual(sessionItem.Path, WhiteImagePath))
+                    if (PathsEqual(sessionItem.Path, Settings.WhiteImagePath))
                     {
                         sessionItem.FfcPlane = fittedPlane;
                     }

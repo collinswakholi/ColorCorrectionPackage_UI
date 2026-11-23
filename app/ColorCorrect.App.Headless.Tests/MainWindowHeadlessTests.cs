@@ -98,7 +98,7 @@ public sealed class MainWindowHeadlessTests
                 vm.LibraryExpanded = true;
                 vm.ProcessExpanded = true;
                 vm.ModelExpanded = true;
-                vm.DoFfc = true;
+                vm.Settings.DoFfc = true;
                 vm.AddPaths([TestImagePath("ColorCard_Big.JPG"), TestImagePath("ColorCard_Combo.JPG"),
                     TestImagePath("Sample_3572.JPG"), TestImagePath("Sample_3573.JPG")]);
                 vm.LibraryExpanded = true; // Adding media deliberately closes Catalog; reopen for this stress case.
@@ -287,19 +287,19 @@ public sealed class MainWindowHeadlessTests
         var (window, vm) = ShowMain(1200, 760, light: false);
         try
         {
-            vm.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
-            vm.HiddenLayersText = "[128, 64, 32]";
-            vm.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
-            vm.NnBatchNormalization = true;
-            vm.NnDropout = 0.25m;
+            vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
+            vm.Settings.HiddenLayersText = "[128, 64, 32]";
+            vm.Settings.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
+            vm.Settings.NnBatchNormalization = true;
+            vm.Settings.NnDropout = 0.25m;
 
             Assert.True(vm.ShowNn);
             Assert.False(vm.ShowPolyCombinations);
             Assert.True(vm.NnSettingsValid);
             Assert.False(vm.HasHiddenLayersError);
-            Assert.Equal("rmsprop", vm.SelectedNnOptimizer.Value);
+            Assert.Equal("rmsprop", vm.Settings.SelectedNnOptimizer.Value);
 
-            vm.HiddenLayersText = "[128, nope]";
+            vm.Settings.HiddenLayersText = "[128, nope]";
             Assert.False(vm.NnSettingsValid);
             Assert.True(vm.HasHiddenLayersError);
             Assert.NotEmpty(vm.HiddenLayersError);
@@ -311,15 +311,15 @@ public sealed class MainWindowHeadlessTests
             {
                 Assert.False(dialog.PolyCombinationsToggle.IsVisible);
                 Assert.True(dialog.DegreeSelect.IsVisible);
-                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "pls");
+                vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "pls");
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(dialog.PolyCombinationsToggle.IsVisible);
                 Assert.True(dialog.DegreeSelect.IsVisible);
-                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "linear");
+                vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "linear");
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(dialog.PolyCombinationsToggle.IsVisible);
                 dialog.PolyCombinationsToggle.IsChecked = false;
-                Assert.False(vm.IncludeCombinations);
+                Assert.False(vm.Settings.IncludeCombinations);
             }
             finally { dialog.Close(); Dispatcher.UIThread.RunJobs(); }
         }
@@ -400,12 +400,12 @@ public sealed class MainWindowHeadlessTests
         try
         {
             var blank = TestImagePath("Blank.JPG");
-            vm.WhiteImagePath = Path.Combine(Path.GetTempPath(), "moved-colorcorrect-fixture", "Blank.JPG");
+            vm.Settings.WhiteImagePath = Path.Combine(Path.GetTempPath(), "moved-colorcorrect-fixture", "Blank.JPG");
 
             vm.AddPaths([blank]);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Equal(Path.GetFullPath(blank), vm.WhiteImagePath);
+            Assert.Equal(Path.GetFullPath(blank), vm.Settings.WhiteImagePath);
             Assert.False(Assert.Single(vm.Session).IncludeInBatch);
         }
         finally
@@ -457,11 +457,11 @@ public sealed class MainWindowHeadlessTests
     public void CcSettings_NeuralNetworkControls_FitAndMatchBaseline()
     {
         var (owner, vm) = ShowMain(1002, 672, light: false);
-        vm.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
-        vm.HiddenLayersText = "[128, 64, 32]";
-        vm.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
-        vm.NnBatchNormalization = true;
-        vm.NnDropout = 0.25m;
+        vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
+        vm.Settings.HiddenLayersText = "[128, 64, 32]";
+        vm.Settings.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
+        vm.Settings.NnBatchNormalization = true;
+        vm.Settings.NnDropout = 0.25m;
         var dialog = new CcSettingsDialog { DataContext = vm };
         try
         {
