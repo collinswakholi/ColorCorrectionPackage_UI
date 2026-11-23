@@ -34,7 +34,7 @@ public sealed class SessionWorkflowTests
         Assert.True(vm.Settings.DoFfc && vm.Settings.DoGc && vm.Settings.DoWb && vm.Settings.DoCc);
         Assert.Equal("blank-test.jpg", vm.Settings.WhiteImagePath);
         Assert.False(vm.Compute.Phase2Teacher);
-        Assert.False(vm.UseLoadedModel);
+        Assert.False(vm.Output.UseLoadedModel);
         Assert.Equal("adobe-rgb-1998", vm.Settings.SelectedInputSpace.Value);
         Assert.Equal(0.6, vm.Stage.Crop, 6);
         Assert.Equal(vm.Stage.Crop, vm.Stage.OverlayCrop);

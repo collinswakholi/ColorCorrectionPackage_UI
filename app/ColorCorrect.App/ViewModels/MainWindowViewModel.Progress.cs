@@ -85,8 +85,8 @@ public partial class MainWindowViewModel
             step.IsActive = false;
         }
 
-        Job.ShowJobProgress = Job.IsBatching || IsSaving;
-        if (!Job.IsBatching && !IsSaving)
+        Job.ShowJobProgress = Job.IsBatching || Output.IsSaving;
+        if (!Job.IsBatching && !Output.IsSaving)
         {
             Job.JobProgress = 0;
             Job.CurrentStage = "";
@@ -96,7 +96,7 @@ public partial class MainWindowViewModel
 
     private void RefreshIdlePipeline()
     {
-        if (Job.Busy || Job.IsBatching || IsSaving)
+        if (Job.Busy || Job.IsBatching || Output.IsSaving)
         {
             return;
         }
@@ -132,7 +132,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!Job.Busy && !IsSaving && !Job.IsBatching)
+        if (!Job.Busy && !Output.IsSaving && !Job.IsBatching)
         {
             return;
         }
@@ -145,7 +145,7 @@ public partial class MainWindowViewModel
         MarkPipeline(key, skipped: message.Contains("skipped", StringComparison.OrdinalIgnoreCase), completed: completed);
         Job.JobProgress = Math.Max(Job.JobProgress, EstimateProgress(key, completed));
         if (Job.IsBatching) UpdateBatchStageProgress();
-        if (Job.Busy && !IsSaving)
+        if (Job.Busy && !Output.IsSaving)
         {
             var name = Job.IsBatching ? Job.BatchLabel : Workspace.Active?.Name;
             Job.Status = string.IsNullOrWhiteSpace(name) ? Job.CurrentStage : $"{Job.CurrentStage} · {name}";
@@ -233,7 +233,7 @@ public partial class MainWindowViewModel
         return Math.Clamp(8 + (completed ? end : idx + 0.15) * 88.0 / enabled.Count, 8, 96);
     }
 
-    private bool CanEditSession() => !Job.Busy && !IsSaving;
+    private bool CanEditSession() => !Job.Busy && !Output.IsSaving;
 
     [RelayCommand(CanExecute = nameof(CanEditSession))]
     private async Task SaveSessionAsAsync()
@@ -250,11 +250,11 @@ public partial class MainWindowViewModel
         }
 
         var state = BuildSessionState(includeItems: true);
-        IsSaving = true;
+        Output.IsSaving = true;
         Job.Status = "Saving session…";
         bool saved;
         try { saved = await Task.Run(() => SessionStore.Write(path, state)); }
-        finally { IsSaving = false; }
+        finally { Output.IsSaving = false; }
         if (!saved)
         {
             Job.Status = "Session could not be saved. Check folder permissions and free space.";
@@ -293,12 +293,12 @@ public partial class MainWindowViewModel
             }
         }
 
-        IsSaving = true;
+        Output.IsSaving = true;
         Job.Status = "Loading session…";
         SessionState state;
         string? error;
         try { (state, error) = await Task.Run(() => SessionStore.TryLoadFrom(path)); }
-        finally { IsSaving = false; }
+        finally { Output.IsSaving = false; }
         if (!string.IsNullOrWhiteSpace(error))
         {
             Job.Status = "Could not load session.";

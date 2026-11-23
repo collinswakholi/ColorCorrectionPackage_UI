@@ -31,7 +31,7 @@ public partial class MainWindowViewModel
         new(model is not null && !model.Matches(modelPath), white is not null && !white.Matches(whitePath));
 
     private LoadedFileState CheckLoadedFilesNow() =>
-        CheckLoadedFiles(_loadedModelIdentity, LoadedModelPath, Settings.DoFfc ? _loadedWhiteIdentity : null, Settings.WhiteImagePath);
+        CheckLoadedFiles(_loadedModelIdentity, Output.LoadedModelPath, Settings.DoFfc ? _loadedWhiteIdentity : null, Settings.WhiteImagePath);
     /// <summary>Validate the next operation, hashing the loaded model and white reference now.</summary>
     internal string? OperationError(bool fit) => OperationError(fit, fit ? default : CheckLoadedFilesNow());
 
@@ -76,7 +76,7 @@ public partial class MainWindowViewModel
         }
 
         var model = _loadedModelIdentity;
-        var modelPath = LoadedModelPath;
+        var modelPath = Output.LoadedModelPath;
         var white = Settings.DoFfc ? _loadedWhiteIdentity : null;
         var whitePath = Settings.WhiteImagePath;
         _ = Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath)).ContinueWith(task => Dispatcher.UIThread.Post(() =>
@@ -99,7 +99,7 @@ public partial class MainWindowViewModel
     {
         if (fit) return null;
         var model = _loadedModelIdentity;
-        var modelPath = LoadedModelPath;
+        var modelPath = Output.LoadedModelPath;
         var white = Settings.DoFfc ? _loadedWhiteIdentity : null;
         var whitePath = Settings.WhiteImagePath;
         var state = await Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath));
@@ -164,7 +164,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async System.Threading.Tasks.Task RelinkImageAsync()
     {
-        if (Job.Busy || IsSaving || Workspace.Active is not { } item || Dialogs is null) return;
+        if (Job.Busy || Output.IsSaving || Workspace.Active is not { } item || Dialogs is null) return;
         var paths = await Dialogs.OpenImagesAsync();
         if (paths.Count != 1) { if (paths.Count > 1) Job.Status = "Choose one replacement image."; return; }
         var replacement = paths[0];

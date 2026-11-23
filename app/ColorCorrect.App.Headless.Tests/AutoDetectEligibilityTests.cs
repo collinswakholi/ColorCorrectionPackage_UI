@@ -39,7 +39,7 @@ public sealed class AutoDetectEligibilityTests
             await gate.WaitAsync(); held = true;
             vm.Compute.WorkerReady = true;
             vm.Job.Busy = busy;
-            vm.IsSaving = saving;
+            vm.Output.IsSaving = saving;
             var item = new SessionItemViewModel(imagePath);
             vm.Session.Add(item);
             vm.HandleSessionClick(item, toggle: false, range: false);
@@ -50,7 +50,7 @@ public sealed class AutoDetectEligibilityTests
             // after any erroneous automatic detection, so this observes its eventual
             // execution deterministically without waiting an arbitrary quiet interval.
             vm.Job.Busy = false;
-            vm.IsSaving = false;
+            vm.Output.IsSaving = false;
             var afterQueuedWork = gate.WaitAsync();
             gate.Release(); held = false;
             await afterQueuedWork.WaitAsync(TimeSpan.FromSeconds(5)); held = true;

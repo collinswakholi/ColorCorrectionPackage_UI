@@ -12,7 +12,6 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    [ObservableProperty] private bool _batchPreviewResults = true;
     private SessionItemViewModel? _batchCurrentItem;
     private int _batchProgressGeneration;
     private int _batchImageIndex;
@@ -116,12 +115,12 @@ public partial class MainWindowViewModel
         Job.BatchProgress = 100.0 * (_batchImageIndex + Job.JobProgress / 100) / Math.Max(1, _batchImageCount);
     }
 
-    partial void OnBatchPreviewResultsChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnBatchPreviewResultsChanged(bool value) { if (!_restoring) ScheduleSave(); }
 
     [RelayCommand]
     private async Task ShowResultPreviewAsync()
     {
-        if (Job.Busy || IsSaving || Workspace.Active is not { PreviewSuppressed: true } item) return;
+        if (Job.Busy || Output.IsSaving || Workspace.Active is not { PreviewSuppressed: true } item) return;
         if (!File.Exists(ResolveCorrectedViewPath(item)))
         {
             Job.Status = "The corrected image is unavailable. Process the image again to create a preview.";

@@ -25,7 +25,7 @@ public sealed class SessionIoTests
             Assert.Null(error);
             Assert.True(saved.Options.DoGc);
             Assert.False(vm.Settings.DoGc);
-            Assert.False(vm.IsSaving);
+            Assert.False(vm.Output.IsSaving);
             Assert.StartsWith("Session saved", vm.Job.Status);
             Assert.True(vm.LoadSessionCommand.CanExecute(null));
 
@@ -33,10 +33,10 @@ public sealed class SessionIoTests
             Assert.False(vm.SaveSessionAsCommand.CanExecute(null));
             Assert.False(vm.LoadSessionCommand.CanExecute(null));
             vm.Job.Busy = false;
-            vm.IsSaving = true;
+            vm.Output.IsSaving = true;
             Assert.False(vm.SaveSessionAsCommand.CanExecute(null));
             Assert.False(vm.LoadSessionCommand.CanExecute(null));
-            vm.IsSaving = false;
+            vm.Output.IsSaving = false;
             Assert.True(vm.SaveSessionAsCommand.CanExecute(null));
         }
         finally { await vm.DisposeAsync(); Directory.Delete(root, true); }

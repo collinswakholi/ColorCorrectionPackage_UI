@@ -205,7 +205,7 @@
 
                     <TextBlock Text="Output format" Classes="settingsLabel"/>
                     <ComboBox x:Name="OutputFormatSelect" Classes="config" ItemsSource="{Binding OutputFormats}"
-                              SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Output.SelectedOutputFormat}" Margin="0,0,0,10"
                               AutomationProperties.Name="Output format"/>
 
                     <CheckBox IsChecked="{Binding Compute.Phase2Teacher}" FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,10"

@@ -152,7 +152,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!fit && !File.Exists(LoadedModelPath))
+        if (!fit && !File.Exists(Output.LoadedModelPath))
         {
             return;
         }
@@ -183,7 +183,7 @@ public partial class MainWindowViewModel
         var face = Stage.OverlayFaceChoice;
         var useAll = Stage.UseAllFaces;
         var crop = Stage.Crop;
-        var modelPath = LoadedModelPath;
+        var modelPath = Output.LoadedModelPath;
         var cancel = BeginJob();
         var elapsed = Stopwatch.StartNew();
         await OnUi(() =>
@@ -285,7 +285,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (applyModel && !File.Exists(LoadedModelPath))
+        if (applyModel && !File.Exists(Output.LoadedModelPath))
         {
             Job.Status = "Load or fit a model first.";
             return;
@@ -309,8 +309,8 @@ public partial class MainWindowViewModel
 
         await _run.WaitAsync().ConfigureAwait(false);
         var cancel = BeginJob();
-        var options = CaptureBatchOptions(BuildOptions(), BatchPreviewResults);
-        var modelPath = LoadedModelPath;
+        var options = CaptureBatchOptions(BuildOptions(), Output.BatchPreviewResults);
+        var modelPath = Output.LoadedModelPath;
         var crop = Stage.Crop;
         var useAll = Stage.UseAllFaces;
         Dictionary<SessionItemViewModel, BatchFitSnapshot> fitSnapshots = [];
@@ -716,9 +716,9 @@ public partial class MainWindowViewModel
             }
             if (File.Exists(outcome.ModelPath))
             {
-                LoadedModelPath = outcome.ModelPath;
+                Output.LoadedModelPath = outcome.ModelPath;
                 _loadedModelPlane = item.FfcPlane ?? FfcPlane.TryLoad(outcome.ModelPath);
-                ModelIoStatus = $"Fitted {Path.GetFileName(outcome.ModelPath)}";
+                Output.ModelIoStatus = $"Fitted {Path.GetFileName(outcome.ModelPath)}";
             }
         }
         else

@@ -27,7 +27,7 @@ public partial class CcSettingsDialog : Window
 
     private async void References_Click(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not ViewModels.MainWindowViewModel { Workspace.Active.Handshake: { Ok: true } } vm || vm.Job.Busy || vm.IsSaving)
+        if (DataContext is not ViewModels.MainWindowViewModel { Workspace.Active.Handshake: { Ok: true } } vm || vm.Job.Busy || vm.Output.IsSaving)
         {
             if (DataContext is ViewModels.MainWindowViewModel current) current.Job.Status = "Detect a chart image before editing its references.";
             return;

@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Output.PropertyChanged += OnOutputStateChanged;
         Job.PropertyChanged += OnJobStateChanged;
         Stage.PropertyChanged += OnStageStateChanged;
         Compute.PropertyChanged += OnComputeStateChanged;
@@ -97,7 +98,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.SelectedInputWhite = Pick(WhitePoints, "d65");
         Settings.SelectedTargetSpace = Pick(RgbSpaces, "srgb");
         Settings.SelectedTargetWhite = Pick(WhitePoints, "d65");
-        SelectedOutputFormat = OutputFormats[1];
+        Output.SelectedOutputFormat = OutputFormats[1];
         SyncDegreeAndAdvanced();
         HookWorkerProgress();
         if (_persistenceEnabled)
@@ -143,40 +144,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<LogEntry> LogEntries { get; } = [];
     public ObservableCollection<PipelineStepViewModel> PipelineSteps { get; } = [];
 
-    [ObservableProperty] private string _savedModelSummary = "";
-    [ObservableProperty] private bool _hasSavedModelSummary;
-    [ObservableProperty] private string _modelLabel = "No model loaded";
-    [ObservableProperty] private string _modelIoStatus = "";
-    [ObservableProperty] private string _loadedModelPath = "";
-    [ObservableProperty] private bool _useLoadedModel;
-    [ObservableProperty] private string _outputDir = "";
     [ObservableProperty] private string _themeLabel = "Light";
     [ObservableProperty] private string _themeHint = "Switch to light theme";
     private FfcPlane? _loadedModelPlane;
-    [ObservableProperty] private NamedValue _selectedOutputFormat = new("png", "PNG");
-    [ObservableProperty] private bool _isSaving;
-    [ObservableProperty] private bool _showSaveProgress;
-    [ObservableProperty] private double _saveProgress;
-    [ObservableProperty] private string _saveProgressLabel = "";
 
     /// <summary>ΔE tiles, per-stage and per-patch rows, report and analysis panel states.</summary>
     public AnalysisViewModel Analysis { get; } = new();
 
     private void OnHasSessionChanged(bool value) => Analysis.HasSession = value;
 
-    [ObservableProperty] private bool _saveCorrected = true;
-    [ObservableProperty] private bool _saveFfc = true;
-    [ObservableProperty] private bool _saveGc = true;
-    [ObservableProperty] private bool _saveWb = true;
-    [ObservableProperty] private bool _saveCc = true;
-    [ObservableProperty] private bool _saveReport = true;
-    [ObservableProperty] private bool _canSaveCorrected;
-    [ObservableProperty] private bool _canSaveFfc;
-    [ObservableProperty] private bool _canSaveGc;
-    [ObservableProperty] private bool _canSaveWb;
-    [ObservableProperty] private bool _canSaveCc;
-    [ObservableProperty] private bool _canSaveReport;
-    [ObservableProperty] private bool _hasReport;
 
     /// <summary>Correction settings (stages, FFC, color spaces, CC model and its parameters).</summary>
     public CorrectionSettingsViewModel Settings { get; } = new();
@@ -305,6 +281,24 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>Outputs and models: output folder and format, which results to save and which can be saved, save progress, the report flag, the loaded model and its status, and the batch preview option.</summary>
+    public OutputViewModel Output { get; } = new();
+
+    private void OnOutputStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(OutputViewModel.OutputDir): OnOutputDirChanged(Output.OutputDir); break;
+            case nameof(OutputViewModel.SelectedOutputFormat): OnSelectedOutputFormatChanged(Output.SelectedOutputFormat); break;
+            case nameof(OutputViewModel.IsSaving): OnIsSavingChanged(Output.IsSaving); break;
+            case nameof(OutputViewModel.LoadedModelPath): OnLoadedModelPathChanged(Output.LoadedModelPath); break;
+            case nameof(OutputViewModel.UseLoadedModel): OnUseLoadedModelChanged(Output.UseLoadedModel); break;
+            case nameof(OutputViewModel.BatchPreviewResults): OnBatchPreviewResultsChanged(Output.BatchPreviewResults); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _isLightTheme;
@@ -354,23 +348,23 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ? $"Next image · {Session[Session.IndexOf(Workspace.Active!) + 1].DisplayName} (Alt+Right)"
         : "No next image";
     public string CropLabel => Stage.Crop.ToString("0.00");
-    public bool HasLoadedModel => File.Exists(LoadedModelPath);
-    public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
+    public bool HasLoadedModel => File.Exists(Output.LoadedModelPath);
+    public bool WillUseLoadedModel => Output.UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => Compute.WorkerStartupComplete && !Compute.WorkerReady;
-    public bool CanOpenBatch => Compute.WorkerReady && !Job.Busy && !IsSaving && Session.Count > 0;
+    public bool CanOpenBatch => Compute.WorkerReady && !Job.Busy && !Output.IsSaving && Session.Count > 0;
     public string DetectActionLabel => Workspace.Active is not null && _detectionFailures.ContainsKey(Workspace.Active.Path) ? "Retry" : "Detect";
     public string RunActionHint => !Compute.WorkerReady ? "Wait for the processing engine, or check setup if it could not start."
-        : Job.Busy || IsSaving ? "Wait for the current operation, or cancel processing."
+        : Job.Busy || Output.IsSaving ? "Wait for the current operation, or cancel processing."
         : Workspace.Active is null ? "Add an image to start."
         : !File.Exists(Workspace.Active.Path) ? "Relink the missing image to continue."
         : CachedOperationError(!WillUseLoadedModel) is { } error ? error
         : !WillUseLoadedModel && Workspace.Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
         : "Run the active workflow (F5).";
     public string BatchFitHint => !Compute.WorkerReady ? "The processing engine is not ready."
-        : Job.Busy || IsSaving ? "Wait for the current operation."
+        : Job.Busy || Output.IsSaving ? "Wait for the current operation."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
         : CachedOperationError(true) ?? "Detect a chart and fit each selected image.";
-    public string BatchApplyHint => !File.Exists(LoadedModelPath) ? "Load or fit a model before applying it to a batch."
+    public string BatchApplyHint => !File.Exists(Output.LoadedModelPath) ? "Load or fit a model before applying it to a batch."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
         : CachedOperationError(false) ?? "Apply the current model to each selected image.";
     public string StatusStateLabel => HasWorkerError
@@ -389,13 +383,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             {
                 if (HasLoadedModel)
                 {
-                    UseLoadedModel = true;
+                    Output.UseLoadedModel = true;
                 }
 
                 return;
             }
 
-            UseLoadedModel = false;
+            Output.UseLoadedModel = false;
         }
     }
 
@@ -406,7 +400,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             if (value)
             {
-                UseLoadedModel = false;
+                Output.UseLoadedModel = false;
             }
         }
     }
@@ -778,9 +772,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             Stage.LastPreviewDir = "";
         }
 
-        if (!string.IsNullOrWhiteSpace(LoadedModelPath) && !File.Exists(LoadedModelPath))
+        if (!string.IsNullOrWhiteSpace(Output.LoadedModelPath) && !File.Exists(Output.LoadedModelPath))
         {
-            LoadedModelPath = "";
+            Output.LoadedModelPath = "";
             _loadedModelPlane = null;
         }
 
@@ -969,10 +963,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        OutputDir = folder;
+        Output.OutputDir = folder;
         if (!await EnsureOutputAllowedAsync())
         {
-            OutputDir = "";
+            Output.OutputDir = "";
             Log("Output", "Folder not confirmed.", LogLevel.Warning);
             return;
         }
@@ -995,11 +989,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        LoadedModelPath = path;
+        Output.LoadedModelPath = path;
         RestoreLoadedModelSettings(path);
-        UseLoadedModel = true;
+        Output.UseLoadedModel = true;
         _loadedModelPlane = FfcPlane.TryLoad(path);
-        ModelIoStatus = $"Loaded {Path.GetFileName(path)}";
+        Output.ModelIoStatus = $"Loaded {Path.GetFileName(path)}";
         Log("Model", $"Loaded {Path.GetFileName(path)}.", LogLevel.Success);
         RefreshOverlay();
         NotifyRunCommands();
@@ -1009,19 +1003,19 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(CanSaveModel))]
     private async Task SaveModelAsync()
     {
-        if (Dialogs is null || !File.Exists(LoadedModelPath))
+        if (Dialogs is null || !File.Exists(Output.LoadedModelPath))
         {
             return;
         }
 
-        var dest = await Dialogs.SaveJsonAsync("Save correction model", Path.GetFileName(LoadedModelPath));
+        var dest = await Dialogs.SaveJsonAsync("Save correction model", Path.GetFileName(Output.LoadedModelPath));
         if (string.IsNullOrWhiteSpace(dest))
         {
             return;
         }
 
-        File.Copy(LoadedModelPath, dest, overwrite: true);
-        ModelIoStatus = $"Saved {Path.GetFileName(dest)}";
+        File.Copy(Output.LoadedModelPath, dest, overwrite: true);
+        Output.ModelIoStatus = $"Saved {Path.GetFileName(dest)}";
         Log("Model", $"Saved {Path.GetFileName(dest)}.", LogLevel.Success, [dest]);
     }
 
@@ -1062,8 +1056,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (!SaveCorrected && !(SaveFfc && CanSaveFfc) && !(SaveGc && CanSaveGc)
-            && !(SaveWb && CanSaveWb) && !(SaveCc && CanSaveCc) && !SaveReport)
+        if (!Output.SaveCorrected && !(Output.SaveFfc && Output.CanSaveFfc) && !(Output.SaveGc && Output.CanSaveGc)
+            && !(Output.SaveWb && Output.CanSaveWb) && !(Output.SaveCc && Output.CanSaveCc) && !Output.SaveReport)
         {
             Job.Status = "Choose at least one output to save.";
             ToastService.ShowWarning(Job.Status);
@@ -1077,15 +1071,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        var destDir = string.IsNullOrWhiteSpace(OutputDir)
+        var destDir = string.IsNullOrWhiteSpace(Output.OutputDir)
             ? Path.Combine(RunPaths.RunsRoot(_worker.RepoRoot), "saved")
-            : Path.IsPathRooted(OutputDir) ? OutputDir : Path.GetFullPath(Path.Combine(_worker.RepoRoot, OutputDir));
-        var format = SelectedOutputFormat?.Value ?? "jpg";
+            : Path.IsPathRooted(Output.OutputDir) ? Output.OutputDir : Path.GetFullPath(Path.Combine(_worker.RepoRoot, Output.OutputDir));
+        var format = Output.SelectedOutputFormat?.Value ?? "jpg";
         var ext = format.Equals("png", StringComparison.OrdinalIgnoreCase) ? ".png" : ".jpg";
-        IsSaving = true;
-        ShowSaveProgress = true;
-        SaveProgress = 0;
-        SaveProgressLabel = $"Preparing {items.Count} image(s)…";
+        Output.IsSaving = true;
+        Output.ShowSaveProgress = true;
+        Output.SaveProgress = 0;
+        Output.SaveProgressLabel = $"Preparing {items.Count} image(s)…";
         Job.CurrentStage = "Save";
         var jobs = new List<(string Src, string Dest)>();
         var failures = new ConcurrentQueue<string>();
@@ -1096,10 +1090,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             for (var i = 0; i < items.Count; i++)
             {
                 var item = items[i];
-                SaveProgress = 40.0 * i / Math.Max(1, items.Count);
-                SaveProgressLabel = $"Preparing {item.FileName}…";
+                Output.SaveProgress = 40.0 * i / Math.Max(1, items.Count);
+                Output.SaveProgressLabel = $"Preparing {item.FileName}…";
                 var stem = artifactNames[i];
-                if (SaveCorrected)
+                if (Output.SaveCorrected)
                 {
                     if (!File.Exists(item.CorrectedPath))
                     {
@@ -1116,25 +1110,25 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     }
                 }
 
-                if (SaveFfc && ResultStageEnabled(item, "ffc"))
+                if (Output.SaveFfc && ResultStageEnabled(item, "ffc"))
                 {
                     await EnsureItemStageAsync(item, "ffc");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "ffc", ext)) failures.Enqueue($"{item.FileName}: requested FFC stage is unavailable.");
                 }
 
-                if (SaveGc && ResultStageEnabled(item, "gc"))
+                if (Output.SaveGc && ResultStageEnabled(item, "gc"))
                 {
                     await EnsureItemStageAsync(item, "gc");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "gc", ext)) failures.Enqueue($"{item.FileName}: requested GC stage is unavailable.");
                 }
 
-                if (SaveWb && ResultStageEnabled(item, "wb"))
+                if (Output.SaveWb && ResultStageEnabled(item, "wb"))
                 {
                     await EnsureItemStageAsync(item, "wb");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "wb", ext)) failures.Enqueue($"{item.FileName}: requested WB stage is unavailable.");
                 }
 
-                if (SaveCc && ResultStageEnabled(item, "cc"))
+                if (Output.SaveCc && ResultStageEnabled(item, "cc"))
                 {
                     await EnsureItemStageAsync(item, "cc");
                     if (!QueueStageCopy(jobs, item, destDir, stem, "cc", ext))
@@ -1143,7 +1137,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     }
                 }
 
-                if (SaveReport && File.Exists(item.ReportPath))
+                if (Output.SaveReport && File.Exists(item.ReportPath))
                 {
                     jobs.Add((item.ReportPath, Path.Combine(destDir, stem + "_report.json")));
                 }
@@ -1182,8 +1176,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                     var n = Interlocked.Increment(ref copied);
                     await OnUi(() =>
                     {
-                        SaveProgress = 40 + 60.0 * n / Math.Max(1, jobs.Count);
-                        SaveProgressLabel = $"Saving {n} / {jobs.Count}";
+                        Output.SaveProgress = 40 + 60.0 * n / Math.Max(1, jobs.Count);
+                        Output.SaveProgressLabel = $"Saving {n} / {jobs.Count}";
                     }).ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -1218,10 +1212,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         finally
         {
-            IsSaving = false;
-            ShowSaveProgress = false;
-            SaveProgress = 0;
-            SaveProgressLabel = "";
+            Output.IsSaving = false;
+            Output.ShowSaveProgress = false;
+            Output.SaveProgress = 0;
+            Output.SaveProgressLabel = "";
             Job.CurrentStage = "";
         }
     }
@@ -1330,7 +1324,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.SelectedInputWhite = Pick(WhitePoints, "d65");
         Settings.SelectedTargetSpace = Pick(RgbSpaces, "srgb");
         Settings.SelectedTargetWhite = Pick(WhitePoints, "d65");
-        SelectedOutputFormat = OutputFormats[1];
+        Output.SelectedOutputFormat = OutputFormats[1];
         Settings.FitSamples = 1;
         Settings.PlsComponents = 0;
         Settings.HiddenLayersText = "100";
@@ -1456,7 +1450,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         ApplyReport(item.Report);
         RefreshOverlay();
-        HasReport = File.Exists(item.ReportPath);
+        Output.HasReport = File.Exists(item.ReportPath);
         OpenReportCommand.NotifyCanExecuteChanged();
         NotifyRunCommands();
         _ = LoadPreviewsAsync(item, gen);
@@ -1695,15 +1689,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Workspace.SessionCountLabel = Session.Count.ToString();
         Workspace.HasSelected = Session.Any(item => item.IsSelected);
         Workspace.HasSaveItems = Session.Any(item => item.HasSaveable);
-        CanSaveCorrected = Session.Any(item => item.IncludeInSave && (item.IsCorrected || File.Exists(item.CorrectedPath)));
-        CanSaveFfc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "ffc"));
-        CanSaveGc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "gc"));
-        CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "wb"));
-        CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "cc"));
-        CanSaveReport = Session.Any(item => item.IncludeInSave && File.Exists(item.ReportPath));
+        Output.CanSaveCorrected = Session.Any(item => item.IncludeInSave && (item.IsCorrected || File.Exists(item.CorrectedPath)));
+        Output.CanSaveFfc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "ffc"));
+        Output.CanSaveGc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "gc"));
+        Output.CanSaveWb = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "wb"));
+        Output.CanSaveCc = Session.Any(item => item.IncludeInSave && item.IsCorrected && ResultStageEnabled(item, "cc"));
+        Output.CanSaveReport = Session.Any(item => item.IncludeInSave && File.Exists(item.ReportPath));
         Workspace.HasWhiteRef = !string.IsNullOrWhiteSpace(Settings.WhiteImagePath) && File.Exists(Settings.WhiteImagePath);
         RefreshWhiteBadges();
-        HasReport = Workspace.Active is not null && File.Exists(Workspace.Active.ReportPath);
+        Output.HasReport = Workspace.Active is not null && File.Exists(Workspace.Active.ReportPath);
         RefreshSessionNavigation();
         ClearSessionCommand.NotifyCanExecuteChanged();
         RemoveSelectedCommand.NotifyCanExecuteChanged();
@@ -1769,20 +1763,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private bool CanClear() => Session.Count > 0;
     private bool CanRemove() => Workspace.HasSelected;
-    private bool CanOpenReport() => HasReport;
+    private bool CanOpenReport() => Output.HasReport;
     private bool CanDetect() =>
-        Compute.WorkerReady && !Job.Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
+        Compute.WorkerReady && !Job.Busy && !Output.IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path);
     private bool CanApply() =>
-        Compute.WorkerReady && !Job.Busy && !IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
+        Compute.WorkerReady && !Job.Busy && !Output.IsSaving && Workspace.Active is not null && File.Exists(Workspace.Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Workspace.Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => Compute.WorkerReady && !Job.Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
+    private bool CanBatchFit() => Compute.WorkerReady && !Job.Busy && !Output.IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
-        Compute.WorkerReady && !Job.Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
-    private bool CanRestartWorker() => !Job.Busy && !IsSaving;
+        Compute.WorkerReady && !Job.Busy && !Output.IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(Output.LoadedModelPath);
+    private bool CanRestartWorker() => !Job.Busy && !Output.IsSaving;
     private bool CanCancel() => Job.Busy;
-    private bool CanSaveModel() => !Job.Busy && File.Exists(LoadedModelPath);
-    private bool CanExportCube() => !Job.Busy && File.Exists(LoadedModelPath);
+    private bool CanSaveModel() => !Job.Busy && File.Exists(Output.LoadedModelPath);
+    private bool CanExportCube() => !Job.Busy && File.Exists(Output.LoadedModelPath);
 
     private CorrectionOptions BuildOptions()
     {
@@ -1794,7 +1788,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             CpuLut = Compute.ForceCpu,
             LutDevice = Compute.SelectedProcessingDevice.Value,
             FastMode = Compute.FastMode,
-            BatchPreviewResults = BatchPreviewResults,
+            BatchPreviewResults = Output.BatchPreviewResults,
             Method = Settings.SelectedMethod.Value,
             Degree = int.TryParse(Settings.SelectedDegree?.Value, out var degree) ? degree : 2,
             IncludeCombinations = Settings.IncludeCombinations,
@@ -1804,8 +1798,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             InputWhite = Settings.SelectedInputWhite.Value,
             TargetSpace = Settings.SelectedTargetSpace.Value,
             TargetWhite = Settings.SelectedTargetWhite.Value,
-            OutputFormat = SelectedOutputFormat.Value,
-            OutputDir = OutputDir,
+            OutputFormat = Output.SelectedOutputFormat.Value,
+            OutputDir = Output.OutputDir,
             PlsComponents = (int)Math.Clamp(Settings.PlsComponents, 0, 64),
             HiddenSize = hiddenLayers[0],
             HiddenLayers = hiddenLayers,
@@ -1816,9 +1810,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             NnEpochs = (int)Math.Clamp(Settings.NnEpochs, 50, 20000),
             NnPatience = (int)Math.Clamp(Settings.NnPatience, 1, 5000),
             NnTol = ClampTol((double)Settings.NnTol, 1e-6),
-            LoadedModelPath = LoadedModelPath,
-            ModelInPath = LoadedModelPath,
-            UseLoadedModel = UseLoadedModel,
+            LoadedModelPath = Output.LoadedModelPath,
+            ModelInPath = Output.LoadedModelPath,
+            UseLoadedModel = Output.UseLoadedModel,
             DoFfc = Settings.DoFfc,
             DoGc = Settings.DoGc,
             DoWb = Settings.DoWb,
@@ -1931,14 +1925,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private string ResolvedOutputDir()
     {
-        if (string.IsNullOrWhiteSpace(OutputDir))
+        if (string.IsNullOrWhiteSpace(Output.OutputDir))
         {
             return RunPaths.RunsRoot(_worker.RepoRoot);
         }
 
-        return Path.IsPathRooted(OutputDir)
-            ? Path.GetFullPath(OutputDir)
-            : Path.GetFullPath(Path.Combine(_worker.RepoRoot, OutputDir));
+        return Path.IsPathRooted(Output.OutputDir)
+            ? Path.GetFullPath(Output.OutputDir)
+            : Path.GetFullPath(Path.Combine(_worker.RepoRoot, Output.OutputDir));
     }
 
     private static void OpenOsPath(string path)
@@ -2052,7 +2046,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private Task<bool> EnsureOutputAllowedAsync()
     {
-        if (string.IsNullOrWhiteSpace(OutputDir))
+        if (string.IsNullOrWhiteSpace(Output.OutputDir))
         {
             return Task.FromResult(true);
         }
@@ -2060,9 +2054,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         string full;
         try
         {
-            full = Path.IsPathRooted(OutputDir)
-                ? Path.GetFullPath(OutputDir)
-                : Path.GetFullPath(Path.Combine(_worker.RepoRoot, OutputDir));
+            full = Path.IsPathRooted(Output.OutputDir)
+                ? Path.GetFullPath(Output.OutputDir)
+                : Path.GetFullPath(Path.Combine(_worker.RepoRoot, Output.OutputDir));
         }
         catch (Exception ex)
         {
@@ -2070,7 +2064,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return Task.FromResult(false);
         }
 
-        if (RunPaths.ContainsParentSegment(OutputDir))
+        if (RunPaths.ContainsParentSegment(Output.OutputDir))
         {
             Job.Status = "Output folder cannot contain '..'.";
             Log("Output", Job.Status, LogLevel.Error);
@@ -2079,7 +2073,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         // Choosing or entering Save to is the user's destination decision. A
         // packaged app has no user-facing project boundary to approve again.
-        OutputDir = full;
+        Output.OutputDir = full;
         return Task.FromResult(true);
     }
 
@@ -2379,7 +2373,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Compute.ForceCpu = options.CpuLut;
         Compute.SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
         Compute.FastMode = options.FastMode;
-        BatchPreviewResults = options.BatchPreviewResults;
+        Output.BatchPreviewResults = options.BatchPreviewResults;
         options.Normalize();
         Settings.SelectedMethod = Pick(Methods, options.Method);
         SyncDegreeAndAdvanced();
@@ -2388,7 +2382,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.SelectedInputWhite = Pick(WhitePoints, options.InputWhite);
         Settings.SelectedTargetSpace = Pick(RgbSpaces, options.TargetSpace);
         Settings.SelectedTargetWhite = Pick(WhitePoints, options.TargetWhite);
-        SelectedOutputFormat = Pick(OutputFormats, options.OutputFormat);
+        Output.SelectedOutputFormat = Pick(OutputFormats, options.OutputFormat);
         Settings.FitSamples = Math.Clamp(options.FitSamples, 1, 200);
         Settings.PlsComponents = Math.Clamp(options.PlsComponents, 0, 64);
         Settings.HiddenLayersText = CorrectionOptions.FormatHiddenLayers(options.HiddenLayers);
@@ -2401,7 +2395,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.NnTol = (decimal)ClampTol(options.NnTol, 1e-6);
         Settings.SkipSaturated = options.SkipSaturated;
         Settings.IncludeCombinations = options.IncludeCombinations;
-        OutputDir = options.OutputDir;
+        Output.OutputDir = options.OutputDir;
         Settings.DoFfc = options.DoFfc;
         Settings.DoGc = options.DoGc;
         Settings.DoWb = options.DoWb;
@@ -2421,8 +2415,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Compute.Phase2Teacher = options.Phase2Teacher;
         var model = File.Exists(options.LoadedModelPath) ? options.LoadedModelPath
             : File.Exists(options.ModelInPath) ? options.ModelInPath : "";
-        LoadedModelPath = model;
-        UseLoadedModel = options.UseLoadedModel == true && File.Exists(model);
+        Output.LoadedModelPath = model;
+        Output.UseLoadedModel = options.UseLoadedModel == true && File.Exists(model);
         _loadedModelPlane = FfcPlane.TryLoad(model);
         UpdateCcSummary();
     }
@@ -2879,31 +2873,31 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private void OnBusyChanged(bool value) => NotifyRunCommands();
-    partial void OnIsSavingChanged(bool value) => NotifyRunCommands();
+    private void OnIsSavingChanged(bool value) => NotifyRunCommands();
     private void OnWorkerReadyChanged(bool value) => NotifyRunCommands();
     private void OnWorkerStartupCompleteChanged(bool value) => NotifyRunCommands();
     private void OnWorkerStartupErrorChanged(string value) => OnPropertyChanged(nameof(HasWorkerError));
     private void OnIsBatchingChanged(bool value) => CancelBatchCommand.NotifyCanExecuteChanged();
-    partial void OnLoadedModelPathChanged(string value)
+    private void OnLoadedModelPathChanged(string value)
     {
         try { _loadedModelIdentity = File.Exists(value) ? AssetIdentity.Capture(value) : null; }
         catch (IOException) { _loadedModelIdentity = null; }
-        ModelLabel = File.Exists(value) ? $"Model · {Path.GetFileName(value)}" : "No model loaded";
-        SavedModelSummary = DescribeSavedModel(value);
-        HasSavedModelSummary = !string.IsNullOrWhiteSpace(SavedModelSummary);
-        if (!File.Exists(value) && UseLoadedModel)
+        Output.ModelLabel = File.Exists(value) ? $"Model · {Path.GetFileName(value)}" : "No model loaded";
+        Output.SavedModelSummary = DescribeSavedModel(value);
+        Output.HasSavedModelSummary = !string.IsNullOrWhiteSpace(Output.SavedModelSummary);
+        if (!File.Exists(value) && Output.UseLoadedModel)
         {
-            UseLoadedModel = false;
+            Output.UseLoadedModel = false;
         }
 
         NotifyRunCommands();
     }
 
-    partial void OnUseLoadedModelChanged(bool value)
+    private void OnUseLoadedModelChanged(bool value)
     {
-        if (value && !File.Exists(LoadedModelPath))
+        if (value && !File.Exists(Output.LoadedModelPath))
         {
-            UseLoadedModel = false;
+            Output.UseLoadedModel = false;
             return;
         }
 
@@ -3000,7 +2994,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
     private void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
     private void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnSelectedOutputFormatChanged(NamedValue value) { if (!_restoring) ScheduleSave(); }
+    private void OnSelectedOutputFormatChanged(NamedValue value) { if (!_restoring) ScheduleSave(); }
     private void OnSkipSaturatedChanged(bool value) { if (!_restoring) ScheduleSave(); }
     private void OnIncludeCombinationsChanged(bool value)
     {
@@ -3010,7 +3004,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             ScheduleSave();
         }
     }
-    partial void OnOutputDirChanged(string value) { if (!_restoring) ScheduleSave(); }
+    private void OnOutputDirChanged(string value) { if (!_restoring) ScheduleSave(); }
     private void OnFitSamplesChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnPlsComponentsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnHiddenLayersTextChanged(string value)

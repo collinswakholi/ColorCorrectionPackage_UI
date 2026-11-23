@@ -116,7 +116,7 @@ public sealed class BatchPresentationTests
                 choice.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Space });
                 choice.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Space });
                 Dispatcher.UIThread.RunJobs();
-                Assert.False(vm.BatchPreviewResults);
+                Assert.False(vm.Output.BatchPreviewResults);
                 Assert.True(window.BatchMenuScroll.Bounds.Width <= window.ClientSize.Width);
                 Assert.True(window.BatchMenuScroll.Bounds.Height <= window.ClientSize.Height - 48);
                 window.BatchMenu.IsOpen = false;

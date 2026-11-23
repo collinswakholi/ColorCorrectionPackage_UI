@@ -265,33 +265,33 @@
                                 </ScrollViewer>
                                 <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,8,0,10"/>
                                 <TextBlock Text="INCLUDE" Classes="caption" Margin="0,0,0,6"/>
-                                <CheckBox IsChecked="{Binding SaveCorrected}" IsEnabled="{Binding CanSaveCorrected}"
+                                <CheckBox IsChecked="{Binding Output.SaveCorrected}" IsEnabled="{Binding Output.CanSaveCorrected}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
                                     <TextBlock Text="Corrected (full size)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
-                                <CheckBox IsChecked="{Binding SaveFfc}" IsEnabled="{Binding CanSaveFfc}"
+                                <CheckBox IsChecked="{Binding Output.SaveFfc}" IsEnabled="{Binding Output.CanSaveFfc}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
                                     <TextBlock Text="FFC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
-                                <CheckBox IsChecked="{Binding SaveGc}" IsEnabled="{Binding CanSaveGc}"
+                                <CheckBox IsChecked="{Binding Output.SaveGc}" IsEnabled="{Binding Output.CanSaveGc}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
                                     <TextBlock Text="GC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
-                                <CheckBox IsChecked="{Binding SaveWb}" IsEnabled="{Binding CanSaveWb}"
+                                <CheckBox IsChecked="{Binding Output.SaveWb}" IsEnabled="{Binding Output.CanSaveWb}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
                                     <TextBlock Text="WB (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
-                                <CheckBox IsChecked="{Binding SaveCc}" IsEnabled="{Binding CanSaveCc}"
+                                <CheckBox IsChecked="{Binding Output.SaveCc}" IsEnabled="{Binding Output.CanSaveCc}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
                                     <TextBlock Text="CC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
-                                <CheckBox IsChecked="{Binding SaveReport}" IsEnabled="{Binding CanSaveReport}"
+                                <CheckBox IsChecked="{Binding Output.SaveReport}" IsEnabled="{Binding Output.CanSaveReport}"
                                           FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,8">
                                     <TextBlock Text="Report (JSON)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <TextBlock Text="FORMAT" Classes="caption" Margin="0,0,0,4"/>
                                 <ComboBox Classes="config" ItemsSource="{Binding OutputFormats}"
-                                          SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
+                                          SelectedItem="{Binding Output.SelectedOutputFormat}" Margin="0,0,0,10"
                                           AutomationProperties.Name="Save image format">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:NamedValue">
@@ -304,19 +304,19 @@
                                     <Button DockPanel.Dock="Right" Content="Browse" Theme="{StaticResource SecondaryButton}"
                                             Command="{Binding BrowseOutputCommand}" Padding="8,5" Margin="4,0,0,0"
                                             AutomationProperties.Name="Browse save folder"/>
-                                    <TextBox Text="{Binding OutputDir}" Classes="config"/>
+                                    <TextBox Text="{Binding Output.OutputDir}" Classes="config"/>
                                 </DockPanel>
-                                <StackPanel Margin="0,0,0,10" IsVisible="{Binding ShowSaveProgress}">
+                                <StackPanel Margin="0,0,0,10" IsVisible="{Binding Output.ShowSaveProgress}">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right" Text="{Binding SaveProgress, StringFormat={}{0:0}%}" Classes="caption"/>
-                                        <TextBlock Text="{Binding SaveProgressLabel}" Classes="caption" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Output.SaveProgress, StringFormat={}{0:0}%}" Classes="caption"/>
+                                        <TextBlock Text="{Binding Output.SaveProgressLabel}" Classes="caption" TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
-                                    <ProgressBar Value="{Binding SaveProgress}" Minimum="0" Maximum="100"
+                                    <ProgressBar Value="{Binding Output.SaveProgress}" Minimum="0" Maximum="100"
                                                  Theme="{StaticResource ModernProgressBar}" Margin="0,6,0,0"/>
                                 </StackPanel>
                                 <Button Content="Save selected" Theme="{StaticResource PrimaryButton}"
                                         Command="{Binding ExecuteSaveCommand}" HorizontalAlignment="Stretch"
-                                        IsEnabled="{Binding !IsSaving}"/>
+                                        IsEnabled="{Binding !Output.IsSaving}"/>
                             </StackPanel>
                         </Border>
                     </Popup>
@@ -783,13 +783,13 @@
                                       AutomationProperties.Name="Model settings">
                                 <Border Classes="modelCard" Margin="0,8,0,0">
                                         <StackPanel>
-                                            <TextBlock Text="{Binding ModelLabel}" Classes="caption" TextWrapping="Wrap"
+                                            <TextBlock Text="{Binding Output.ModelLabel}" Classes="caption" TextWrapping="Wrap"
                                                        Margin="0,0,0,6"/>
-                                            <TextBlock x:Name="SavedModelSummary" Text="{Binding SavedModelSummary}" Classes="caption"
+                                            <TextBlock x:Name="SavedModelSummary" Text="{Binding Output.SavedModelSummary}" Classes="caption"
                                                        Margin="0,0,0,6" TextWrapping="Wrap"
-                                                       IsVisible="{Binding HasSavedModelSummary}"
+                                                       IsVisible="{Binding Output.HasSavedModelSummary}"
                                                        AutomationProperties.AutomationId="SavedModelSummary"
-                                                       AutomationProperties.Name="{Binding SavedModelSummary}"/>
+                                                       AutomationProperties.Name="{Binding Output.SavedModelSummary}"/>
                                             <Border Classes="segmented" HorizontalAlignment="Stretch" Margin="0,0,0,6">
                                                 <UniformGrid x:Name="ModelSourceGrid" Columns="2">
                                                     <RadioButton x:Name="UseLoadedModelRadio" Content="Use loaded"
@@ -825,12 +825,12 @@
                                                         Command="{Binding ExportCubeCommand}"
                                                         AutomationProperties.Name="Export LUT"/>
                                             </UniformGrid>
-                                            <TextBlock x:Name="ModelIoStatus" Text="{Binding ModelIoStatus}" Classes="caption"
+                                            <TextBlock x:Name="ModelIoStatus" Text="{Binding Output.ModelIoStatus}" Classes="caption"
                                                        TextWrapping="Wrap"/>
                                         </StackPanel>
                                 </Border>
                             </Expander>
-                            <TextBlock Text="{Binding ModelLabel}" Classes="caption" Margin="0,0,0,8"
+                            <TextBlock Text="{Binding Output.ModelLabel}" Classes="caption" Margin="0,0,0,8"
                                        TextWrapping="Wrap" IsVisible="{Binding !ModelExpanded}"/>
                     </StackPanel>
                         </StackPanel>
@@ -1623,7 +1623,7 @@
                             Padding="0,10,0,10">
                         <StackPanel>
                             <CheckBox x:Name="BatchPreviewResults" Content="Preview results"
-                                      IsChecked="{Binding BatchPreviewResults}" IsEnabled="{Binding !Job.Busy}"
+                                      IsChecked="{Binding Output.BatchPreviewResults}" IsEnabled="{Binding !Job.Busy}"
                                       AutomationProperties.Name="Preview batch results"/>
                             <TextBlock Text="Turn off to process full images without previews. Save exports them."
                                        Classes="caption" TextWrapping="Wrap" Margin="0,4,0,0"/>

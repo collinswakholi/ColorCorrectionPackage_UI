@@ -22,9 +22,9 @@ public sealed class BackgroundValidationTests
         File.WriteAllText(model, System.Text.Json.JsonSerializer.Serialize(new { do_ffc = true, do_gc = false, do_wb = true, do_cc = true,
             ffc_params = new { method = "linear", bins = 17, smooth_window = 3, degree = 4, nn_max_iter = 90, tol = 1e-7 },
             python_api = new { white, white_sha256 = AssetIdentity.Capture(white).Sha256.ToLowerInvariant(), crop_rect = "1,2,30,40" } }));
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { LoadedModelPath = model };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Output = { LoadedModelPath = model }};
         vm.RestoreLoadedModelSettings(model);
-        vm.UseLoadedModel = true; // apply mode: validation checks the loaded files
+        vm.Output.UseLoadedModel = true; // apply mode: validation checks the loaded files
         return (vm, dir, white, model);
     }
 

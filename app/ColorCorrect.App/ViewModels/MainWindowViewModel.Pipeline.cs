@@ -373,7 +373,7 @@ public partial class MainWindowViewModel
         var result = await _worker.SendAsync(new Dictionary<string, object?>
         {
             ["cmd"] = "export_cube",
-            ["model"] = LoadedModelPath,
+            ["model"] = Output.LoadedModelPath,
             ["path"] = dest,
             ["size"] = 33,
         }).ConfigureAwait(false);

@@ -88,7 +88,7 @@ public sealed class BatchSnapshotTests
                 .Invoke(vm, [removed, new CorrectionOutcome { Ok = true, ModelPath = model, OutputPath = "stale-output.jpg" }, true, true]);
             Assert.False(removed.IsCorrected);
             Assert.Equal("", removed.CorrectedPath);
-            Assert.NotEqual(model, vm.LoadedModelPath);
+            Assert.NotEqual(model, vm.Output.LoadedModelPath);
         }
         finally { File.Delete(model); }
     }

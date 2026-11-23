@@ -44,7 +44,7 @@ public sealed class CompletedWorkflowTests
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(photo), b, new() { DoGc = false, DoWb = true, FastMode = false });
             var apply = typeof(MainWindowViewModel).GetMethod("ApplyOutcome", BindingFlags.Instance | BindingFlags.NonPublic)!;
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = true, ModelPath = b, CompletedContext = context }, false, false]);
-            vm.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.Compute.FastMode = true;
+            vm.Output.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.Compute.FastMode = true;
             Assert.Equal(b, item.ModelPath); Assert.Equal(b, item.CompletedContext!.Model.Path);
             Assert.False(vm.ReplayOptions(item)!.DoGc); Assert.True(vm.ReplayOptions(item)!.DoWb); Assert.False(vm.ReplayOptions(item)!.FastMode);
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = false, ModelPath = c, Error = "cancelled" }, false, false]);
@@ -170,7 +170,7 @@ public sealed class CompletedWorkflowTests
             File.WriteAllText(model, System.Text.Json.JsonSerializer.Serialize(new { do_ffc = true, do_gc = false, do_wb = true, do_cc = true,
                 ffc_params = new { method, bins = 17, smooth_window = 3, degree = 4, nn_max_iter = 90, tol = 1e-7 },
                 python_api = new { white, white_sha256 = AssetIdentity.Capture(white).Sha256.ToLowerInvariant(), crop_rect = "1,2,30,40" } }));
-            var vm = new MainWindowViewModel(persistenceEnabled: false) { LoadedModelPath = model };
+            var vm = new MainWindowViewModel(persistenceEnabled: false) { Output = { LoadedModelPath = model }};
             vm.RestoreLoadedModelSettings(model);
             Assert.Equal(method, vm.Settings.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.Settings.FfcBins); Assert.Equal(3m, vm.Settings.FfcSmoothWindow);
             Assert.Equal(4m, vm.Settings.FfcDegree); Assert.Equal(90m, vm.Settings.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.Settings.FfcTol);

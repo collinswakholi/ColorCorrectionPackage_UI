@@ -16,7 +16,7 @@ public partial class MainWindowViewModel
 
     public void AssignReference(SessionItemViewModel item, string chartId, ReferenceProfile? profile)
     {
-        if (Job.Busy || IsSaving) throw new InvalidOperationException("Wait for the current job before editing chart references.");
+        if (Job.Busy || Output.IsSaving) throw new InvalidOperationException("Wait for the current job before editing chart references.");
         var faces = item.Handshake?.Faces().Where(f => f.TryGetProperty("chart_id", out var id) && id.GetString() == chartId).ToArray();
         if (faces is not { Length: 1 })
             throw new InvalidOperationException("The detection changed. Reopen the reference editor and select the chart again.");
@@ -44,7 +44,7 @@ public partial class MainWindowViewModel
         InvalidateCalibration(item);
         if (item == Workspace.Active)
         {
-            UseLoadedModel = false;
+            Output.UseLoadedModel = false;
             ApplyReport(null);
             OnPropertyChanged(nameof(ReferenceSummary));
         }
