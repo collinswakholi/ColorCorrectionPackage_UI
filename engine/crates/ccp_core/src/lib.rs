@@ -36,6 +36,20 @@ pub enum Error {
     UnsupportedRaw { path: String, ext: String },
     #[error("16-bit TIFF is not supported: {path}. Export an 8-bit JPEG, PNG, or TIFF first.")]
     Unsupported16BitTiff { path: String },
+    #[error("16-bit {format} is not supported: {path}. Export an 8-bit JPEG, PNG, or TIFF first.")]
+    Unsupported16Bit { path: String, format: String },
+    #[error(
+        "Image is too large: {path} is {width}x{height} ({:.1} MP); the limit is {:.1} MP. \
+         Downscale the image or raise CCP_MAX_IMAGE_MEGAPIXELS.",
+        f64::from(*width) * f64::from(*height) / 1e6,
+        *max_pixels as f64 / 1e6
+    )]
+    ImageTooLarge {
+        path: String,
+        width: u32,
+        height: u32,
+        max_pixels: u64,
+    },
     #[error("apply-only / no chart: ΔE metrics are hidden")]
     MetricsHidden,
     #[error("Phase 2 reconciler is disabled until a .ts path exists")]

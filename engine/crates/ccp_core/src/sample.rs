@@ -21,6 +21,7 @@ pub struct RgbImage {
 
 impl RgbImage {
     pub fn new(width: u32, height: u32, rgb: Vec<f32>) -> Result<Self> {
+        reject_empty(width, height)?;
         let expected = width as usize * height as usize * 3;
         if rgb.len() != expected {
             return Err(Error::InvalidArgument(format!(
@@ -67,6 +68,7 @@ pub struct RgbView<'a> {
 
 impl<'a> RgbView<'a> {
     pub fn from_rgb(width: u32, height: u32, rgb: &'a [f32]) -> Result<Self> {
+        reject_empty(width, height)?;
         let expected = width as usize * height as usize * 3;
         if rgb.len() != expected {
             return Err(Error::InvalidArgument(format!(
@@ -78,6 +80,9 @@ impl<'a> RgbView<'a> {
     }
 
     pub fn pixel(&self, x: i32, y: i32) -> Vec3 {
+        if self.width == 0 || self.height == 0 {
+            return [0.0; 3];
+        }
         let x = x.clamp(0, self.width as i32 - 1) as usize;
         let y = y.clamp(0, self.height as i32 - 1) as usize;
         let i = (y * self.width as usize + x) * 3;
@@ -111,6 +116,58 @@ impl Default for SamplingOptions {
     }
 }
 
+fn reject_empty(width: u32, height: u32) -> Result<()> {
+    if width == 0 || height == 0 {
+        return Err(Error::InvalidArgument(format!(
+            "image has no pixels ({width}x{height})"
+        )));
+    }
+    Ok(())
+}
+
+/// Default decode cap (200 MP). Override per process with the
+/// `CCP_MAX_IMAGE_MEGAPIXELS` environment variable or [`set_max_image_pixels`].
+pub const DEFAULT_MAX_IMAGE_PIXELS: u64 = 200_000_000;
+
+static MAX_IMAGE_PIXELS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Current decode cap in pixels (width x height).
+pub fn max_image_pixels() -> u64 {
+    use std::sync::atomic::Ordering;
+    let current = MAX_IMAGE_PIXELS.load(Ordering::Relaxed);
+    if current != 0 {
+        return current;
+    }
+    let configured = std::env::var("CCP_MAX_IMAGE_MEGAPIXELS")
+        .ok()
+        .and_then(|v| v.trim().parse::<f64>().ok())
+        .filter(|mp| mp.is_finite() && *mp > 0.0)
+        .map(|mp| (mp * 1_000_000.0).min(u64::MAX as f64) as u64)
+        .filter(|&pixels| pixels > 0)
+        .unwrap_or(DEFAULT_MAX_IMAGE_PIXELS);
+    MAX_IMAGE_PIXELS.store(configured, Ordering::Relaxed);
+    configured
+}
+
+/// Set the decode cap for this process; `0` restores the default/env value.
+pub fn set_max_image_pixels(pixels: u64) {
+    MAX_IMAGE_PIXELS.store(pixels, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn format_label(format: Option<image::ImageFormat>) -> String {
+    match format {
+        Some(image::ImageFormat::Png) => "PNG".into(),
+        Some(image::ImageFormat::Tiff) => "TIFF".into(),
+        Some(image::ImageFormat::Jpeg) => "JPEG".into(),
+        Some(other) => format!("{other:?}").to_ascii_uppercase(),
+        None => "image".into(),
+    }
+}
+
+/// Pixels converted per ICC transform call; bounds the scratch buffer so a
+/// large image is not duplicated as a second full-size f32 buffer.
+const ICC_CHUNK_PIXELS: usize = 4096;
+
 pub fn load_image(path: impl AsRef<Path>) -> Result<RgbImage> {
     load_image_with_icc(path, true)
 }
@@ -118,6 +175,16 @@ pub fn load_image(path: impl AsRef<Path>) -> Result<RgbImage> {
 /// Orient pixels consistently and, for the sRGB working pipeline, honor the
 /// embedded ICC profile. Explicit non-sRGB input encodings use unmanaged bytes.
 pub fn load_image_with_icc(path: impl AsRef<Path>, honor_icc: bool) -> Result<RgbImage> {
+    load_image_with_limit(path, honor_icc, max_image_pixels())
+}
+
+/// [`load_image_with_icc`] with an explicit `max_pixels` (width x height) cap,
+/// checked from the header before any pixel data is decoded.
+pub fn load_image_with_limit(
+    path: impl AsRef<Path>,
+    honor_icc: bool,
+    max_pixels: u64,
+) -> Result<RgbImage> {
     let path = path.as_ref();
     let ext = path
         .extension()
@@ -136,9 +203,48 @@ pub fn load_image_with_icc(path: impl AsRef<Path>, honor_icc: bool) -> Result<Rg
             path: path.display().to_string(),
         });
     }
-    let mut decoder = image::ImageReader::new(Cursor::new(bytes))
-        .with_guessed_format()?
-        .into_decoder()?;
+    let mut reader = image::ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
+    let format = reader.format();
+    // Keep the decoder's historical 512 MiB allocation floor, widened so any
+    // 8-bit RGBA image within the pixel cap can still decode.
+    let mut limits = image::Limits::default();
+    let floor = limits.max_alloc.unwrap_or(512 * 1024 * 1024);
+    limits.max_alloc = Some(floor.max(max_pixels.saturating_mul(4)));
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder()?;
+    let (width, height) = decoder.dimensions();
+    if width == 0 || height == 0 {
+        return Err(Error::InvalidArgument(format!(
+            "image has no pixels ({width}x{height}): {}",
+            path.display()
+        )));
+    }
+    if u64::from(width) * u64::from(height) > max_pixels {
+        return Err(Error::ImageTooLarge {
+            path: path.display().to_string(),
+            width,
+            height,
+            max_pixels,
+        });
+    }
+    if matches!(
+        decoder.color_type(),
+        image::ColorType::L16
+            | image::ColorType::La16
+            | image::ColorType::Rgb16
+            | image::ColorType::Rgba16
+    ) {
+        return Err(if format == Some(image::ImageFormat::Tiff) {
+            Error::Unsupported16BitTiff {
+                path: path.display().to_string(),
+            }
+        } else {
+            Error::Unsupported16Bit {
+                path: path.display().to_string(),
+                format: format_label(format),
+            }
+        });
+    }
     let orientation = decoder.orientation()?;
     let icc = if honor_icc {
         decoder.icc_profile()?
@@ -146,19 +252,8 @@ pub fn load_image_with_icc(path: impl AsRef<Path>, honor_icc: bool) -> Result<Rg
         None
     };
     let mut loaded = DynamicImage::from_decoder(decoder)?;
-    if matches!(
-        loaded.color(),
-        image::ColorType::L16
-            | image::ColorType::La16
-            | image::ColorType::Rgb16
-            | image::ColorType::Rgba16
-    ) {
-        return Err(Error::Unsupported16BitTiff {
-            path: path.display().to_string(),
-        });
-    }
     loaded.apply_orientation(orientation);
-    let mut result = RgbImage::from_srgb_u8(&loaded.to_rgb8());
+    let mut result = RgbImage::from_srgb_u8(&loaded.into_rgb8());
     if let Some(icc) = icc {
         let source = moxcms::ColorProfile::new_from_slice(&icc)
             .map_err(|e| Error::InvalidArgument(format!("Invalid embedded ICC profile: {e}")))?;
@@ -173,14 +268,17 @@ pub fn load_image_with_icc(path: impl AsRef<Path>, honor_icc: bool) -> Result<Rg
             .map_err(|e| {
                 Error::InvalidArgument(format!("Cannot convert embedded ICC profile to sRGB: {e}"))
             })?;
-        let mut converted = vec![0.0f32; result.rgb.len()];
-        transform
-            .transform(&result.rgb, &mut converted)
-            .map_err(|e| Error::InvalidArgument(format!("ICC conversion to sRGB failed: {e}")))?;
-        for value in &mut converted {
-            *value = (*value).clamp(0.0, 1.0);
+        let chunk_len = ICC_CHUNK_PIXELS * 3;
+        let mut converted = vec![0.0f32; chunk_len.min(result.rgb.len())];
+        for chunk in result.rgb.chunks_mut(chunk_len) {
+            let out = &mut converted[..chunk.len()];
+            transform.transform(chunk, out).map_err(|e| {
+                Error::InvalidArgument(format!("ICC conversion to sRGB failed: {e}"))
+            })?;
+            for (value, &mapped) in chunk.iter_mut().zip(out.iter()) {
+                *value = mapped.clamp(0.0, 1.0);
+            }
         }
-        result.rgb = converted;
     }
     Ok(result)
 }
@@ -602,6 +700,92 @@ mod tests {
             assert!((raw.rgb[channel] as f64 - rgb[channel]).abs() < 1e-7);
         }
         assert!((managed.rgb[0] - raw.rgb[0]).abs() > 0.01);
+    }
+
+    fn write_png(
+        name: &str,
+        width: u32,
+        height: u32,
+        color: image::ExtendedColorType,
+    ) -> std::path::PathBuf {
+        use image::ImageEncoder;
+        let bytes = width as usize * height as usize * color.bits_per_pixel() as usize / 8;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(&vec![0x40; bytes], width, height, color)
+            .unwrap();
+        let path = std::env::temp_dir().join(format!("ccp-{name}-{}.png", std::process::id()));
+        std::fs::write(&path, png).unwrap();
+        path
+    }
+
+    #[test]
+    fn images_over_the_pixel_cap_are_rejected_before_decoding() {
+        let path = write_png("pixel-cap", 64, 32, image::ExtendedColorType::Rgb8);
+        let error = load_image_with_limit(&path, true, 64 * 32 - 1).unwrap_err();
+        assert!(matches!(error, Error::ImageTooLarge { .. }), "{error}");
+        assert!(error.to_string().contains("64x32"), "{error}");
+        let image = load_image_with_limit(&path, true, 64 * 32).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!((image.width, image.height), (64, 32));
+        assert_eq!(DEFAULT_MAX_IMAGE_PIXELS, 200_000_000);
+    }
+
+    #[test]
+    fn sixteen_bit_png_is_reported_as_png_not_tiff() {
+        let path = write_png("png16", 2, 2, image::ExtendedColorType::Rgb16);
+        let error = load_image(&path).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        let message = error.to_string();
+        assert!(message.contains("16-bit PNG"), "{message}");
+        assert!(!message.contains("TIFF is not"), "{message}");
+    }
+
+    #[test]
+    fn zero_size_images_are_rejected_and_views_do_not_panic() {
+        assert!(RgbImage::new(0, 4, Vec::new()).is_err());
+        assert!(RgbView::from_rgb(4, 0, &[]).is_err());
+        let empty = RgbView {
+            width: 0,
+            height: 0,
+            rgb: &[],
+        };
+        assert_eq!(empty.pixel(3, -2), [0.0; 3]);
+        assert_eq!(sample_bilinear_view(&empty, 1.5, 2.5), [0.0; 3]);
+    }
+
+    #[test]
+    fn chunked_icc_conversion_matches_per_pixel_result_on_large_images() {
+        use image::ImageEncoder;
+        let source = moxcms::ColorProfile::new_display_p3();
+        let (width, height) = (97u32, 61u32);
+        let raw: Vec<u8> = (0..width * height * 3)
+            .map(|i| (i * 7 % 251) as u8)
+            .collect();
+        let mut png = Vec::new();
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut png);
+        encoder.set_icc_profile(source.encode().unwrap()).unwrap();
+        encoder
+            .write_image(&raw, width, height, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let path = std::env::temp_dir().join(format!("ccp-icc-big-{}.png", std::process::id()));
+        std::fs::write(&path, png).unwrap();
+        let managed = load_image(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        let white = crate::color::parse_white_point("d65").unwrap();
+        let p3 = crate::color::parse_rgb_color_space("display-p3", &white).unwrap();
+        let srgb = crate::color::parse_rgb_color_space("srgb", &white).unwrap();
+        for pixel in [0usize, 4095, 4096, 4097, (width * height - 1) as usize] {
+            let rgb = [0, 1, 2].map(|c| raw[pixel * 3 + c] as f64 / 255.0);
+            let expected = crate::color::convert_encoded_rgb(rgb, &p3, &srgb).unwrap();
+            for c in 0..3 {
+                let got = managed.rgb[pixel * 3 + c] as f64;
+                assert!(
+                    (got - expected[c].clamp(0.0, 1.0)).abs() < 0.002,
+                    "{pixel}/{c}"
+                );
+            }
+        }
     }
 
     #[test]
