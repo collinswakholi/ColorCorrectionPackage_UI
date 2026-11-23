@@ -14,6 +14,7 @@ use ccp_detect::{
 };
 use serde_json::{json, Value};
 
+use crate::error_code::ErrorCode;
 use crate::run_pipeline::{
     apply_saved_to_image_ex_with_progress, export_cube_from_saved, json_bool, json_f64, json_str,
     last_apply_backend, load_saved, run_from_json_ex, ApplyOptions, FfcGainCache, PreviewMode,
@@ -67,6 +68,22 @@ fn with_accel(mut value: Value) -> Value {
         }
     }
     value
+}
+
+/// NDJSON protocol version announced in the ready event. Version 3 adds a
+/// stable `code` to every `ok:false` reply; everything else matches version 2.
+pub const PROTOCOL_VERSION: u32 = 3;
+
+fn fail(code: ErrorCode, message: impl Into<String>) -> Value {
+    json!({"ok": false, "code": code.as_str(), "error": message.into()})
+}
+
+fn fail_with(error: &crate::run_pipeline::Error) -> Value {
+    fail(error.code(), error.to_string())
+}
+
+fn detect_code(result: &ccp_detect::DetectResult) -> ErrorCode {
+    ErrorCode::parse(&result.error_code).unwrap_or(ErrorCode::InferenceFailed)
 }
 
 fn emit_progress(msg: &str) {
@@ -163,19 +180,22 @@ fn ready_title(warmed: bool, policy: &str) -> String {
     format!("{warm} · {}", report.recommended)
 }
 
-fn emit_ready(state: &ServeState) {
-    let ready = json!({
+fn ready_event(state: &ServeState) -> Value {
+    json!({
         "ok": true,
         "event": "ready",
         "patch_sampling": "random-lcg32-v1",
         "device": state.device,
         "warmed": state.warmed,
         "title": ready_title(state.warmed, &state.policy),
-        "protocol_version": 2,
+        "protocol_version": PROTOCOL_VERSION,
         "capabilities": ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1", "cpu_inference_v1"],
         "portable_lut": cfg!(feature = "wgpu-lut"),
-    });
-    emit_json(&ready);
+    })
+}
+
+fn emit_ready(state: &ServeState) {
+    emit_json(&ready_event(state));
 }
 
 fn cmd_devices(state: &ServeState, req: &Value) -> Value {
@@ -220,6 +240,7 @@ fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
     } else {
         json!({
             "ok": false,
+            "code": detect_code(&result).as_str(),
             "warmed": false,
             "device": state.device,
             "error": result.error,
@@ -241,18 +262,46 @@ fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
             .map(|actual|json!({"status":"verified","backend":actual.backend,"fallback":actual.chunks.fallback_reason}))
     };
     let correction=correction.unwrap_or_else(|reason|json!({"status":"failed","error":reason}));
-    json!({"ok":inference["ok"]==true && correction["status"]=="verified",
-        "setup_verified":inference["ok"]==true && correction["status"]=="verified",
-        "inference":inference,"correction":correction})
+    let verified = inference["ok"] == true && correction["status"] == "verified";
+    let mut reply = json!({"ok":verified, "setup_verified":verified,
+        "inference":inference,"correction":correction});
+    if !verified {
+        let (code, error) = if inference["ok"] != true {
+            (
+                inference["code"]
+                    .as_str()
+                    .unwrap_or(ErrorCode::InferenceFailed.as_str())
+                    .to_string(),
+                inference["error"]
+                    .as_str()
+                    .unwrap_or("inference setup failed")
+                    .to_string(),
+            )
+        } else {
+            (
+                ErrorCode::ProcessingFailed.as_str().to_string(),
+                correction["error"]
+                    .as_str()
+                    .unwrap_or("correction setup failed")
+                    .to_string(),
+            )
+        };
+        reply["code"] = json!(code);
+        reply["error"] = json!(error);
+    }
+    reply
 }
 
 fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     let image = match json_str(req, &["image", "input", "image_path"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"detect requires image"}),
+        None => return fail(ErrorCode::InvalidRequest, "detect requires image"),
     };
     if !image.is_file() {
-        return json!({"ok":false,"error": format!("image not found: {}", image.display())});
+        return fail(
+            ErrorCode::IoError,
+            format!("image not found: {}", image.display()),
+        );
     }
     // Fresh SDK clients need no preceding devices/warmup request. Routing in
     // ccp_detect reads the runtime assignment, so synchronize it before both
@@ -285,7 +334,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
                         let returned = requested.as_ref().unwrap_or(cached);
                         if returned != cached {
                             if let Err(error) = write_with_parent(returned, text.as_bytes()) {
-                                return json!({"ok":false,"error":error});
+                                return fail(ErrorCode::IoError, error);
                             }
                         }
                         touch_detect_cache(state, &key);
@@ -312,6 +361,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     if !result.ok {
         return json!({
             "ok": false,
+            "code": detect_code(&result).as_str(),
             "error": result.error,
             "device":result.device,
             "detect_backend":result.device,
@@ -323,6 +373,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     if result.json.trim().is_empty() {
         return json!({
             "ok": false,
+            "code": ErrorCode::InferenceFailed.as_str(),
             "error": "detect produced an empty handshake",
             "n_charts": result.n_charts,
             "chart_type": result.chart_type,
@@ -331,7 +382,10 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     let handshake = match serde_json::from_str::<Value>(&result.json) {
         Ok(value) => identify_detection_handshake(value),
         Err(error) => {
-            return json!({"ok":false,"error":format!("invalid detection handshake: {error}")})
+            return fail(
+                ErrorCode::InferenceFailed,
+                format!("invalid detection handshake: {error}"),
+            )
         }
     };
     let handshake_out = json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
@@ -349,7 +403,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         p
     });
     if let Err(e) = write_with_parent(&out, &serde_json::to_vec(&handshake).unwrap_or_default()) {
-        return json!({"ok":false,"error": e});
+        return fail(ErrorCode::IoError, e);
     }
     if worker_owned {
         remember_temp_output(state, out.clone());
@@ -421,7 +475,7 @@ fn cmd_run(state: &mut ServeState, req: &Value) -> Value {
                 "report_json": out.report_json,
             }))
         }
-        Err(e) => json!({"ok": false, "error": e.to_string()}),
+        Err(e) => fail_with(&e),
     }
 }
 
@@ -471,11 +525,11 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
     sync_runtime(state, req);
     let model_path = match json_str(req, &["model", "model_path", "model_in"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"apply requires model"}),
+        None => return fail(ErrorCode::InvalidRequest, "apply requires model"),
     };
     let saved = match load_saved(&model_path) {
         Ok(s) => s,
-        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+        Err(e) => return fail_with(&e),
     };
     let images = req
         .get("images")
@@ -483,18 +537,23 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         .cloned()
         .unwrap_or_default();
     if images.is_empty() {
-        return json!({"ok":false,"error":"apply requires images"});
+        return fail(ErrorCode::InvalidRequest, "apply requires images");
     }
     let output_dir = match json_str(req, &["output_dir", "output"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"apply requires output_dir"}),
+        None => return fail(ErrorCode::InvalidRequest, "apply requires output_dir"),
     };
     let output_ext = match req.get("output_format") {
         None => "jpg",
         Some(v) => match v.as_str().map(str::to_ascii_lowercase).as_deref() {
             Some("png") => "png",
             Some("jpg" | "jpeg") => "jpg",
-            _ => return json!({"ok":false,"error":"output_format must be png, jpg or jpeg"}),
+            _ => {
+                return fail(
+                    ErrorCode::InvalidRequest,
+                    "output_format must be png, jpg or jpeg",
+                )
+            }
         },
     };
     let mut valid_images = Vec::with_capacity(images.len());
@@ -502,14 +561,18 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         match value.as_str().filter(|s| !s.is_empty()) {
             Some(image) => valid_images.push(image.to_string()),
             None => {
-                return json!({"ok":false,
-                    "error": format!("images[{index}] must be a nonempty path string")})
+                return fail(
+                    ErrorCode::InvalidRequest,
+                    format!("images[{index}] must be a nonempty path string"),
+                )
             }
         }
     }
     if let Err(e) = std::fs::create_dir_all(&output_dir) {
-        return json!({"ok":false,
-            "error": format!("cannot create output_dir {}: {e}", output_dir.display())});
+        return fail(
+            ErrorCode::IoError,
+            format!("cannot create output_dir {}: {e}", output_dir.display()),
+        );
     }
     emit_progress(&format!("Applying model to {} images", images.len()));
 
@@ -527,8 +590,10 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
                     root.clone()
                 };
                 if let Err(e) = std::fs::create_dir_all(&dir) {
-                    return json!({"ok":false,
-                        "error": format!("cannot create preview_dir {}: {e}", dir.display())});
+                    return fail(
+                        ErrorCode::IoError,
+                        format!("cannot create preview_dir {}: {e}", dir.display()),
+                    );
                 }
                 Some(dir)
             }
@@ -538,7 +603,7 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
 
     let mut apply = match ApplyOptions::try_from_req(req, &saved) {
         Ok(apply) => apply,
-        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+        Err(e) => return fail_with(&e),
     };
     apply.ffc_cache = Some(state.ffc_cache.clone());
     let apply_one = |img: &str, out: &Path, preview: Option<&Path>| -> Value {
@@ -570,6 +635,7 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
             }
             Err(e) => json!({
                 "ok": false,
+                "code": e.code().as_str(),
                 "image": img,
                 "error": e.to_string(),
                 "metrics_hidden": true,
@@ -584,7 +650,7 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         .map(|(img, out, preview)| apply_one(img, out, preview.as_deref()))
         .collect();
     let failed = results.iter().filter(|r| r["ok"] == false).count();
-    with_accel(json!({
+    let mut reply = json!({
         "ok": failed < results.len(),
         "results": results,
         "metrics_hidden": true,
@@ -593,18 +659,28 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         } else {
             None
         },
-    }))
+    });
+    if reply["ok"] == false {
+        // Every image failed: report the first image's code for the batch.
+        let first = reply["results"]
+            .as_array()
+            .and_then(|rows| rows.iter().find_map(|row| row["code"].as_str()))
+            .unwrap_or(ErrorCode::ProcessingFailed.as_str())
+            .to_string();
+        reply["code"] = json!(first);
+    }
+    with_accel(reply)
 }
 
 fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
     sync_runtime(state, req);
     let model_path = match json_str(req, &["model", "model_path", "model_in"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"preview_stage requires model"}),
+        None => return fail(ErrorCode::InvalidRequest, "preview_stage requires model"),
     };
     let saved = match load_saved(&model_path) {
         Ok(s) => s,
-        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+        Err(e) => return fail_with(&e),
     };
     let image = match json_str(req, &["image", "input", "image_path"]) {
         Some(p) => PathBuf::from(p),
@@ -616,13 +692,18 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
                 .and_then(Value::as_str);
             match first {
                 Some(p) => PathBuf::from(p),
-                None => return json!({"ok":false,"error":"preview_stage requires image"}),
+                None => return fail(ErrorCode::InvalidRequest, "preview_stage requires image"),
             }
         }
     };
     let preview_dir = match json_str(req, &["preview_dir"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"preview_stage requires preview_dir"}),
+        None => {
+            return fail(
+                ErrorCode::InvalidRequest,
+                "preview_stage requires preview_dir",
+            )
+        }
     };
     let stage = json_str(req, &["stage", "preview_mode"])
         .unwrap_or("corrected")
@@ -630,7 +711,7 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
     let dummy = preview_dir.join("_unused.jpg");
     let mut apply = match ApplyOptions::try_from_req(req, &saved) {
         Ok(apply) => apply,
-        Err(e) => return json!({"ok":false,"error": e.to_string()}),
+        Err(e) => return fail_with(&e),
     };
     apply.write_output = false;
     apply.preview_mode = PreviewMode::Stage(stage.clone());
@@ -654,7 +735,7 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
             apply.do_cc = false;
         }
         "cc" | "corrected" => {}
-        other => return json!({"ok":false,"error": format!("unknown stage: {other}")}),
+        other => return fail(ErrorCode::InvalidRequest, format!("unknown stage: {other}")),
     }
     match apply_saved_to_image_ex_with_progress(&saved, &image, &dummy, Some(&preview_dir), &apply, &mut emit_progress) {
         Ok(report) => {
@@ -668,7 +749,7 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
             }
             with_accel(row)
         }
-        Err(e) => json!({"ok": false, "error": e.to_string()}),
+        Err(e) => fail_with(&e),
     }
 }
 
@@ -677,11 +758,14 @@ fn cmd_export_cube(state: &ServeState, req: &Value) -> Value {
     if let Some(model) = json_str(req, &["model", "model_path"]) {
         return match load_saved(model) {
             Ok(saved) => write_cube_reply(&saved, req),
-            Err(e) => json!({"ok":false,"error": e.to_string()}),
+            Err(e) => fail_with(&e),
         };
     }
     let Some(saved) = &state.last else {
-        return json!({"ok":false,"error":"export_cube needs a prior run or model"});
+        return fail(
+            ErrorCode::InvalidRequest,
+            "export_cube needs a prior run or model",
+        );
     };
     write_cube_reply(saved, req)
 }
@@ -689,20 +773,25 @@ fn cmd_export_cube(state: &ServeState, req: &Value) -> Value {
 fn write_cube_reply(saved: &SavedPipeline, req: &Value) -> Value {
     let path = match json_str(req, &["path", "output", "lut_out"]) {
         Some(p) => PathBuf::from(p),
-        None => return json!({"ok":false,"error":"export_cube requires path"}),
+        None => return fail(ErrorCode::InvalidRequest, "export_cube requires path"),
     };
     let size = match req.get("size") {
         None => DEFAULT_LUT_SIZE,
         Some(value) => match value.as_u64().filter(|n| (2..=129).contains(n)) {
             Some(size) => size as usize,
-            None => return json!({"ok":false,"error":"size must be an integer from 2 to 129"}),
+            None => {
+                return fail(
+                    ErrorCode::InvalidRequest,
+                    "size must be an integer from 2 to 129",
+                )
+            }
         },
     };
     match export_cube_from_saved(saved, &path, size) {
         Ok(()) => {
             json!({"ok":true,"path": path, "size": size, "note":"LUT does not include flat-field."})
         }
-        Err(e) => json!({"ok":false,"error": e.to_string()}),
+        Err(e) => fail_with(&e),
     }
 }
 
@@ -714,19 +803,39 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
         match mode.as_str() {
             Some("auto") => crate::run_pipeline::set_auto_lut_request(true),
             Some("cpu") => crate::run_pipeline::set_cpu_lut_request(true),
-            Some("gpu") => {},
-            _ => return (json!({"ok":false,"error":"lut_device must be auto, cpu, or gpu"}), false),
+            Some("gpu") => {}
+            _ => {
+                return (
+                    fail(
+                        ErrorCode::InvalidRequest,
+                        "lut_device must be auto, cpu, or gpu",
+                    ),
+                    false,
+                )
+            }
         }
     }
     let cmd = json_str(req, &["cmd", "command"])
         .unwrap_or("")
         .to_ascii_lowercase();
     if req.get("cc_method").is_some() {
-        return (json!({"ok":false,"error":"cc_method was removed; use fast_mode: true for the optional combined LUT"}), false);
+        return (
+            fail(
+                ErrorCode::InvalidRequest,
+                "cc_method was removed; use fast_mode: true for the optional combined LUT",
+            ),
+            false,
+        );
     }
     if let Some(value) = req.get("fast_mode") {
         if !value.is_boolean() || !matches!(cmd.as_str(), "run" | "apply" | "preview_stage") {
-            return (json!({"ok":false,"error":"fast_mode must be a boolean on run/apply/preview_stage requests"}), false);
+            return (
+                fail(
+                    ErrorCode::InvalidRequest,
+                    "fast_mode must be a boolean on run/apply/preview_stage requests",
+                ),
+                false,
+            );
         }
     }
     if matches!(cmd.as_str(), "run" | "apply" | "preview_stage") {
@@ -742,7 +851,10 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
         "preview_stage" => (cmd_preview_stage(state, req), false),
         "export_cube" => (cmd_export_cube(state, req), false),
         "video" | "video_grade" => (
-            json!({"ok":false,"error":"Video processing has been removed; this app supports still images only."}),
+            fail(
+                ErrorCode::UnsupportedCommand,
+                "Video processing has been removed; this app supports still images only.",
+            ),
             false,
         ),
         #[cfg(test)]
@@ -751,9 +863,12 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
             let _ = crate::run_pipeline::flush_preview_encodes();
             (json!({"ok":true,"event":"shutdown"}), true)
         }
-        "" => (json!({"ok":false,"error":"missing cmd"}), false),
+        "" => (fail(ErrorCode::InvalidRequest, "missing cmd"), false),
         other => (
-            json!({"ok":false,"error": format!("unknown cmd: {other}")}),
+            fail(
+                ErrorCode::UnsupportedCommand,
+                format!("unknown cmd: {other}"),
+            ),
             false,
         ),
     }
@@ -777,10 +892,10 @@ pub fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
             // Preview encoders may still reference a half-written request.
             let _ = crate::run_pipeline::flush_preview_encodes();
             (
-                json!({
-                    "ok": false,
-                    "error": format!("internal error: {}", panic_message(payload.as_ref())),
-                }),
+                fail(
+                    ErrorCode::InternalError,
+                    format!("internal error: {}", panic_message(payload.as_ref())),
+                ),
                 false,
             )
         }
@@ -828,7 +943,10 @@ pub fn serve_lines<R: BufRead>(
         let line = match std::str::from_utf8(&buffer) {
             Ok(line) => line,
             Err(e) => {
-                emit(&json!({"ok":false,"error": format!("invalid UTF-8 in request: {e}")}));
+                emit(&fail(
+                    ErrorCode::InvalidRequest,
+                    format!("invalid UTF-8 in request: {e}"),
+                ));
                 continue;
             }
         };
@@ -838,7 +956,10 @@ pub fn serve_lines<R: BufRead>(
         let req: Value = match serde_json::from_str(line) {
             Ok(v) => v,
             Err(e) => {
-                emit(&json!({"ok":false,"error": format!("invalid JSON: {e}")}));
+                emit(&fail(
+                    ErrorCode::InvalidRequest,
+                    format!("invalid JSON: {e}"),
+                ));
                 continue;
             }
         };
@@ -1219,6 +1340,115 @@ mod tests {
         assert!(state.detect_cache.is_empty());
         assert!(cache_files.iter().chain(&outputs).all(|p| !p.exists()));
         assert!(!replacement.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn ready_event_announces_protocol_three() {
+        let ready = ready_event(&ServeState::default());
+        assert_eq!(ready["protocol_version"], 3);
+        assert_eq!(ready["event"], "ready");
+        assert!(ready.get("code").is_none());
+    }
+
+    #[test]
+    fn every_failed_reply_carries_a_stable_code() {
+        let dir = std::env::temp_dir().join(format!("ccp-serve-codes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = valid_model(&dir);
+        let crafted = dir.join("crafted.json");
+        std::fs::write(
+            &crafted,
+            r#"{"kind":"ccm","feature_count":3,"poly_degree":2,
+            "include_combinations":true,"pls_components":0,"hidden_size":0,
+            "input_space_id":"srgb","target_space_id":"srgb","target_white_id":"d65",
+            "saturated_patches":0,"saturated_names":[],"x_mean":[],"x_std":[],
+            "y_mean":[0,0,0],"y_std":[1,1,1],"intercept":[0,0,0],"coefficients":[1],
+            "w1":[],"b1":[],"w2":[],"b2":[]}"#,
+        )
+        .unwrap();
+        let not_json = dir.join("not-json.json");
+        std::fs::write(&not_json, b"not json").unwrap();
+        let not_image = dir.join("not-image.png");
+        std::fs::write(&not_image, b"definitely not a png").unwrap();
+        let missing = dir.join("missing-model.json");
+        let cases = [
+            (json!({}), "invalid_request"),
+            (json!({"cmd":"nope"}), "unsupported_command"),
+            (json!({"cmd":"video"}), "unsupported_command"),
+            (
+                json!({"cmd":"apply","lut_device":"cuda"}),
+                "invalid_request",
+            ),
+            (json!({"cmd":"run","cc_method":"x"}), "invalid_request"),
+            (json!({"cmd":"apply","policy":"cpu"}), "invalid_request"),
+            (
+                json!({"cmd":"apply","policy":"cpu","model":missing,"images":["a.jpg"],
+                "output_dir":dir}),
+                "io_error",
+            ),
+            (
+                json!({"cmd":"apply","policy":"cpu","model":crafted,"images":["a.jpg"],
+                "output_dir":dir}),
+                "invalid_model",
+            ),
+            (
+                json!({"cmd":"apply","policy":"cpu","model":not_json,"images":["a.jpg"],
+                "output_dir":dir}),
+                "invalid_model",
+            ),
+            (
+                json!({"cmd":"apply","policy":"cpu","model":model,"images":[not_image],
+                "output_dir":dir}),
+                "image_decode_failed",
+            ),
+            (
+                json!({"cmd":"apply","policy":"cpu","model":model,"images":[dir.join("nope.png")],
+                "output_dir":dir}),
+                "io_error",
+            ),
+            (json!({"cmd":"detect","policy":"cpu"}), "invalid_request"),
+            (
+                json!({"cmd":"detect","policy":"cpu","image":dir.join("nope.png")}),
+                "io_error",
+            ),
+            (json!({"cmd":"export_cube"}), "invalid_request"),
+            (
+                json!({"cmd":"export_cube","model":model,"path":dir.join("x.cube"),"size":1}),
+                "invalid_request",
+            ),
+            (
+                json!({"cmd":"preview_stage","policy":"cpu","model":model,"image":not_image,
+                "preview_dir":dir.join("p"),"stage":"bogus"}),
+                "invalid_request",
+            ),
+            (json!({"cmd":"__test_panic"}), "internal_error"),
+        ];
+        let mut state = ServeState::default();
+        for (req, expected) in cases {
+            let (reply, _) = dispatch_guarded(&mut state, &req);
+            assert_eq!(reply["ok"], false, "{req}: {reply}");
+            assert_eq!(reply["code"], expected, "{req}: {reply}");
+            assert!(
+                reply["error"].as_str().is_some_and(|e| !e.is_empty()),
+                "{reply}"
+            );
+            for row in reply["results"].as_array().into_iter().flatten() {
+                assert_eq!(row["code"], expected, "{row}");
+            }
+        }
+        let mut replies = Vec::new();
+        let input = b"{not json}\n\xff\n";
+        serve_lines(&mut state, std::io::Cursor::new(&input[..]), &mut |r| {
+            replies.push(r.clone())
+        })
+        .unwrap();
+        assert!(
+            replies.iter().all(|r| r["code"] == "invalid_request"),
+            "{replies:?}"
+        );
+        let (ok, _) = dispatch_guarded(&mut state, &json!({"cmd":"devices","policy":"cpu"}));
+        assert!(ok.get("code").is_none(), "successful replies are unchanged");
         let _ = std::fs::remove_dir_all(dir);
     }
 

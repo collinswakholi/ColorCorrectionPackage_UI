@@ -51,6 +51,8 @@ use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::error_code::ErrorCode;
+
 pub mod fast_lut;
 use fast_lut::apply_combined;
 
@@ -136,10 +138,13 @@ impl PreviewPngEncoders {
         }
         drop(pending);
         match self.take_failure(path) {
-            Some(error) => Err(Error::Message(format!(
-                "preview PNG {} could not be written: {error}",
-                path.display()
-            ))),
+            Some(error) => Err(Error::coded(
+                ErrorCode::IoError,
+                format!(
+                    "preview PNG {} could not be written: {error}",
+                    path.display()
+                ),
+            )),
             None => Ok(()),
         }
     }
@@ -171,10 +176,13 @@ impl PreviewPngEncoders {
             .filter_map(|path| failed.remove(path))
             .collect();
         match (first, errors.first()) {
-            (Some(path), Some(error)) => Err(Error::Message(format!(
-                "preview PNG {} could not be written: {error}",
-                path.display()
-            ))),
+            (Some(path), Some(error)) => Err(Error::coded(
+                ErrorCode::IoError,
+                format!(
+                    "preview PNG {} could not be written: {error}",
+                    path.display()
+                ),
+            )),
             _ => Ok(()),
         }
     }
@@ -197,7 +205,9 @@ impl PreviewPngEncoders {
                 )
             });
         failed.clear();
-        first.map_or(Ok(()), |message| Err(Error::Message(message)))
+        first.map_or(Ok(()), |message| {
+            Err(Error::coded(ErrorCode::IoError, message))
+        })
     }
 
     fn spawn(&self, rgb: Rgb8, path: PathBuf) {
@@ -255,6 +265,9 @@ pub fn flush_preview_encodes() -> Result<()> {
 pub enum Error {
     #[error("{0}")]
     Message(String),
+    /// A message with an explicit protocol error code.
+    #[error("{message}")]
+    Coded { code: ErrorCode, message: String },
     #[error(transparent)]
     Core(#[from] ccp_core::Error),
     #[error(transparent)]
@@ -266,6 +279,26 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self::Coded {
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// Stable protocol-3 code for this error.
+    pub fn code(&self) -> ErrorCode {
+        crate::error_code::classify(self)
+    }
+}
+
+/// Tag an input-image load failure (message unchanged).
+fn image_load_error(error: ccp_core::Error) -> Error {
+    let code = crate::error_code::classify_image_load(&error);
+    Error::coded(code, error.to_string())
+}
 
 // Request-local diagnostics must not be overwritten by concurrent callers of
 // the library. The worker dispatches a request and reads its result on this thread.
@@ -367,7 +400,8 @@ fn apply_lut_accel(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) 
             *img = Array3::from_shape_vec(dim, owned).map_err(|e| Error::Message(e.to_string()))?;
         }
         if let Some(slice) = img.as_slice_mut() {
-            let execution = ccp_detect::lut_wgpu::apply(slice, &lut, gs).map_err(Error::Message)?;
+            let execution = ccp_detect::lut_wgpu::apply(slice, &lut, gs)
+                .map_err(|e| Error::coded(ErrorCode::ProcessingFailed, e))?;
             if let Some(reason) = &execution.chunks.fallback_reason {
                 eprintln!("LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
                     execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels);
@@ -831,7 +865,8 @@ fn array3_to_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
     buf.par_iter_mut()
         .zip(src.par_iter())
         .for_each(|(d, s)| *d = f32_to_u8(*s));
-    Rgb8::from_raw(w, h, buf).ok_or_else(|| Error::Message("preview buffer size mismatch".into()))
+    Rgb8::from_raw(w, h, buf)
+        .ok_or_else(|| Error::coded(ErrorCode::InternalError, "preview buffer size mismatch"))
 }
 
 fn preview_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
@@ -844,7 +879,7 @@ fn preview_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
             .zip(src.par_iter())
             .for_each(|(d, s)| *d = f32_to_u8(*s));
         return Rgb8::from_raw(w as u32, h as u32, buf)
-            .ok_or_else(|| Error::Message("preview buffer size mismatch".into()));
+            .ok_or_else(|| Error::coded(ErrorCode::InternalError, "preview buffer size mismatch"));
     }
 
     let out_w = PREVIEW_MAX_WIDTH as usize;
@@ -865,7 +900,7 @@ fn preview_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
             }
         });
     Rgb8::from_raw(out_w as u32, out_h as u32, buf)
-        .ok_or_else(|| Error::Message("preview buffer size mismatch".into()))
+        .ok_or_else(|| Error::coded(ErrorCode::InternalError, "preview buffer size mismatch"))
 }
 
 fn encode_jpeg(rgb: &Rgb8, path: &Path, quality: u8) -> Result<()> {
@@ -881,7 +916,12 @@ fn encode_jpeg(rgb: &Rgb8, path: &Path, quality: u8) -> Result<()> {
     encoder.set_sampling_factor(SamplingFactor::R_4_4_4);
     encoder
         .encode(rgb.as_raw(), width, height, JpegColorType::Rgb)
-        .map_err(|e| Error::Message(format!("JPEG encode failed: {e}")))
+        .map_err(|e| {
+            Error::coded(
+                ErrorCode::ProcessingFailed,
+                format!("JPEG encode failed: {e}"),
+            )
+        })
 }
 
 pub fn write_preview_jpeg(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
@@ -971,7 +1011,7 @@ fn preview_rgb8_in_space(arr: &Array3<f32>, space: &RgbColorSpace) -> Result<Rgb
             Ok(())
         })?;
     Rgb8::from_raw(out_w as u32, out_h as u32, buf)
-        .ok_or_else(|| Error::Message("preview buffer size mismatch".into()))
+        .ok_or_else(|| Error::coded(ErrorCode::InternalError, "preview buffer size mismatch"))
 }
 
 fn write_preview_in_space(
@@ -1656,7 +1696,7 @@ pub struct CachedFfc {
 
 impl CachedFfc {
     pub fn compute(white: &Path, crop: Option<&str>, params: &FfcFitParams) -> Result<Self> {
-        let white_img = load_image(white).map_err(|error|Error::Message(format!("Cannot load FFC white image {}: {error}. Provide a readable blank white-field image from the same capture setup.",white.display())))?;
+        let white_img = load_image(white).map_err(|error|Error::coded(crate::error_code::classify_image_load(&error), format!("Cannot load FFC white image {}: {error}. Provide a readable blank white-field image from the same capture setup.",white.display())))?;
         let (rect, source) = ffc_plane_info(&white_img, crop)?;
         let white_size = [white_img.width as i32, white_img.height as i32];
         let white_arr = rgb_image_into_array3(white_img)?;
@@ -1743,7 +1783,7 @@ fn write_jobs_parallel(
             write_still(work, path)
         };
     }
-    let errors: Vec<String> = jobs
+    let errors: Vec<Error> = jobs
         .par_iter()
         .filter_map(|(path, preview)| {
             let r = if *preview {
@@ -1751,11 +1791,11 @@ fn write_jobs_parallel(
             } else {
                 write_still(work, path)
             };
-            r.err().map(|e| e.to_string())
+            r.err()
         })
         .collect();
     if let Some(e) = errors.into_iter().next() {
-        return Err(Error::Message(e));
+        return Err(e);
     }
     Ok(())
 }
@@ -1834,12 +1874,12 @@ fn ffc_plane_info(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4]
         .iter()
         .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
         .collect();
-    let plane = ccp_detect::paths::plane_onnx_path().ok_or_else(||Error::Message(
-        "White-plane detection model is missing. Repair the application setup or provide a manual FFC crop.".into()))?;
+    let plane = ccp_detect::paths::plane_onnx_path().ok_or_else(||Error::coded(ErrorCode::InferenceFailed,
+        "White-plane detection model is missing. Repair the application setup or provide a manual FFC crop."))?;
     {
         let path=plane.as_path();
         if let Some(r) = ccp_detect::plane::detect_plane(&rgb8, white.width, white.height, path)
-            .map_err(|e| Error::Message(format!("White-plane detection failed: {e}. Check the detection engine or provide a manual FFC crop.")))?
+            .map_err(|e| Error::coded(ErrorCode::InferenceFailed, format!("White-plane detection failed: {e}. Check the detection engine or provide a manual FFC crop.")))?
         {
             if r.width > 0 && r.height > 0 {
                 return Ok(([r.x, r.y, r.width, r.height], "detected"));
@@ -1991,7 +2031,8 @@ pub fn run_from_json_ex(
 
     progress("Loading image");
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
-    let loaded = ccp_core::sample::load_image_with_icc(image_path, honor_icc)?;
+    let loaded =
+        ccp_core::sample::load_image_with_icc(image_path, honor_icc).map_err(image_load_error)?;
     let (spec, before_patches, chart_type) =
         sample_faces(loaded.view(), &faces, sampling, reference_context.as_ref())?;
     let mut work = rgb_image_into_array3(loaded)?;
@@ -2028,7 +2069,16 @@ pub fn run_from_json_ex(
                     ffc_applied = true;
                     ffc_elapsed = t.elapsed().as_secs_f64();
                 }
-                Err(error) => return Err(Error::Message(format!("FFC could not complete: {error}"))),
+                Err(error) => {
+                    let code = match error.code() {
+                        ErrorCode::InvalidRequest => ErrorCode::ProcessingFailed,
+                        code => code,
+                    };
+                    return Err(Error::coded(
+                        code,
+                        format!("FFC could not complete: {error}"),
+                    ));
+                }
             }
         } else {
             progress("FFC skipped (white miss)");
@@ -2388,30 +2438,30 @@ pub fn run_from_json_ex(
 
 pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
     let path=path.as_ref();
-    let text = std::fs::read_to_string(path).map_err(|error|Error::Message(format!("Cannot load calibration model {}: {error}. Locate the saved model or fit a new calibration.",path.display())))?;
-    let v: Value = serde_json::from_str(&text)?;
+    let text = std::fs::read_to_string(path).map_err(|error|Error::coded(ErrorCode::IoError, format!("Cannot load calibration model {}: {error}. Locate the saved model or fit a new calibration.",path.display())))?;
+    let invalid =
+        |error: &dyn std::fmt::Display| Error::coded(ErrorCode::InvalidModel, error.to_string());
+    let v: Value = serde_json::from_str(&text).map_err(|e| invalid(&e))?;
     if v.get("correction").is_some()
         || v.get("gc_coeffs").is_some()
         || v.get("gc_model").is_some()
         || v.get("wb_diag").is_some()
     {
-        let saved: SavedPipeline = serde_json::from_value(v)?;
+        let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
         if let Some(correction) = &saved.correction {
             correction.validate()?;
         }
         if let Some(context) = &saved.reference_context {
             if context.version != 1 {
-                return Err(Error::Message(
-                    "unsupported reference context version".into(),
-                ));
+                return Err(invalid(&"unsupported reference context version"));
             }
             for profile in &context.reference_profiles {
-                profile.resolve()?;
+                profile.resolve().map_err(|e| invalid(&e))?;
             }
         }
         return Ok(saved);
     }
-    let correction: CorrectionModel = serde_json::from_value(v)?;
+    let correction: CorrectionModel = serde_json::from_value(v).map_err(|e| invalid(&e))?;
     correction.validate()?;
     Ok(SavedPipeline {
         version: 1,
@@ -2645,7 +2695,8 @@ pub fn apply_saved_to_image_ex_with_progress(
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
     progress("Loading image");
     let started = Instant::now();
-    let loaded = ccp_core::sample::load_image_with_icc(image, honor_icc)?;
+    let loaded =
+        ccp_core::sample::load_image_with_icc(image, honor_icc).map_err(image_load_error)?;
     let mut work = rgb_image_into_array3(loaded)?;
     let decoded = Instant::now();
     let ffc_skipped = None;
@@ -2654,7 +2705,7 @@ pub fn apply_saved_to_image_ex_with_progress(
             .ok_or_else(|| Error::Message("FFC requires a blank white-field image from the same capture setup; neither color chart is a flat-field reference.".into()))?;
         progress("FFC");
         let ffc = resolve_cached_ffc(white, apply.crop_rect.as_deref(), &apply.ffc, apply.ffc_cache.as_ref())
-            .map_err(|e| Error::Message(format!("FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup.")))?;
+            .map_err(|e| Error::coded(match e.code() { ErrorCode::InvalidRequest => ErrorCode::ProcessingFailed, code => code }, format!("FFC reference could not be loaded or fitted: {e}. Provide a readable blank white-field image from the same capture setup.")))?;
         Some(Arc::clone(&ffc.gain))
     } else {
         None

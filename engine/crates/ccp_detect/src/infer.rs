@@ -15,5 +15,9 @@ pub fn detect_chart(path: &Path, settings: &DetectSettings) -> DetectResult {
 }
 #[cfg(not(feature = "ort-plane"))]
 fn disabled() -> DetectResult {
-    DetectResult { error: "Chart inference requires the ort-plane build feature.".into(), ..DetectResult::default() }
+    DetectResult {
+        error: "Chart inference requires the ort-plane build feature.".into(),
+        error_code: "unsupported_capability".into(),
+        ..DetectResult::default()
+    }
 }

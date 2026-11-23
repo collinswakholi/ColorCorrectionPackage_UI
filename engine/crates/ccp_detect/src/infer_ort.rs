@@ -140,6 +140,7 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
     let primary = primary_onnx_path(&deploy);
     if !primary.is_file() {
         result.error = format!("missing {}", primary.display());
+        result.error_code = "inference_failed".into();
         return result;
     }
     let imgsz = PRIMARY_SIZE;
@@ -159,10 +160,12 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
             }
             Err(err) if is_oom(&err) => {
                 result.error = format!("failed: oom_on_warmup ({err})");
+                result.error_code = "inference_failed".into();
                 result
             }
             Err(err) => {
                 result.error = err;
+                result.error_code = "inference_failed".into();
                 result
             }
     }
@@ -178,6 +181,12 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     let (rgb, width, height) = match load_rgb_f32(image_path) {
         Ok(v) => v,
         Err(err) => {
+            result.error_code = if std::fs::metadata(image_path).is_err() {
+                "io_error"
+            } else {
+                "image_decode_failed"
+            }
+            .into();
             result.error = err;
             return result;
         }
@@ -186,6 +195,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     let primary = primary_onnx_path(&deploy);
     if !primary.is_file() {
         result.error = format!("missing {}", primary.display());
+        result.error_code = "inference_failed".into();
         return result;
     }
     let conf = if settings.conf > 0.0 {
@@ -223,6 +233,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
         Ok(d) => d,
         Err(err) => {
             result.error = err;
+            result.error_code = "inference_failed".into();
             return result;
         }
     };
@@ -262,6 +273,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     result.n_dets = dets.len() as i32;
     if charts.is_empty() {
         result.error = "no lattice".into();
+        result.error_code = "no_chart_detected".into();
         result.n_charts = 0;
         return result;
     }
@@ -275,7 +287,10 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     result.inference = inference_records(result.recall_source == "recall_1536");
     match make_handshake(&result, &charts, crop, image_path) {
         Ok(json) => result.json = json,
-        Err(err) => result.error = err.to_string(),
+        Err(err) => {
+            result.error = err.to_string();
+            result.error_code = "processing_failed".into();
+        }
     }
     result
 }
@@ -286,6 +301,7 @@ fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
     result.ok=false;
     result.error=format!("Recall chart detection failed: {reason}. Check setup, choose Auto or CPU, and retry detection.");
     result.recall_source="failed".into();
+    result.error_code="inference_failed".into();
     result.inference=inference_records(false);
     result.inference["recall_error"]=serde_json::json!(reason);
     result

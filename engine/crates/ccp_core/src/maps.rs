@@ -236,7 +236,7 @@ impl Default for CorrectionModel {
 }
 
 fn invalid_model(detail: impl std::fmt::Display) -> Error {
-    Error::InvalidArgument(format!("invalid correction model: {detail}"))
+    Error::InvalidModel(format!("invalid correction model: {detail}"))
 }
 
 fn check_len(name: &str, actual: usize, expected: usize) -> Result<()> {

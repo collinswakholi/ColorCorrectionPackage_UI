@@ -30,6 +30,9 @@ pub enum Error {
     InvalidArgument(String),
     #[error("{0}")]
     Runtime(String),
+    /// A saved correction model failed validation.
+    #[error("{0}")]
+    InvalidModel(String),
     #[error(
         "RAW files are not supported ({ext}): {path}. Export an 8-bit JPEG, PNG, or TIFF first."
     )]

@@ -110,6 +110,9 @@ pub struct DetectResult {
     pub inference: serde_json::Value,
     pub n_dets: i32,
     pub n_charts: i32,
+    /// Stable protocol error code for a failed result (empty when `ok`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error_code: String,
 }
 
 impl Default for DetectResult {
@@ -130,6 +133,7 @@ impl Default for DetectResult {
             inference: serde_json::Value::Null,
             n_dets: 0,
             n_charts: 0,
+            error_code: String::new(),
         }
     }
 }
