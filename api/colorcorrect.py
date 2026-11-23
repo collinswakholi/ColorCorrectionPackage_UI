@@ -19,10 +19,14 @@ import threading
 import time
 import tempfile
 from typing import Any, Callable
+import weakref
 
 __version__ = "2.3.0"
-COMMANDS = ("devices", "warmup", "detect", "run", "apply", "preview_stage",
+COMMANDS = ("devices", "setup_probe", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
+#: Worker NDJSON protocol versions this client understands. A ready event
+#: without protocol_version is treated as version 2.
+SUPPORTED_PROTOCOL_VERSIONS = (2, 3)
 _DEFAULT_POLICY = "auto"
 _STILL_FORMATS = ("png", "jpg", "jpeg")
 
@@ -32,6 +36,29 @@ class EngineError(RuntimeError):
     def __init__(self, message: str, reply: dict | None = None):
         super().__init__(message)
         self.reply = reply
+
+
+def _reap_worker(process: subprocess.Popen) -> None:
+    """Finalizer for an Engine that was never closed: stop its worker."""
+    try:
+        if process.poll() is None:
+            try:
+                process.stdin.write('{"cmd":"shutdown"}\n')
+                process.stdin.flush()
+                process.wait(timeout=5)
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    for pipe in (process.stdin, process.stdout, process.stderr):
+        try:
+            if pipe:
+                pipe.close()
+        except (OSError, ValueError):
+            pass
 
 
 def _unsupported_capability(message: str, *, check: bool) -> dict:
@@ -134,7 +161,14 @@ class Engine:
         self._stderr: deque[str] = deque(maxlen=80)
         self._readers: list[threading.Thread] = []
         self._lock = threading.Lock()
+        self._finalizer: weakref.finalize | None = None
         self.ready: dict = {}
+
+    @property
+    def protocol_version(self) -> int:
+        """Protocol version from the worker's ready event (2 when absent)."""
+        version = self.ready.get("protocol_version", 2)
+        return version if type(version) is int else 2
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -196,17 +230,26 @@ class Engine:
                     lines.put(line)
             finally:
                 lines.put(None)
-        def read_stderr(pipe):
+        # Readers must not reference self, or an unclosed Engine could never be
+        # collected and its finalizer would never stop the worker.
+        def read_stderr(pipe, sink):
             for line in pipe:
-                self._stderr.append(line.rstrip())
+                sink.append(line.rstrip())
+        self._finalizer = weakref.finalize(self, _reap_worker, self._process)
         self._readers = [threading.Thread(target=read_stdout, args=(self._process.stdout, self._lines), daemon=True),
-                         threading.Thread(target=read_stderr, args=(self._process.stderr,), daemon=True)]
+                         threading.Thread(target=read_stderr, args=(self._process.stderr, self._stderr), daemon=True)]
         for reader in self._readers:
             reader.start()
         try:
             self.ready = self._read_reply(self.timeout)
             if self.ready.get("event") != "ready":
                 raise EngineError("Worker did not send a ready event", self.ready)
+            version = self.ready.get("protocol_version", 2)
+            if type(version) is not int or version not in SUPPORTED_PROTOCOL_VERSIONS:
+                raise EngineError(
+                    f"Unsupported worker protocol version {version!r}; this client supports "
+                    + " and ".join(map(str, SUPPORTED_PROTOCOL_VERSIONS))
+                    + ". Install a matching ColorCorrect engine.", self.ready)
         except BaseException:
             self._stop()
             raise
@@ -289,7 +332,8 @@ class Engine:
             except BaseException:
                 self._stop()
                 raise
-            if command in ("shutdown", "quit"):
+            # The worker matches commands case-insensitively; so must cleanup.
+            if command.lower() in ("shutdown", "quit"):
                 exit_code = self._stop(graceful=reply.get("ok") is True)
                 if reply.get("ok") is True and exit_code not in (None, 0):
                     reply = {**reply, "ok": False, "code": "shutdown_failure", "exit_code": exit_code,
@@ -361,6 +405,9 @@ class Engine:
 
     def _stop(self, *, graceful: bool = False):
         process, self._process = self._process, None
+        if self._finalizer is not None:
+            self._finalizer.detach()
+            self._finalizer = None
         if process:
             try:
                 if graceful and process.poll() is None:

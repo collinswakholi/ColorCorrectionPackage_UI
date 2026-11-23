@@ -15,7 +15,8 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from colorcorrect import (Client, ReferenceProfile, CalibrationOptions, ApplyOptions, DetectionOptions,
     FFCOptions, NeuralNetworkOptions, InvalidInputError, BatchProcessingError, ClosedClientError,
-    UnsupportedCapabilityError, ProcessingTimeoutError, MissingRuntimeError)
+    UnsupportedCapabilityError, ProcessingTimeoutError, MissingRuntimeError, ColorCorrectError,
+    ProcessingError)
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).with_name("sdk_fake_worker.py")
@@ -273,6 +274,22 @@ class SDKTests(unittest.TestCase):
 
     def fit(self, **options):
         return self.client.calibrate(self.folder / "chart.jpg", output_dir=self.folder / "results", **options)
+
+    def test_error_code_is_preferred_over_message_matching(self):
+        cases = (
+            ({"ok": False, "code": "unsupported_capability", "error": "no GPU LUT"}, UnsupportedCapabilityError),
+            ({"ok": False, "code": "processing_failed", "error": "plane was built without luck"}, ProcessingError),
+            # Protocol-2 workers send no code: keep the historical message match.
+            ({"ok": False, "error": "ccp_detect was built without ONNX Runtime"}, UnsupportedCapabilityError),
+            ({"ok": False, "error": "deliberate failure"}, ProcessingError),
+        )
+        for reply, expected in cases:
+            with self.subTest(reply=reply):
+                with self.assertRaises(ColorCorrectError) as caught:
+                    self.client._request("devices", fake_reply=reply)
+                self.assertIs(type(caught.exception), expected)
+                self.assertEqual(caught.exception.code, reply.get("code"))
+                self.assertEqual(str(caught.exception), reply["error"])
 
     def test_seeded_fit_reports_unsupported_worker(self):
         with self.assertRaisesRegex(UnsupportedCapabilityError, "updated worker") as caught:

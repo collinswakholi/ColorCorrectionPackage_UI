@@ -42,6 +42,12 @@ class ColorCorrectError(RuntimeError):
         super().__init__(message)
         self.raw_reply = raw_reply
 
+    @property
+    def code(self) -> str | None:
+        """Stable worker error code (protocol 3), or None when not reported."""
+        code = (self.raw_reply or {}).get("code") if isinstance(self.raw_reply, dict) else None
+        return code if isinstance(code, str) else None
+
 
 class InvalidInputError(ColorCorrectError, ValueError):
     """A path, reference, option, or selection is invalid."""
@@ -723,7 +729,11 @@ class Client:
             raise ProcessingTimeoutError(str(exc)) from exc
         except EngineError as exc:
             message = str(exc)
-            if "built without" in message or (exc.reply or {}).get("code") == "unsupported_capability":
+            code = (exc.reply or {}).get("code")
+            # Protocol-3 workers report a stable code; older workers only the message.
+            unsupported = (code == "unsupported_capability" if isinstance(code, str)
+                           else "built without" in message)
+            if unsupported:
                 raise UnsupportedCapabilityError(message, exc.reply) from exc
             raise ProcessingError(message, exc.reply) from exc
         except OSError as exc:

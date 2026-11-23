@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from colorcorrect import Engine, EngineError, Client, MissingRuntimeError
+from colorcorrect import COMMANDS, Engine, EngineError, Client, MissingRuntimeError
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE = Path(__file__).with_name("fake_worker.py")
@@ -96,6 +96,43 @@ class ClientTests(unittest.TestCase):
     def tearDown(self):
         self.engine.close()
         self.mock.stop()
+
+    def test_ready_protocol_version_is_read_and_checked(self):
+        for marker, expected in ((None, 2), (2, 2), (3, 3)):
+            env = {} if marker is None else {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}
+            with self.subTest(marker=marker), patch.dict(os.environ, env):
+                try:
+                    self.assertTrue(self.engine.devices()["ok"])
+                    self.assertEqual(self.engine.protocol_version, expected)
+                finally:
+                    self.engine.close()
+        for marker in (1, 4, "3", True):
+            with self.subTest(marker=marker), patch.dict(os.environ,
+                    {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}):
+                with self.assertRaisesRegex(EngineError, "protocol"):
+                    self.engine.devices()
+                self.assertIsNone(self.engine._process)
+
+    def test_shutdown_acknowledgement_is_case_insensitive(self):
+        self.engine.devices()
+        process = self.engine._process
+        reply = self.engine.request("Shutdown")
+        self.assertTrue(reply["ok"])
+        self.assertIsNone(self.engine._process)
+        self.assertIsNotNone(process.poll())
+
+    def test_cli_lists_setup_probe(self):
+        self.assertIn("setup_probe", COMMANDS)
+
+    def test_unclosed_engine_stops_its_worker_when_collected(self):
+        import gc
+        engine = Engine(sys.executable, root=ROOT, timeout=5)
+        engine.devices()
+        process = engine._process
+        del engine
+        gc.collect()
+        process.wait(timeout=10)
+        self.assertIsNotNone(process.returncode)
 
     def test_explicit_cpu_override_reaches_worker(self):
         with Engine(sys.executable, root=ROOT, policy="cpu") as cpu:

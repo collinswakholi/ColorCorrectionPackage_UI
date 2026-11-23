@@ -8,13 +8,16 @@ import time
 ready = {"ok": True, "event": "ready"}
 if "FAKE_WORKER_PATCH_SAMPLING" in os.environ:
     ready["patch_sampling"] = json.loads(os.environ["FAKE_WORKER_PATCH_SAMPLING"])
+if "FAKE_WORKER_PROTOCOL" in os.environ:
+    ready["protocol_version"] = json.loads(os.environ["FAKE_WORKER_PROTOCOL"])
 print(json.dumps(ready), flush=True)
 pending = None
 cleanup_delay = 0
 cleanup_exit = 0
 for line in sys.stdin:
     request = json.loads(line)
-    command = request["cmd"]
+    # The native worker matches commands case-insensitively.
+    command = request["cmd"].lower()
     if command == "deferred":
         pending = request["path"]
     if command == "deferred_after_ack":

@@ -15,7 +15,9 @@ for line in sys.stdin:
         break
     print(json.dumps({"type": "progress", "message": "working"}), flush=True)
     reply = {"ok": True, "echo": request, "apply_backend": "cpu"}
-    if command == "detect":
+    if "fake_reply" in request:
+        reply = request["fake_reply"]
+    elif command == "detect":
         if "slow" in request["image"]:
             time.sleep(1)
         faces = [{"id": index, "chart_id": f"fixture-{index}", "cli_chart": "classic", "rows": 4, "cols": 6,
