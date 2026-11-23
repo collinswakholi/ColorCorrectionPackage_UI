@@ -224,15 +224,15 @@
                             AutomationProperties.Name="Open help and guidance"/>
                     <Button x:Name="ThemeToggle" Theme="{StaticResource ToolbarIconButton}"
                             Command="{Binding ToggleThemeCommand}"
-                            ToolTip.Tip="{Binding ThemeHint}"
+                            ToolTip.Tip="{Binding Layout.ThemeHint}"
                             AutomationProperties.AcceleratorKey="Ctrl+T"
-                            AutomationProperties.Name="{Binding ThemeHint}">
+                            AutomationProperties.Name="{Binding Layout.ThemeHint}">
                         <Panel>
                             <Path x:Name="MoonThemeIcon" Classes="toolbarGlyph" Data="{StaticResource MoonIconGeometry}"
-                                  IsVisible="{Binding IsLightTheme}"
+                                  IsVisible="{Binding Layout.IsLightTheme}"
                                   Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                             <Path x:Name="SunThemeIcon" Classes="toolbarGlyph" Data="{StaticResource SunIconGeometry}"
-                                  IsVisible="{Binding !IsLightTheme}"
+                                  IsVisible="{Binding !Layout.IsLightTheme}"
                                   Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                         </Panel>
                     </Button>
@@ -551,7 +551,7 @@
                     <StackPanel x:Name="ProcessModelHost" Margin="14,8,12,12">
                             <Expander x:Name="AvailableToggle" Header="Catalog" Classes="section"
                                       Theme="{StaticResource SectionExpander}"
-                                      IsExpanded="{Binding LibraryExpanded, Mode=TwoWay}"
+                                      IsExpanded="{Binding Layout.LibraryExpanded, Mode=TwoWay}"
                                       Margin="0,0,0,8"
                                       ToolTip.Tip="Click adds to Session. Ctrl-click selects. Drag to Session or the FFC white well.">
                                 <StackPanel Spacing="8" Margin="0,8,0,0">
@@ -685,7 +685,7 @@
 
                             <Expander x:Name="ProcessToggle" Header="Process" Classes="section"
                                       Theme="{StaticResource SectionExpander}"
-                                      IsExpanded="{Binding ProcessExpanded, Mode=TwoWay}" Margin="0,0,0,8"
+                                      IsExpanded="{Binding Layout.ProcessExpanded, Mode=TwoWay}" Margin="0,0,0,8"
                                       AutomationProperties.Name="Process settings">
                                 <StackPanel Spacing="0" Margin="0,8,0,0">
                                     <Border Classes="stageRow">
@@ -779,7 +779,7 @@
 
                             <Expander x:Name="ModelToggle" Header="Model" Classes="section"
                                       Theme="{StaticResource SectionExpander}"
-                                      IsExpanded="{Binding ModelExpanded, Mode=TwoWay}" Margin="0,0,0,8"
+                                      IsExpanded="{Binding Layout.ModelExpanded, Mode=TwoWay}" Margin="0,0,0,8"
                                       AutomationProperties.Name="Model settings">
                                 <Border Classes="modelCard" Margin="0,8,0,0">
                                         <StackPanel>
@@ -831,7 +831,7 @@
                                 </Border>
                             </Expander>
                             <TextBlock Text="{Binding Output.ModelLabel}" Classes="caption" Margin="0,0,0,8"
-                                       TextWrapping="Wrap" IsVisible="{Binding !ModelExpanded}"/>
+                                       TextWrapping="Wrap" IsVisible="{Binding !Layout.ModelExpanded}"/>
                     </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

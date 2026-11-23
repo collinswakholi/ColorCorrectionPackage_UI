@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Layout.PropertyChanged += OnLayoutStateChanged;
         Output.PropertyChanged += OnOutputStateChanged;
         Job.PropertyChanged += OnJobStateChanged;
         Stage.PropertyChanged += OnStageStateChanged;
@@ -144,8 +145,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<LogEntry> LogEntries { get; } = [];
     public ObservableCollection<PipelineStepViewModel> PipelineSteps { get; } = [];
 
-    [ObservableProperty] private string _themeLabel = "Light";
-    [ObservableProperty] private string _themeHint = "Switch to light theme";
     private FfcPlane? _loadedModelPlane;
 
     /// <summary>ΔE tiles, per-stage and per-patch rows, report and analysis panel states.</summary>
@@ -299,13 +298,21 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>Window layout preferences: light/dark theme with its label and hint, and which sidebar sections are expanded.</summary>
+    public LayoutViewModel Layout { get; } = new();
+
+    private void OnLayoutStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(LayoutViewModel.IsLightTheme): OnIsLightThemeChanged(Layout.IsLightTheme); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
-    [ObservableProperty] private bool _isLightTheme;
-    [ObservableProperty] private bool _libraryExpanded;
-    [ObservableProperty] private bool _processExpanded = true;
-    [ObservableProperty] private bool _modelExpanded;
-    [ObservableProperty] private bool _settingsExpanded;
 
     public ObservableCollection<string> FaceOptions { get; } = [];
     public string? SelectedFace
@@ -522,7 +529,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             if (collapseLibrary)
             {
-                LibraryExpanded = false;
+                Layout.LibraryExpanded = false;
             }
 
             Log("Session", $"Added {names.Count} file(s).", LogLevel.Info, names);
@@ -910,7 +917,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     [RelayCommand]
-    private void ToggleTheme() => IsLightTheme = !IsLightTheme;
+    private void ToggleTheme() => Layout.IsLightTheme = !Layout.IsLightTheme;
 
     [RelayCommand]
     private Task CopyPickerAsync() => CopyPickerTextAsync(null);
@@ -2178,7 +2185,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         ActivePath = includeItems ? Workspace.Active?.Path ?? "" : "",
         Options = BuildOptions(),
         Crop = Stage.Crop,
-        Theme = IsLightTheme ? "Light" : "Dark",
+        Theme = Layout.IsLightTheme ? "Light" : "Dark",
         TrustedOutputDirs = _trusted.ToList(),
         CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
         ForceCpu = Compute.ForceCpu,
@@ -2219,7 +2226,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             ApplyOptions(state.Options);
             Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
             Stage.OverlayCrop = Stage.Crop;
-            IsLightTheme = string.Equals(state.Theme, "Light", StringComparison.OrdinalIgnoreCase);
+            Layout.IsLightTheme = string.Equals(state.Theme, "Light", StringComparison.OrdinalIgnoreCase);
             var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
                 ? state.AccelPolicy
                 : state.ForceCpu ? "cpu" : "auto";
@@ -2339,7 +2346,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             var active = Session.FirstOrDefault(item => PathIdentity.Equal(item.Path, state.ActivePath))
                          ?? Session[0];
             Activate(active);
-            LibraryExpanded = false;
+            Layout.LibraryExpanded = false;
         }
 
         RefreshSessionUi();
@@ -3109,10 +3116,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             .Replace("NVIDIA ", "", StringComparison.OrdinalIgnoreCase);
     }
 
-    partial void OnIsLightThemeChanged(bool value)
+    private void OnIsLightThemeChanged(bool value)
     {
-        ThemeLabel = value ? "Dark" : "Light";
-        ThemeHint = value ? "Switch to dark theme" : "Switch to light theme";
+        Layout.ThemeLabel = value ? "Dark" : "Light";
+        Layout.ThemeHint = value ? "Switch to dark theme" : "Switch to light theme";
         if (Application.Current is { } app)
         {
             app.RequestedThemeVariant = value ? ThemeVariant.Light : ThemeVariant.Dark;

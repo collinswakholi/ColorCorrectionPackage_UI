@@ -18,7 +18,7 @@ public sealed class ThemeRefreshTests
     [AvaloniaFact]
     public void ExistingLogRowsChangeThemeWithoutReplacingTheirEntriesOrControls()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { IsLightTheme = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Layout = { IsLightTheme = true }};
         vm.LogEntries.Clear();
         foreach (var level in Enum.GetValues<LogLevel>())
         {
@@ -38,7 +38,7 @@ public sealed class ThemeRefreshTests
             var initial = labels.Select(text => BrushColor(text.Foreground)).ToArray();
             foreach (var light in new[] { false, true, false })
             {
-                vm.IsLightTheme = light;
+                vm.Layout.IsLightTheme = light;
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(entries, vm.LogEntries.Take(entries.Length));
                 foreach (var label in labels)
@@ -66,7 +66,7 @@ public sealed class ThemeRefreshTests
     [AvaloniaFact]
     public void ExistingDeltaECardsRefreshBothForegroundAndBackgroundOnThemeChange()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { IsLightTheme = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Layout = { IsLightTheme = true }};
         vm.Analysis.HasMetrics = true;
         vm.Analysis.MeanAfterValue = 0.5;
         vm.Analysis.MedianAfterValue = 2.5;
@@ -87,7 +87,7 @@ public sealed class ThemeRefreshTests
             Assert.Equal(3, summaries.Length);
             foreach (var light in new[] { false, true, false })
             {
-                vm.IsLightTheme = light;
+                vm.Layout.IsLightTheme = light;
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(rows, vm.Analysis.StageDeltaERows);
                 foreach (var card in cards)

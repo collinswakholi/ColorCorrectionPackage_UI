@@ -95,13 +95,13 @@ public sealed class MainWindowHeadlessTests
                 // Exercise the real 240 px splitter minimum, not just the default sidebar width.
                 var grid = Assert.IsType<Grid>(window.Sidebar.Parent);
                 grid.ColumnDefinitions[0].Width = new GridLength(240);
-                vm.LibraryExpanded = true;
-                vm.ProcessExpanded = true;
-                vm.ModelExpanded = true;
+                vm.Layout.LibraryExpanded = true;
+                vm.Layout.ProcessExpanded = true;
+                vm.Layout.ModelExpanded = true;
                 vm.Settings.DoFfc = true;
                 vm.AddPaths([TestImagePath("ColorCard_Big.JPG"), TestImagePath("ColorCard_Combo.JPG"),
                     TestImagePath("Sample_3572.JPG"), TestImagePath("Sample_3573.JPG")]);
-                vm.LibraryExpanded = true; // Adding media deliberately closes Catalog; reopen for this stress case.
+                vm.Layout.LibraryExpanded = true; // Adding media deliberately closes Catalog; reopen for this stress case.
                 // A cold decode is asynchronous. Never compare a transient blank
                 // canvas to the populated reference, or depend on a warm disk cache.
                 var previewDeadline = DateTime.UtcNow.AddSeconds(10);
@@ -129,11 +129,11 @@ public sealed class MainWindowHeadlessTests
                 processHeader.IsChecked = false;
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(chevron.IsVisible);
-                Assert.False(vm.ProcessExpanded);
+                Assert.False(vm.Layout.ProcessExpanded);
                 processHeader.IsChecked = true;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(chevron.IsVisible);
-                Assert.True(vm.ProcessExpanded);
+                Assert.True(vm.Layout.ProcessExpanded);
                 foreach (var button in new[] { window.ImageUpload, window.FolderUpload,
                     window.FfcSettingsButton, window.GcSettingsButton, window.CcSettingsButton })
                 {
@@ -537,7 +537,7 @@ public sealed class MainWindowHeadlessTests
             // The real main window appears after the splash has finished worker startup.
             // Render the post-splash idle state instead of the transient constructor state.
             Job = { Busy = false },
-            IsLightTheme = light,
+            Layout = { IsLightTheme = light },
         };
         PublicFixtureCatalog.Install(vm);
         var window = new MainWindow

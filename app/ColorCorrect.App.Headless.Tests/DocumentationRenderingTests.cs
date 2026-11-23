@@ -21,8 +21,7 @@ public sealed class DocumentationRenderingTests
         var corpus = Path.Combine(root.FullName, "testdata", "acceptance");
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
-            Job = { Busy = false }, IsLightTheme = true, ProcessExpanded = true,
-            ModelExpanded = false, LibraryExpanded = false,
+            Job = { Busy = false }, Layout = { IsLightTheme = true, ProcessExpanded = true, ModelExpanded = false, LibraryExpanded = false },
         };
         PublicFixtureCatalog.Install(vm);
         var window = new MainWindow { Width = 1002, Height = 900, DataContext = vm };

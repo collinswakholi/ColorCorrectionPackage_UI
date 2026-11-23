@@ -22,7 +22,7 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Job = { Busy = true, IsBatching = true }, IsLightTheme = light,
+                Job = { Busy = true, IsBatching = true }, Layout = { IsLightTheme = light },
                 Settings = { DoFfc = true, DoGc = true, DoWb = true, DoCc = true },
             };
             var window = new MainWindow { Width = 1000, Height = 640, DataContext = vm };
@@ -87,7 +87,7 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Job = { Busy = false }, IsLightTheme = light, Settings = { DoFfc = true },
+                Job = { Busy = false }, Layout = { IsLightTheme = light }, Settings = { DoFfc = true },
             };
             for (var i = 0; i < 4; i++)
                 vm.Session.Add(new SessionItemViewModel($"batch-{i + 1}.jpg")
