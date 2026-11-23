@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 
 const MIN_POLY_DEGREE: i32 = 1;
 const MAX_POLY_DEGREE: i32 = 7;
-const MAX_FEATURES: usize = 96;
+/// Degree-7 RGB polynomial with bias and combinations: C(7 + 3, 3) = 120 terms.
+const MAX_FEATURES: usize = 120;
 const MIN_CHANNEL: f64 = 1e-12;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,7 +235,156 @@ impl Default for CorrectionModel {
     }
 }
 
+fn invalid_model(detail: impl std::fmt::Display) -> Error {
+    Error::InvalidArgument(format!("invalid correction model: {detail}"))
+}
+
+fn check_len(name: &str, actual: usize, expected: usize) -> Result<()> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(invalid_model(format!(
+            "{name} has {actual} values, expected {expected}"
+        )))
+    }
+}
+
+fn check_finite<'a>(name: &str, values: impl IntoIterator<Item = &'a f64>) -> Result<()> {
+    if values.into_iter().all(|v| v.is_finite()) {
+        Ok(())
+    } else {
+        Err(invalid_model(format!("{name} contains non-finite values")))
+    }
+}
+
 impl CorrectionModel {
+    /// Check that every coefficient buffer matches the model's declared
+    /// shape so [`apply_model`] can never index out of bounds. Saved models
+    /// are untrusted input; call this before applying a deserialized model.
+    pub fn validate(&self) -> Result<()> {
+        if uses_polynomial_features(self.kind)
+            && !(MIN_POLY_DEGREE..=MAX_POLY_DEGREE).contains(&self.poly_degree)
+        {
+            return Err(invalid_model(format!(
+                "poly_degree {} is outside {MIN_POLY_DEGREE}..={MAX_POLY_DEGREE}",
+                self.poly_degree
+            )));
+        }
+        let mut scratch = [0.0; MAX_FEATURES];
+        let probe = [0.25, 0.25, 0.25];
+        let expected = write_features_for(
+            probe,
+            self.kind,
+            self.poly_degree,
+            self.include_combinations,
+            &mut scratch,
+        );
+        // Linear models historically also accept the bias-augmented basis.
+        let alternate = (self.kind == ModelKind::Linear).then(|| {
+            write_polynomial_features(
+                probe,
+                self.poly_degree,
+                true,
+                self.include_combinations,
+                &mut scratch,
+            )
+        });
+        let p = usize::try_from(self.feature_count).unwrap_or(usize::MAX);
+        if p != expected && Some(p) != alternate {
+            return Err(invalid_model(format!(
+                "feature_count {} does not match {} (expected {expected})",
+                self.feature_count,
+                self.kind.name()
+            )));
+        }
+        check_finite("intercept", &self.intercept)?;
+        check_finite("y_mean", &self.y_mean)?;
+        check_finite("y_std", &self.y_std)?;
+        match self.kind {
+            ModelKind::NeuralNet => self.validate_mlp(p),
+            ModelKind::Linear | ModelKind::Pls => {
+                check_len("coefficients", self.coefficients.len(), p * 3)?;
+                check_finite("coefficients", &self.coefficients)?;
+                if !self.x_mean.is_empty() || !self.x_std.is_empty() {
+                    check_len("x_mean", self.x_mean.len(), p)?;
+                    check_len("x_std", self.x_std.len(), p)?;
+                    check_finite("x_mean", &self.x_mean)?;
+                    check_finite("x_std", &self.x_std)?;
+                    if self.x_std.iter().any(|&s| s == 0.0) {
+                        return Err(invalid_model("x_std contains zero"));
+                    }
+                }
+                Ok(())
+            }
+            _ => {
+                check_len("coefficients", self.coefficients.len(), p * 3)?;
+                check_finite("coefficients", &self.coefficients)
+            }
+        }
+    }
+
+    fn validate_mlp(&self, p: usize) -> Result<()> {
+        let max = crate::mlp::MAX_HIDDEN;
+        if p > max {
+            return Err(invalid_model(format!("NN input width {p} exceeds {max}")));
+        }
+        if !self.layer_weights.is_empty() || !self.layer_biases.is_empty() {
+            if self.layer_weights.len() != self.layer_biases.len() {
+                return Err(invalid_model(
+                    "layer_weights and layer_biases have different layer counts",
+                ));
+            }
+            let mut input = p;
+            for (layer, (weights, biases)) in self
+                .layer_weights
+                .iter()
+                .zip(&self.layer_biases)
+                .enumerate()
+            {
+                let output = biases.len();
+                if output == 0 || output > max {
+                    return Err(invalid_model(format!(
+                        "NN layer {layer} width {output} is outside 1..={max}"
+                    )));
+                }
+                check_len(
+                    &format!("layer_weights[{layer}]"),
+                    weights.len(),
+                    input * output,
+                )?;
+                check_finite("layer_weights", weights)?;
+                check_finite("layer_biases", biases)?;
+                input = output;
+            }
+            if input != 3 {
+                return Err(invalid_model(format!(
+                    "NN output layer has width {input}, expected 3"
+                )));
+            }
+            return Ok(());
+        }
+        let hidden = usize::try_from(self.hidden_size.max(1)).unwrap_or(usize::MAX);
+        if hidden > max {
+            return Err(invalid_model(format!(
+                "hidden_size {} exceeds {max}",
+                self.hidden_size
+            )));
+        }
+        check_len("w1", self.w1.len(), p * hidden)?;
+        check_len("b1", self.b1.len(), hidden)?;
+        check_len("w2", self.w2.len(), hidden * 3)?;
+        check_len("b2", self.b2.len(), 3)?;
+        for (name, values) in [
+            ("w1", &self.w1),
+            ("b1", &self.b1),
+            ("w2", &self.w2),
+            ("b2", &self.b2),
+        ] {
+            check_finite(name, values)?;
+        }
+        Ok(())
+    }
+
     pub fn apply_linear(&self, linear_rgb: Vec3) -> Result<Vec3> {
         apply_model(self, linear_rgb)
     }
@@ -797,6 +947,7 @@ pub fn build_encoded_lut(
     settings: &CorrectionSettings,
     size: usize,
 ) -> Result<Vec<f32>> {
+    model.validate()?;
     let gs = size.max(2);
     let mut lut = vec![0f32; gs * gs * gs * 3];
     let denom = (gs - 1) as f64;
@@ -932,6 +1083,93 @@ mod tests {
         assert!(model.x_mean.is_empty());
         let y = apply_model(&model, [0.4, 0.3, 0.2]).unwrap();
         assert!(y.iter().all(|v| v.is_finite()));
+    }
+
+    fn fitted(kind: ModelKind, degree: i32) -> CorrectionModel {
+        let settings = CorrectionSettings::srgb_d65().unwrap();
+        let mapping = MappingOptions {
+            poly_degree: degree,
+            hidden_size: 8,
+            hidden_layers: vec![8],
+            nn_epochs: 40,
+            nn_patience: 10,
+            ..MappingOptions::default()
+        };
+        fit_correction_model(&classic_ish_patches(), kind, &settings, 0.0, &mapping).unwrap()
+    }
+
+    #[test]
+    fn degree_seven_polynomial_models_fit_and_apply_without_panicking() {
+        for kind in [ModelKind::Linear, ModelKind::Pls, ModelKind::NeuralNet] {
+            let model = fitted(kind, 7);
+            assert_eq!(model.poly_degree, 7);
+            model.validate().unwrap();
+            let y = apply_model(&model, [0.4, 0.3, 0.2]).unwrap();
+            assert!(y.iter().all(|v| v.is_finite()), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn validate_accepts_fitted_models_and_rejects_crafted_ones() {
+        for kind in [
+            ModelKind::Ccm3x3,
+            ModelKind::RootPolynomial2,
+            ModelKind::RootPolynomial3,
+            ModelKind::Linear,
+            ModelKind::Pls,
+            ModelKind::NeuralNet,
+        ] {
+            let model = fitted(kind, 2);
+            model.validate().unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+
+            let mut short = model.clone();
+            if kind == ModelKind::NeuralNet {
+                short.layer_weights[0].pop();
+            } else {
+                short.coefficients.pop();
+            }
+            assert!(short.validate().is_err(), "{kind:?} truncated");
+
+            let mut count = model.clone();
+            count.feature_count += 1;
+            assert!(count.validate().is_err(), "{kind:?} feature_count");
+
+            let mut huge = model.clone();
+            huge.feature_count = 10_000;
+            assert!(huge.validate().is_err(), "{kind:?} huge feature_count");
+
+            let mut nan = model.clone();
+            nan.intercept[0] = f64::NAN;
+            if kind == ModelKind::NeuralNet {
+                nan.layer_biases[0][0] = f64::INFINITY;
+            } else {
+                nan.coefficients[0] = f64::INFINITY;
+            }
+            assert!(nan.validate().is_err(), "{kind:?} non-finite");
+        }
+
+        let mut standardized = fitted(ModelKind::Linear, 2);
+        standardized.x_mean = vec![0.0; 2];
+        standardized.x_std = vec![1.0; 2];
+        assert!(standardized.validate().is_err(), "short standardization");
+
+        let mut legacy = CorrectionModel {
+            kind: ModelKind::NeuralNet,
+            poly_degree: 1,
+            feature_count: 4,
+            hidden_size: 4,
+            w1: vec![0.2; 16],
+            b1: vec![0.0; 4],
+            w2: vec![0.1; 12],
+            b2: vec![0.0; 3],
+            ..CorrectionModel::default()
+        };
+        legacy.validate().unwrap();
+        legacy.w2.truncate(5);
+        assert!(legacy.validate().is_err(), "legacy NN truncated w2");
+        legacy.w2 = vec![0.1; 12];
+        legacy.hidden_size = 100_000;
+        assert!(legacy.validate().is_err(), "legacy NN hidden_size");
     }
 
     #[test]

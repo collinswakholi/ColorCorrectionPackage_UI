@@ -2239,6 +2239,9 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
         || v.get("wb_diag").is_some()
     {
         let saved: SavedPipeline = serde_json::from_value(v)?;
+        if let Some(correction) = &saved.correction {
+            correction.validate()?;
+        }
         if let Some(context) = &saved.reference_context {
             if context.version != 1 {
                 return Err(Error::Message(
@@ -2252,6 +2255,7 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
         return Ok(saved);
     }
     let correction: CorrectionModel = serde_json::from_value(v)?;
+    correction.validate()?;
     Ok(SavedPipeline {
         version: 1,
         kind: correction.kind.name().into(),
@@ -3860,6 +3864,8 @@ mod tests {
 
         let nn = CorrectionModel {
             kind: ModelKind::NeuralNet,
+            poly_degree: 1,
+            feature_count: 4,
             hidden_size: 4,
             w1: vec![0.2; 16],
             b1: vec![0.0; 4],
@@ -3886,6 +3892,42 @@ mod tests {
         let legacy_back: SavedPipeline = serde_json::from_str(&legacy_json).unwrap();
         let (legacy_lut, _) = legacy_back.lut_pipeline().unwrap();
         assert!((legacy_lut.gc.unwrap().map_lstar(50.0) - 50.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn load_saved_rejects_crafted_models_instead_of_panicking_on_apply() {
+        let dir = std::env::temp_dir().join(format!("ccp-crafted-model-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut truncated = progress_fixture();
+        if let Some(model) = truncated.correction.as_mut() {
+            model.coefficients.truncate(2);
+        }
+        let mut miscounted = progress_fixture();
+        miscounted.correction.as_mut().unwrap().feature_count = 1_000;
+        let bare = CorrectionModel {
+            kind: ModelKind::RootPolynomial2,
+            feature_count: 6,
+            coefficients: vec![1.0],
+            ..CorrectionModel::default()
+        };
+        let cases = [
+            serde_json::to_string(&truncated).unwrap(),
+            serde_json::to_string(&miscounted).unwrap(),
+            serde_json::to_string(&bare).unwrap(),
+        ];
+        for (index, text) in cases.iter().enumerate() {
+            let path = dir.join(format!("crafted-{index}.json"));
+            std::fs::write(&path, text).unwrap();
+            let error = load_saved(&path).expect_err("crafted model must be rejected");
+            assert!(
+                error.to_string().contains("invalid correction model"),
+                "{error}"
+            );
+        }
+        let valid = dir.join("valid.json");
+        std::fs::write(&valid, serde_json::to_string(&progress_fixture()).unwrap()).unwrap();
+        load_saved(&valid).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

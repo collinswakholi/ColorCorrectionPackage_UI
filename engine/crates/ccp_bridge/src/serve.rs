@@ -708,6 +708,8 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
             json!({"ok":false,"error":"Video processing has been removed; this app supports still images only."}),
             false,
         ),
+        #[cfg(test)]
+        "__test_panic" => panic!("deliberate test panic"),
         "shutdown" | "quit" => {
             crate::run_pipeline::flush_preview_encodes();
             (json!({"ok":true,"event":"shutdown"}), true)
@@ -717,6 +719,34 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
             json!({"ok":false,"error": format!("unknown cmd: {other}")}),
             false,
         ),
+    }
+}
+
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".into())
+}
+
+/// [`dispatch`] behind a panic boundary: a bug in one request becomes an
+/// error reply, so the worker stays alive and the reply stream stays in sync.
+pub fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| dispatch(state, req)));
+    match result {
+        Ok(reply) => reply,
+        Err(payload) => {
+            // Preview encoders may still reference a half-written request.
+            crate::run_pipeline::flush_preview_encodes();
+            (
+                json!({
+                    "ok": false,
+                    "error": format!("internal error: {}", panic_message(payload.as_ref())),
+                }),
+                false,
+            )
+        }
     }
 }
 
@@ -747,7 +777,7 @@ pub fn run() -> Result<(), String> {
                 continue;
             }
         };
-        let (reply, stop) = dispatch(&mut state, &req);
+        let (reply, stop) = dispatch_guarded(&mut state, &req);
         emit_json(&reply);
         if stop {
             break;
@@ -919,6 +949,49 @@ mod tests {
         let (b, stop_b) = dispatch(&mut state, &json!({"cmd":"quit"}));
         assert!(stop_b);
         assert_eq!(b["event"], "shutdown");
+    }
+
+    #[test]
+    fn panicking_command_returns_internal_error_and_worker_keeps_serving() {
+        let mut state = ServeState::default();
+        let (reply, stop) = dispatch_guarded(&mut state, &json!({"cmd":"__test_panic"}));
+        assert!(!stop);
+        assert_eq!(reply["ok"], false);
+        assert!(reply["error"].as_str().unwrap().contains("internal error"));
+        let (next, stop) = dispatch_guarded(&mut state, &json!({"cmd":"nope"}));
+        assert!(!stop);
+        assert!(next["error"].as_str().unwrap().contains("unknown cmd"));
+    }
+
+    #[test]
+    fn crafted_model_is_rejected_by_apply_without_panicking() {
+        let dir = std::env::temp_dir().join(format!("ccp-serve-crafted-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("model.json");
+        std::fs::write(
+            &model,
+            r#"{"kind":"rpcc2","feature_count":6,"poly_degree":2,"include_combinations":true,
+            "pls_components":0,"hidden_size":0,"input_space_id":"srgb","target_space_id":"srgb",
+            "target_white_id":"d65","saturated_patches":0,"saturated_names":[],"x_mean":[],
+            "x_std":[],"y_mean":[0,0,0],"y_std":[1,1,1],"intercept":[0,0,0],
+            "coefficients":[1.0],"w1":[],"b1":[],"w2":[],"b2":[]}"#,
+        )
+        .unwrap();
+        let mut state = ServeState::default();
+        let (reply, stop) = dispatch_guarded(
+            &mut state,
+            &json!({"cmd":"apply","model":model,"images":["x.jpg"],"output_dir":dir}),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!stop);
+        assert_eq!(reply["ok"], false);
+        assert!(
+            reply["error"]
+                .as_str()
+                .unwrap()
+                .contains("invalid correction model"),
+            "{reply}"
+        );
     }
 
     #[test]
