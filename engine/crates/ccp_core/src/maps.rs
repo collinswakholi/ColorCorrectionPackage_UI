@@ -504,7 +504,27 @@ pub fn features_for(
     scratch[..n].to_vec()
 }
 
+/// Pivot threshold relative to the largest entry, floored at the historical
+/// absolute `1e-12` for systems whose entries reach 1 or more. Uniformly
+/// down-scaled well-conditioned systems therefore solve, while the result for
+/// every system the absolute threshold accepted is unchanged.
+const PIVOT_RELATIVE_TOLERANCE: f64 = 1e-12;
+
 pub fn solve_linear_system(mut matrix: Vec<f64>, mut rhs: Vec<f64>, n: usize) -> Result<Vec<f64>> {
+    if matrix.len() != n * n || rhs.len() != n {
+        return Err(Error::InvalidArgument(format!(
+            "linear system shape mismatch: {} matrix values and {} rhs values for n={n}",
+            matrix.len(),
+            rhs.len()
+        )));
+    }
+    if !matrix.iter().chain(&rhs).all(|v| v.is_finite()) {
+        return Err(Error::Runtime(
+            "correction fit has non-finite values; check chart samples".into(),
+        ));
+    }
+    let scale = matrix.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+    let tolerance = PIVOT_RELATIVE_TOLERANCE * scale.min(1.0);
     for pivot in 0..n {
         let mut best_row = pivot;
         let mut best_value = matrix[pivot * n + pivot].abs();
@@ -515,7 +535,7 @@ pub fn solve_linear_system(mut matrix: Vec<f64>, mut rhs: Vec<f64>, n: usize) ->
                 best_row = row;
             }
         }
-        if best_value < 1e-12 {
+        if best_value.is_nan() || best_value == 0.0 || best_value < tolerance {
             return Err(Error::Runtime(
                 "correction fit is singular; check chart samples".into(),
             ));
@@ -544,6 +564,11 @@ pub fn solve_linear_system(mut matrix: Vec<f64>, mut rhs: Vec<f64>, n: usize) ->
             }
             rhs[row] -= factor * rhs[pivot];
         }
+    }
+    if !rhs.iter().all(|v| v.is_finite()) {
+        return Err(Error::Runtime(
+            "correction fit produced non-finite coefficients; check chart samples".into(),
+        ));
     }
     Ok(rhs)
 }
@@ -594,6 +619,8 @@ fn fit_least_squares_intercept(
         }
         x_aug[row * p_aug + p] = 1.0;
     }
+    // The intercept column stays ridge-penalized: exempting it moved fitted
+    // outputs on the reference fixtures by 2.6e-5 (degree 1) to 0.26 (degree 2).
     let coeffs_aug = fit_least_squares(&x_aug, y, n, p_aug, ridge)?;
     let mut coefficients = vec![0.0; p * 3];
     for j in 0..p {
@@ -834,10 +861,9 @@ pub fn collect_xy(
     settings: &CorrectionSettings,
 ) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
     let p = features_for([0.25, 0.25, 0.25], kind, poly_degree, include_combinations).len();
-    let n = patches.len();
-    let mut x = vec![0.0; n * p];
-    let mut y = vec![0.0; n * 3];
-    for (row, patch) in patches.iter().enumerate() {
+    let mut x = Vec::with_capacity(patches.len() * p);
+    let mut y = Vec::with_capacity(patches.len() * 3);
+    for patch in patches {
         let measured = encoded_to_linear_rgb(patch.measured_srgb, &settings.input_space);
         let reference = lab_d50_to_target_linear(
             patch.reference_lab_d50,
@@ -845,12 +871,25 @@ pub fn collect_xy(
             &settings.target_white,
         )?;
         let feats = features_for(measured, kind, poly_degree, include_combinations);
-        for j in 0..p {
-            x[row * p + j] = feats[j];
+        // A non-finite sample would poison every coefficient (or, through the
+        // feature clamp, silently read as black); leave it out.
+        let values = patch
+            .measured_srgb
+            .iter()
+            .chain(&measured)
+            .chain(&reference);
+        if !values.chain(&feats).all(|v| v.is_finite()) {
+            continue;
         }
-        for channel in 0..3 {
-            y[row * 3 + channel] = reference[channel];
-        }
+        x.extend_from_slice(&feats[..p]);
+        y.extend_from_slice(&reference);
+    }
+    let n = y.len() / 3;
+    if n == 0 {
+        return Err(Error::InvalidArgument(
+            "cannot fit correction model: no chart patch has finite measured and reference values"
+                .into(),
+        ));
     }
     Ok((x, y, n, p))
 }
@@ -924,6 +963,8 @@ pub fn fit_correction_model(
         }
     }
     let _ = MIN_CHANNEL;
+    // PLS and NN fits do not go through the solver; check every family.
+    model.validate()?;
     Ok(model)
 }
 
@@ -1096,6 +1137,69 @@ mod tests {
             ..MappingOptions::default()
         };
         fit_correction_model(&classic_ish_patches(), kind, &settings, 0.0, &mapping).unwrap()
+    }
+
+    #[test]
+    fn solver_is_scale_aware_and_still_rejects_singular_systems() {
+        let system = vec![4.0, 1.0, 0.5, 1.0, 3.0, 0.25, 0.5, 0.25, 2.0];
+        let rhs = vec![1.0, 2.0, 3.0];
+        let unit = solve_linear_system(system.clone(), rhs.clone(), 3).unwrap();
+        for scale in [1e-14, 1e-9, 1e6] {
+            let scaled = system.iter().map(|v| v * scale).collect();
+            let rhs_scaled = rhs.iter().map(|v| v * scale).collect();
+            let solution = solve_linear_system(scaled, rhs_scaled, 3)
+                .unwrap_or_else(|e| panic!("scale {scale}: {e}"));
+            for (a, b) in solution.iter().zip(&unit) {
+                assert!((a - b).abs() <= 1e-9 * b.abs().max(1.0), "scale {scale}");
+            }
+        }
+        assert!(solve_linear_system(vec![0.0; 4], vec![1.0, 1.0], 2).is_err());
+        assert!(solve_linear_system(vec![1.0, 1.0, 1.0, 1.0], vec![1.0, 2.0], 2).is_err());
+        assert!(solve_linear_system(vec![1.0, f64::NAN, 0.0, 1.0], vec![1.0, 2.0], 2).is_err());
+        assert!(
+            solve_linear_system(vec![1.0, 0.0, 0.0, 1.0], vec![f64::INFINITY, 2.0], 2).is_err()
+        );
+    }
+
+    #[test]
+    fn non_finite_samples_are_dropped_before_fitting() {
+        let settings = CorrectionSettings::srgb_d65().unwrap();
+        let mut patches = classic_ish_patches();
+        let clean = fit_correction_model(
+            &patches,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default(),
+        )
+        .unwrap();
+        let mut bad = patches[0].clone();
+        bad.measured_srgb = [f64::NAN, 0.2, 0.3];
+        patches.push(bad);
+        let mut infinite = patches[1].clone();
+        infinite.reference_lab_d50.l = f64::INFINITY;
+        patches.push(infinite);
+        let (_, _, n, _) =
+            collect_xy(&patches, ModelKind::RootPolynomial2, 2, true, &settings).unwrap();
+        assert_eq!(n, patches.len() - 2);
+        let model = fit_correction_model(
+            &patches,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(model.coefficients, clean.coefficients);
+        let all_bad = vec![patches[patches.len() - 2].clone()];
+        assert!(fit_correction_model(
+            &all_bad,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default()
+        )
+        .is_err());
     }
 
     #[test]
