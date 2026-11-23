@@ -383,16 +383,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         : Busy || IsSaving ? "Wait for the current operation, or cancel processing."
         : Active is null ? "Add an image to start."
         : !File.Exists(Active.Path) ? "Relink the missing image to continue."
-        : OperationError(!WillUseLoadedModel) is { } error ? error
+        : CachedOperationError(!WillUseLoadedModel) is { } error ? error
         : !WillUseLoadedModel && Active.Handshake is not { Ok: true } ? "Detect the chart, or retry detection, before fitting."
         : "Run the active workflow (F5).";
     public string BatchFitHint => !WorkerReady ? "The processing engine is not ready."
         : Busy || IsSaving ? "Wait for the current operation."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
-        : OperationError(true) ?? "Detect a chart and fit each selected image.";
+        : CachedOperationError(true) ?? "Detect a chart and fit each selected image.";
     public string BatchApplyHint => !File.Exists(LoadedModelPath) ? "Load or fit a model before applying it to a batch."
         : !Session.Any(item => item.IncludeInBatch) ? "Select at least one image for the batch."
-        : OperationError(false) ?? "Apply the current model to each selected image.";
+        : CachedOperationError(false) ?? "Apply the current model to each selected image.";
     public string StatusStateLabel => HasWorkerError
         ? "Engine error"
         : Busy
@@ -1947,12 +1947,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool CanDetect() =>
         WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path);
     private bool CanApply() =>
-        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path) && OperationError(!WillUseLoadedModel) is null &&
+        WorkerReady && !Busy && !IsSaving && Active is not null && File.Exists(Active.Path) && CachedOperationError(!WillUseLoadedModel) is null &&
         (WillUseLoadedModel
             || Active.Handshake is { Ok: true });
-    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && OperationError(true) is null && Session.Any(item => item.IncludeInBatch);
+    private bool CanBatchFit() => WorkerReady && !Busy && !IsSaving && CachedOperationError(true) is null && Session.Any(item => item.IncludeInBatch);
     private bool CanBatchApply() =>
-        WorkerReady && !Busy && !IsSaving && OperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
+        WorkerReady && !Busy && !IsSaving && CachedOperationError(false) is null && Session.Any(item => item.IncludeInBatch) && File.Exists(LoadedModelPath);
     private bool CanRestartWorker() => !Busy && !IsSaving;
     private bool CanCancel() => Busy;
     private bool CanSaveModel() => !Busy && File.Exists(LoadedModelPath);

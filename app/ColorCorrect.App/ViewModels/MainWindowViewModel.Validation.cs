@@ -4,6 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Threading;
 using ColorCorrect.App.Models;
 using ColorCorrect.Engine;
 using CommunityToolkit.Mvvm.Input;
@@ -15,6 +18,21 @@ public partial class MainWindowViewModel
     private readonly Dictionary<string, string> _numericText = new();
     private AssetIdentity? _loadedModelIdentity;
     private AssetIdentity? _loadedWhiteIdentity;
+
+    /// <summary>Whether the loaded model / its white reference no longer match their files.</summary>
+    internal readonly record struct LoadedFileState(bool ModelChanged, bool WhiteChanged);
+
+    // Last background comparison, read by the UI-polled validation paths so property getters
+    // and CanExecute never hash files on the UI thread.
+    private LoadedFileState _cachedFileState;
+    private int _fileCheckRunning;
+    private int _fileCheckDirty;
+
+    private static LoadedFileState CheckLoadedFiles(AssetIdentity? model, string modelPath, AssetIdentity? white, string whitePath) =>
+        new(model is not null && !model.Matches(modelPath), white is not null && !white.Matches(whitePath));
+
+    private LoadedFileState CheckLoadedFilesNow() =>
+        CheckLoadedFiles(_loadedModelIdentity, LoadedModelPath, DoFfc ? _loadedWhiteIdentity : null, WhiteImagePath);
     private string NumericText(string name, decimal value) => _numericText.GetValueOrDefault(name) ?? value.ToString(CultureInfo.CurrentCulture);
     private void SetNumericText(string name, string text, Action<decimal> set)
     {
@@ -44,14 +62,20 @@ public partial class MainWindowViewModel
         return null;
     }
 
-    internal string? OperationError(bool fit)
+    /// <summary>Validate the next operation, hashing the loaded model and white reference now.</summary>
+    internal string? OperationError(bool fit) => OperationError(fit, fit ? default : CheckLoadedFilesNow());
+
+    /// <summary>Validation for UI polling (getters, CanExecute): uses the last background file check.</summary>
+    private string? CachedOperationError(bool fit) => OperationError(fit, _cachedFileState);
+
+    private string? OperationError(bool fit, LoadedFileState files)
     {
-        if (!fit && _loadedModelIdentity is not null && !_loadedModelIdentity.Matches(LoadedModelPath))
+        if (!fit && files.ModelChanged)
             return "The loaded model changed or moved. Load it again before applying it.";
         if (DoFfc)
         {
             if (!File.Exists(WhiteImagePath)) return "Choose a readable white reference before using FFC.";
-            if (!fit && _loadedWhiteIdentity is not null && !_loadedWhiteIdentity.Matches(WhiteImagePath))
+            if (!fit && files.WhiteChanged)
                 return "The model's white reference changed. Choose the intended white image again before applying it.";
             var error = NumberError(nameof(FfcBins), FfcBins, "FFC bins", 4, 200, true)
                 ?? NumberError(nameof(FfcSmoothWindow), FfcSmoothWindow, "FFC smooth window", 1, 51, true);
@@ -75,13 +99,70 @@ public partial class MainWindowViewModel
             ?? NumberError(nameof(NnEpochs), NnEpochs, "Epochs", 50, 20000, true)
             ?? NumberError(nameof(NnPatience), NnPatience, "Patience", 1, 5000, true);
     }
-    public string ValidationMessage => OperationError(!WillUseLoadedModel) ?? "";
+    public string ValidationMessage => CachedOperationError(!WillUseLoadedModel) ?? "";
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationMessage);
     private void RefreshValidation()
+    {
+        NotifyValidation();
+        QueueLoadedFileCheck();
+    }
+
+    private void NotifyValidation()
     {
         OnPropertyChanged(nameof(ValidationMessage));
         OnPropertyChanged(nameof(HasValidationError));
         ApplyCommand.NotifyCanExecuteChanged(); BatchFitCommand.NotifyCanExecuteChanged(); BatchApplyCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Re-compare the loaded model and white reference with their files off the UI thread.
+    /// Requests that arrive while a check runs are coalesced into one follow-up check; the UI
+    /// is notified only when the result changes.
+    /// </summary>
+    private void QueueLoadedFileCheck()
+    {
+        if (_loadedModelIdentity is null && _loadedWhiteIdentity is null)
+        {
+            if (_cachedFileState != default) { _cachedFileState = default; NotifyValidation(); }
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _fileCheckRunning, 1) == 1)
+        {
+            Volatile.Write(ref _fileCheckDirty, 1);
+            return;
+        }
+
+        var model = _loadedModelIdentity;
+        var modelPath = LoadedModelPath;
+        var white = DoFfc ? _loadedWhiteIdentity : null;
+        var whitePath = WhiteImagePath;
+        _ = Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath)).ContinueWith(task => Dispatcher.UIThread.Post(() =>
+        {
+            Volatile.Write(ref _fileCheckRunning, 0);
+            if (task.IsCompletedSuccessfully && task.Result != _cachedFileState)
+            {
+                _cachedFileState = task.Result;
+                NotifyValidation();
+            }
+            if (Interlocked.Exchange(ref _fileCheckDirty, 0) == 1) QueueLoadedFileCheck();
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Authoritative check before an apply starts: hashes off the UI thread, updates the cached
+    /// state and returns the blocking error, if any.
+    /// </summary>
+    private async Task<string?> VerifyLoadedFilesAsync(bool fit)
+    {
+        if (fit) return null;
+        var model = _loadedModelIdentity;
+        var modelPath = LoadedModelPath;
+        var white = DoFfc ? _loadedWhiteIdentity : null;
+        var whitePath = WhiteImagePath;
+        var state = await Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath));
+        if (state != _cachedFileState) { _cachedFileState = state; NotifyValidation(); }
+        return OperationError(fit, state);
     }
     private void ClearNumericDrafts()
     {

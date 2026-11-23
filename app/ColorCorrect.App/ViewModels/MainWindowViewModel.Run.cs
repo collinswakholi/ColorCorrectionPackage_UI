@@ -157,6 +157,12 @@ public partial class MainWindowViewModel
             return;
         }
 
+        if (await VerifyLoadedFilesAsync(fit) is { } changed)
+        {
+            Status = changed;
+            return;
+        }
+
         if (!await EnsureOutputAllowedAsync())
         {
             Status = "Output folder not confirmed.";
@@ -282,6 +288,12 @@ public partial class MainWindowViewModel
         if (applyModel && !File.Exists(LoadedModelPath))
         {
             Status = "Load or fit a model first.";
+            return;
+        }
+
+        if (await VerifyLoadedFilesAsync(fit: !applyModel) is { } changed)
+        {
+            Status = changed;
             return;
         }
 

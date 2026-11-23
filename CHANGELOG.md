@@ -20,6 +20,7 @@
 - The status bar turns red while the last message is an error.
 - Thumbnails and previews decode about 2.5 times faster, at most a few at a time, and unreadable files show "No preview" with the reason instead of a blank tile.
 - Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
+- Checking that a loaded model and its white reference are unchanged no longer hashes files on the UI thread while you edit settings; the check runs in the background and again, authoritatively, when Apply or a batch starts.
 
 ## 0.3.0
 
