@@ -19,7 +19,7 @@ public partial class MainWindowViewModel
     private int _engineGeneration;
 
     private string DetectionFailureKey(SessionItemViewModel item) =>
-        $"{AssetIdentity.CaptureCached(item.Path).Sha256}:{Crop:R}:{SelectedAccelPolicy.Value}:{_engineGeneration}";
+        $"{AssetIdentity.Capture(item.Path).Sha256}:{Crop:R}:{SelectedAccelPolicy.Value}:{_engineGeneration}";
 
     private async Task AutoDetectIfNeededAsync(SessionItemViewModel item)
     {
