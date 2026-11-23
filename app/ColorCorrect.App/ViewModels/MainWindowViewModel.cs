@@ -34,11 +34,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly HashSet<string> _trusted = new(PathIdentity.Comparer);
     private readonly List<CatalogItemViewModel> _catalog = [];
     private CancellationTokenSource? _jobCts;
-    private CancellationTokenSource? _saveCts;
-    private readonly object _settingsWriteLock = new();
-    private long _settingsSnapshotGeneration;
-    private long _settingsWrittenGeneration;
-    private bool _settingsSaveWarned;
+    private readonly SettingsSaveScheduler _settingsSaver;
     private CancellationTokenSource? _cropCts;
     private SessionItemViewModel? _rangeAnchor;
     private int _previewGeneration;
@@ -71,6 +67,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     internal MainWindowViewModel(bool persistenceEnabled)
     {
         _persistenceEnabled = persistenceEnabled;
+        _settingsSaver = new SettingsSaveScheduler(SettingsSnapshot, OnUi, SessionStore.SaveSettings,
+            () => Dispatcher.UIThread.Post(() => Log("Settings",
+                "Settings could not be saved. Changes apply to this session only; check that the settings folder is writable.",
+                LogLevel.Warning)));
         Settings.PropertyChanged += OnSettingChanged;
         Layout.PropertyChanged += OnLayoutStateChanged;
         Output.PropertyChanged += OnOutputStateChanged;
@@ -793,7 +793,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     public void FlushPersist()
     {
-        _saveCts?.Cancel();
+        _settingsSaver.CancelPending();
         if (_persistenceEnabled && !_restoring)
         {
             Persist();
@@ -1378,7 +1378,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         try
         {
             UnhookWorkerProgress();
-            _saveCts?.Cancel();
+            _settingsSaver.CancelPending();
             _jobCts?.Cancel();
             _cropCts?.Cancel();
             FlushPersist();
@@ -2082,350 +2082,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         // packaged app has no user-facing project boundary to approve again.
         Output.OutputDir = full;
         return Task.FromResult(true);
-    }
-
-    private void ScheduleSave()
-    {
-        if (_disposed || !_persistenceEnabled || _restoring)
-        {
-            return;
-        }
-
-        var previous = _saveCts;
-        _saveCts = new CancellationTokenSource();
-        previous?.Cancel();
-        previous?.Dispose();
-        var token = _saveCts.Token;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(400, token).ConfigureAwait(false);
-                // Snapshot view-model state on the UI thread, then write the file off it.
-                (SessionState State, long Generation)? snapshot = null;
-                await OnUi(() => snapshot = SnapshotSettings()).ConfigureAwait(false);
-                token.ThrowIfCancellationRequested();
-                if (snapshot is { } taken) WriteSettings(taken.State, taken.Generation);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        });
-    }
-
-    /// <summary>Synchronous save (used on flush and close); shares the write lock with background saves.</summary>
-    private void Persist()
-    {
-        if (SnapshotSettings() is { } taken) WriteSettings(taken.State, taken.Generation);
-    }
-
-    private (SessionState State, long Generation)? SnapshotSettings()
-    {
-        if (!_persistenceEnabled || _restoring)
-        {
-            return null;
-        }
-
-        return (BuildSessionState(includeItems: false), Interlocked.Increment(ref _settingsSnapshotGeneration));
-    }
-
-    /// <summary>Write settings unless a newer snapshot was already written; warn once if saving fails.</summary>
-    private void WriteSettings(SessionState state, long generation)
-    {
-        bool saved;
-        lock (_settingsWriteLock)
-        {
-            if (generation < _settingsWrittenGeneration) return;
-            saved = SessionStore.SaveSettings(state);
-            if (saved) _settingsWrittenGeneration = generation;
-        }
-
-        if (!saved && !_settingsSaveWarned)
-        {
-            _settingsSaveWarned = true;
-            Dispatcher.UIThread.Post(() => Log("Settings",
-                "Settings could not be saved. Changes apply to this session only; check that the settings folder is writable.",
-                LogLevel.Warning));
-        }
-    }
-
-    private SessionState BuildSessionState(bool includeItems) => new()
-    {
-        Items = includeItems
-            ? Session.Select(item => new SessionItemDto
-            {
-                Path = item.Path,
-                Name = item.Name,
-                HandshakeJson = item.Handshake?.Json ?? "",
-                ReferenceProfiles = item.ReferenceProfiles.Select(p => p.Snapshot()).ToList(),
-                ReferenceAssignments = item.ReferenceAssignments.ToList(),
-                ReferencesNeedAssignment = item.ReferencesNeedAssignment,
-                CorrectedPath = item.CorrectedPath,
-                ReportPath = item.ReportPath,
-                ModelPath = item.ModelPath,
-                CompletedContext = item.CompletedContext,
-                SourceIdentity = item.SourceIdentity,
-                FaceChoice = item.FaceChoice,
-                UseAllFaces = item.UseAllFaces,
-                IncludeInBatch = item.IncludeInBatch,
-                PreviewSuppressed = item.PreviewSuppressed,
-                PreviewDir = item.PreviewDir,
-                FfcPlane = item.FfcPlane is { } plane
-                    ? [plane.X, plane.Y, plane.Width, plane.Height]
-                    : null,
-                FfcWhiteSize = item.FfcPlane is { } sized && sized.WhiteWidth > 0
-                    ? [sized.WhiteWidth, sized.WhiteHeight]
-                    : null,
-                FfcPlaneSource = item.FfcPlane?.Source ?? "",
-            }).ToList()
-            : [],
-        ActivePath = includeItems ? Workspace.Active?.Path ?? "" : "",
-        Options = BuildOptions(),
-        Crop = Stage.Crop,
-        Theme = Layout.IsLightTheme ? "Light" : "Dark",
-        TrustedOutputDirs = _trusted.ToList(),
-        CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
-        ForceCpu = Compute.ForceCpu,
-        AccelPolicy = Compute.SelectedAccelPolicy.Value,
-        ShowLattice = Stage.ShowLattice,
-        ShowSample = Stage.ShowSample,
-        ShowDim = Stage.ShowDim,
-        ShowPlane = Stage.ShowPlane,
-    };
-
-    private void RestoreSession()
-    {
-        _saveCts?.Cancel();
-        _restoring = true;
-        try
-        {
-            var (state, error) = SessionStore.TryLoad();
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                Log("Session", "Saved session could not be restored.", LogLevel.Warning, [error]);
-            }
-
-            foreach (var dir in state.TrustedOutputDirs)
-            {
-                _trusted.Add(dir);
-            }
-
-            CatalogFolders.Clear();
-            foreach (var folder in state.CatalogFolders.Distinct(PathIdentity.Comparer))
-            {
-                if (Directory.Exists(folder))
-                {
-                    CatalogFolders.Add(new CatalogFolderViewModel(folder));
-                }
-            }
-            Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
-
-            ApplyOptions(state.Options);
-            Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
-            Stage.OverlayCrop = Stage.Crop;
-            Layout.IsLightTheme = string.Equals(state.Theme, "Light", StringComparison.OrdinalIgnoreCase);
-            var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
-                ? state.AccelPolicy
-                : state.ForceCpu ? "cpu" : "auto";
-            Compute.SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
-            Compute.ForceCpu = state.ForceCpu || policy == "cpu";
-            _worker.Policy = Compute.SelectedAccelPolicy.Value;
-            Stage.ShowLattice = state.ShowLattice ?? true;
-            Stage.ShowSample = state.ShowSample ?? true;
-            Stage.ShowDim = state.ShowDim ?? true;
-            Stage.ShowPlane = state.ShowPlane ?? true;
-
-            LoadCatalog();
-            RefreshSessionUi();
-            EnsureWhiteInSession(activate: false);
-            RefreshOverlay();
-        }
-        finally
-        {
-            _restoring = false;
-            RefreshSessionUi();
-            NotifyRunCommands();
-        }
-    }
-
-    internal int RestoreWorkingItems(SessionState state)
-    {
-        var wasRestoring = _restoring;
-        _restoring = true;
-        try
-        {
-            if (state.HasOptions)
-            {
-                ApplyOptions(state.Options);
-                Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
-                Stage.OverlayCrop = Stage.Crop;
-            }
-            RestoreWorkingItemsCore(state);
-            var skipped = state.Items.Count - Session.Count;
-            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
-            return skipped;
-        }
-        finally
-        {
-            _restoring = wasRestoring;
-            UpdateCcSummary(); NotifyRunCommands(); ScheduleSave();
-        }
-    }
-
-    private void RestoreWorkingItemsCore(SessionState state)
-    {
-        _previewGeneration++;
-        foreach (var item in Session.ToList())
-        {
-            item.Dispose();
-        }
-
-        Session.Clear();
-        Workspace.Active = null;
-        _rangeAnchor = null;
-        Stage.LastPreviewDir = "";
-        SetPreview(null, null);
-        Stage.OverlayHandshake = null;
-        Workspace.HasImage = false;
-        Workspace.HasCorrected = false;
-        Stage.ShowFacePicker = false;
-        FaceOptions.Clear();
-        ClearPicker();
-        ApplyReport(null);
-        foreach (var dto in state.Items)
-        {
-            if (dto.IsVideo || !IsImage(dto.Path))
-            {
-                continue;
-            }
-
-            var item = new SessionItemViewModel(dto.Path)
-            {
-                FaceChoice = dto.FaceChoice,
-                UseAllFaces = dto.UseAllFaces,
-                IncludeInBatch = dto.IncludeInBatch,
-                CorrectedPath = dto.CorrectedPath,
-                ReportPath = dto.ReportPath,
-                ModelPath = dto.ModelPath,
-                PreviewDir = dto.PreviewDir,
-                CompletedContext = dto.CompletedContext,
-                PreviewSuppressed = dto.PreviewSuppressed,
-                SourceIdentity = dto.SourceIdentity ?? dto.CompletedContext?.Source,
-                IsCorrected = File.Exists(dto.CorrectedPath)
-                    || (Directory.Exists(dto.PreviewDir) && ResolvePreviewFile(dto.PreviewDir, "corrected") is not null),
-                IncludeInSave = File.Exists(dto.CorrectedPath) || Directory.Exists(dto.PreviewDir),
-                Report = CorrectionReport.TryLoad(dto.ReportPath),
-                FfcPlane = PlaneFromDto(dto) ?? CorrectionReport.TryLoad(dto.ReportPath)?.FfcPlane
-                           ?? FfcPlane.TryLoad(dto.ModelPath),
-            };
-            item.NotifyOutputs();
-            if (!string.IsNullOrWhiteSpace(dto.HandshakeJson))
-            {
-                try
-                {
-                    item.ApplyHandshake(new HandshakeDocument(dto.HandshakeJson));
-                }
-                catch
-                {
-                    item.ApplyHandshake(null);
-                }
-            }
-
-            item.ReferenceProfiles = dto.ReferenceProfiles.Select(p => p.Snapshot()).ToList();
-            item.ReferenceAssignments = dto.ReferenceAssignments.Select(a => new ChartReferenceAssignment { ChartId = a.ChartId, ProfileId = a.ProfileId, ProfileRevision = a.ProfileRevision }).ToList();
-            item.ReferencesNeedAssignment = dto.ReferencesNeedAssignment;
-            ValidateRestoredReferences(item);
-            Session.Add(item);
-        }
-
-        if (Session.Count > 0)
-        {
-            var active = Session.FirstOrDefault(item => PathIdentity.Equal(item.Path, state.ActivePath))
-                         ?? Session[0];
-            Activate(active);
-            Layout.LibraryExpanded = false;
-        }
-
-        RefreshSessionUi();
-        EnsureWhiteInSession(activate: false);
-        NotifyRunCommands();
-
-    }
-
-    private static FfcPlane? PlaneFromDto(SessionItemDto dto)
-    {
-        if (dto.FfcPlane is not { Length: >= 4 } rect || rect[2] <= 0 || rect[3] <= 0)
-        {
-            return null;
-        }
-
-        return new FfcPlane
-        {
-            X = rect[0],
-            Y = rect[1],
-            Width = rect[2],
-            Height = rect[3],
-            WhiteWidth = dto.FfcWhiteSize is { Length: >= 2 } size ? size[0] : 0,
-            WhiteHeight = dto.FfcWhiteSize is { Length: >= 2 } size2 ? size2[1] : 0,
-            Source = dto.FfcPlaneSource ?? "",
-        };
-    }
-
-    private void ApplyOptions(CorrectionOptions options)
-    {
-        Settings.ClearDrafts(notify: false);
-        Compute.ForceCpu = options.CpuLut;
-        Compute.SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
-        Compute.FastMode = options.FastMode;
-        Output.BatchPreviewResults = options.BatchPreviewResults;
-        options.Normalize();
-        Settings.SelectedMethod = Pick(Methods, options.Method);
-        SyncDegreeAndAdvanced();
-        Settings.SelectedDegree = DegreeOptions.FirstOrDefault(item => item.Value == options.Degree.ToString()) ?? Settings.SelectedDegree;
-        Settings.SelectedInputSpace = Pick(RgbSpaces, options.InputSpace);
-        Settings.SelectedInputWhite = Pick(WhitePoints, options.InputWhite);
-        Settings.SelectedTargetSpace = Pick(RgbSpaces, options.TargetSpace);
-        Settings.SelectedTargetWhite = Pick(WhitePoints, options.TargetWhite);
-        Output.SelectedOutputFormat = Pick(OutputFormats, options.OutputFormat);
-        Settings.FitSamples = Math.Clamp(options.FitSamples, 1, 200);
-        Settings.PlsComponents = Math.Clamp(options.PlsComponents, 0, 64);
-        Settings.HiddenLayersText = CorrectionOptions.FormatHiddenLayers(options.HiddenLayers);
-        Settings.SelectedNnOptimizer = Pick(NnOptimizers, options.NnOptimizer);
-        Settings.NnBatchNormalization = options.NnBatchNormalization;
-        Settings.NnDropout = (decimal)Math.Clamp(options.NnDropout, 0, 0.8);
-        Settings.NnLr = (decimal)options.NnLr;
-        Settings.NnEpochs = Math.Clamp(options.NnEpochs, 50, 20000);
-        Settings.NnPatience = Math.Clamp(options.NnPatience, 1, 5000);
-        Settings.NnTol = (decimal)ClampTol(options.NnTol, 1e-6);
-        Settings.SkipSaturated = options.SkipSaturated;
-        Settings.IncludeCombinations = options.IncludeCombinations;
-        Output.OutputDir = options.OutputDir;
-        Settings.DoFfc = options.DoFfc;
-        Settings.DoGc = options.DoGc;
-        Settings.DoWb = options.DoWb;
-        Settings.DoCc = options.DoCc;
-        Settings.WhiteImagePath = options.WhiteImagePath;
-        Stage.CropRect = options.CropRect;
-        Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, string.IsNullOrWhiteSpace(options.FfcFitMethod) ? "poly" : options.FfcFitMethod);
-        Settings.FfcBins = Math.Clamp(options.FfcBins, 4, 200);
-        Settings.FfcSmoothWindow = Math.Clamp(options.FfcSmoothWindow, 1, 51);
-        Settings.FfcDegree = Math.Clamp(options.FfcDegree, 1, 7);
-        Settings.FfcNnMaxIter = Math.Clamp(options.FfcNnMaxIter <= 0 ? 10000 : options.FfcNnMaxIter, 50, 20000);
-        Settings.FfcTol = (decimal)ClampTol(options.FfcTol, 1e-8);
-        Settings.FfcCutOff = (decimal)ClampFfcCutOff(options.FfcCutOff);
-        Settings.FfcMaxVal = (decimal)ClampFfcMaxVal(options.FfcMaxVal, ClampFfcCutOff(options.FfcCutOff));
-        Settings.ClipLo = (decimal)ClampClipLo(options.ClipLo);
-        Settings.ClipHi = (decimal)ClampClipHi(options.ClipHi, ClampClipLo(options.ClipLo));
-        Compute.Phase2Teacher = options.Phase2Teacher;
-        var model = File.Exists(options.LoadedModelPath) ? options.LoadedModelPath
-            : File.Exists(options.ModelInPath) ? options.ModelInPath : "";
-        Output.LoadedModelPath = model;
-        Output.UseLoadedModel = options.UseLoadedModel == true && File.Exists(model);
-        _loadedModelPlane = FfcPlane.TryLoad(model);
-        UpdateCcSummary();
     }
 
     private void LoadCatalog()

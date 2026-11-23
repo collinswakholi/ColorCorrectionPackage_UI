@@ -1,43 +1,84 @@
-using System.Reflection;
-using Avalonia.Headless.XUnit;
-using ColorCorrect.App.ViewModels;
+using ColorCorrect.App.Services;
 using ColorCorrect.Engine;
 using Xunit;
 
 namespace ColorCorrect.App.Headless.Tests;
 
+/// <summary>Ordering, debouncing and failure reporting of the settings save scheduler.</summary>
 public sealed class SettingsPersistenceTests
 {
-    [AvaloniaFact]
-    public async Task OlderSettingsSnapshotNeverOverwritesANewerOne()
+    private static Task RunInline(Action action)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "ccp-settings-" + Guid.NewGuid().ToString("N"));
-        var previous = Environment.GetEnvironmentVariable("COLORCORRECT_DATA_DIR");
-        Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", dir);
-        var vm = new MainWindowViewModel(persistenceEnabled: false);
-        try
-        {
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var build = typeof(MainWindowViewModel).GetMethod("BuildSessionState", flags)!;
-            var write = typeof(MainWindowViewModel).GetMethod("WriteSettings", flags)!;
-            var state = (SessionState)build.Invoke(vm, [false])!;
-            var path = SessionStore.SettingsPath();
+        action();
+        return Task.CompletedTask;
+    }
 
-            write.Invoke(vm, [state, 2L]);
-            Assert.True(File.Exists(path));
-            File.Delete(path);
+    [Fact]
+    public void OlderSettingsSnapshotNeverOverwritesANewerOne()
+    {
+        var writes = new List<string>();
+        var saver = new SettingsSaveScheduler(() => null, RunInline,
+            state => { writes.Add(state.ActivePath); return true; }, () => { });
 
-            write.Invoke(vm, [state, 1L]); // a stale background snapshot arriving late
-            Assert.False(File.Exists(path));
+        saver.WriteIfNewest(new SessionState { ActivePath = "gen2" }, 2);
+        saver.WriteIfNewest(new SessionState { ActivePath = "gen1" }, 1); // a stale background snapshot arriving late
+        saver.WriteIfNewest(new SessionState { ActivePath = "gen3" }, 3);
 
-            write.Invoke(vm, [state, 3L]);
-            Assert.True(File.Exists(path));
-        }
-        finally
-        {
-            await vm.DisposeAsync();
-            Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", previous);
-            if (Directory.Exists(dir)) Directory.Delete(dir, true);
-        }
+        Assert.Equal(["gen2", "gen3"], writes);
+    }
+
+    [Fact]
+    public async Task ScheduledSavesAreCoalescedIntoOneWriteOfTheLatestState()
+    {
+        var current = "a";
+        var writes = new List<string>();
+        var saver = new SettingsSaveScheduler(() => new SessionState { ActivePath = current }, RunInline,
+            state => { lock (writes) writes.Add(state.ActivePath); return true; }, () => { })
+        { Delay = TimeSpan.FromMilliseconds(80) };
+
+        saver.Schedule();
+        current = "b";
+        saver.Schedule();
+        current = "c";
+        saver.Schedule();
+        await Task.Delay(400);
+
+        lock (writes) Assert.Equal(["c"], writes);
+    }
+
+    [Fact]
+    public async Task CancelPendingDropsAScheduledSaveAndSaveNowWritesImmediately()
+    {
+        var writes = 0;
+        var saver = new SettingsSaveScheduler(() => new SessionState(), RunInline,
+            _ => { Interlocked.Increment(ref writes); return true; }, () => { })
+        { Delay = TimeSpan.FromMilliseconds(80) };
+
+        saver.Schedule();
+        saver.CancelPending();
+        await Task.Delay(300);
+        Assert.Equal(0, writes);
+
+        saver.SaveNow();
+        Assert.Equal(1, writes);
+    }
+
+    [Fact]
+    public void NullSnapshotSkipsSavingAndFailureIsReportedOnce()
+    {
+        var failures = 0;
+        var writes = 0;
+        var allow = false;
+        var saver = new SettingsSaveScheduler(() => allow ? new SessionState() : null, RunInline,
+            _ => { writes++; return false; }, () => failures++);
+
+        saver.SaveNow(); // saving not allowed (e.g. while restoring)
+        Assert.Equal(0, writes);
+
+        allow = true;
+        saver.SaveNow();
+        saver.SaveNow();
+        Assert.Equal(2, writes);
+        Assert.Equal(1, failures);
     }
 }
