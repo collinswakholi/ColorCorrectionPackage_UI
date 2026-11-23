@@ -46,12 +46,12 @@ public partial class MainWindowViewModel
 
     internal string? OperationError(bool fit)
     {
-        if (!fit && _loadedModelIdentity is not null && !_loadedModelIdentity.Matches(LoadedModelPath))
+        if (!fit && _loadedModelIdentity is not null && !_loadedModelIdentity.MatchesCached(LoadedModelPath))
             return "The loaded model changed or moved. Load it again before applying it.";
         if (DoFfc)
         {
             if (!File.Exists(WhiteImagePath)) return "Choose a readable white reference before using FFC.";
-            if (!fit && _loadedWhiteIdentity is not null && !_loadedWhiteIdentity.Matches(WhiteImagePath))
+            if (!fit && _loadedWhiteIdentity is not null && !_loadedWhiteIdentity.MatchesCached(WhiteImagePath))
                 return "The model's white reference changed. Choose the intended white image again before applying it.";
             var error = NumberError(nameof(FfcBins), FfcBins, "FFC bins", 4, 200, true)
                 ?? NumberError(nameof(FfcSmoothWindow), FfcSmoothWindow, "FFC smooth window", 1, 51, true);

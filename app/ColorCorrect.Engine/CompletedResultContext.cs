@@ -6,15 +6,49 @@ namespace ColorCorrect.Engine;
 /// <summary>File identity is content based: changing a file at the same path is not a relink.</summary>
 public sealed record AssetIdentity(string Path, string Sha256)
 {
+    // Last full hash per file, keyed by full path and validated by length + last-write time.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Length, DateTime WriteUtc, string Sha256)> Stamps =
+        new(PathIdentity.Comparer);
+
+    /// <summary>Hash the whole file. Use at operation boundaries (run, save, replay).</summary>
     public static AssetIdentity Capture(string path)
     {
-        using var stream = File.OpenRead(path);
-        return new(System.IO.Path.GetFullPath(path), Convert.ToHexString(SHA256.HashData(stream)));
+        var full = System.IO.Path.GetFullPath(path);
+        var before = new FileInfo(full);
+        string sha;
+        using (var stream = File.OpenRead(full)) sha = Convert.ToHexString(SHA256.HashData(stream));
+        before.Refresh();
+        if (before.Exists) Stamps[full] = (before.Length, before.LastWriteTimeUtc, sha);
+        return new(full, sha);
+    }
+
+    /// <summary>
+    /// Identity for interactive checks (validation, browsing): reuses the last full hash while the
+    /// file's length and last-write time are unchanged, otherwise hashes it again.
+    /// </summary>
+    public static AssetIdentity CaptureCached(string path)
+    {
+        var full = System.IO.Path.GetFullPath(path);
+        var info = new FileInfo(full);
+        if (info.Exists && Stamps.TryGetValue(full, out var stamp)
+            && stamp.Length == info.Length && stamp.WriteUtc == info.LastWriteTimeUtc)
+        {
+            return new(full, stamp.Sha256);
+        }
+        return Capture(full);
     }
 
     public bool Matches(string? path = null)
     {
         try { return string.Equals(Capture(path ?? Path).Sha256, Sha256, StringComparison.OrdinalIgnoreCase); }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>Like <see cref="Matches"/>, but avoids re-hashing a file whose size and write time are unchanged.</summary>
+    public bool MatchesCached(string? path = null)
+    {
+        try { return string.Equals(CaptureCached(path ?? Path).Sha256, Sha256, StringComparison.OrdinalIgnoreCase); }
         catch (IOException) { return false; }
         catch (UnauthorizedAccessException) { return false; }
     }
