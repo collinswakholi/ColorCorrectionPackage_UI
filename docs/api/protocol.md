@@ -6,10 +6,11 @@ Python 3.10+; direct protocol clients do not require Python. Keep the worker,
 models, references, and native libraries together. A desktop window does not
 need to be open for processing.
 
-This reference follows the current source. The `cpu_inference_v1` capability and
-CPU inference recovery are available in the 0.2.2 engine. Check the
-worker's capabilities before requesting new functionality; a newer SDK does not
-upgrade a separately installed worker.
+This reference follows the current source: the 0.3.x engine, which speaks NDJSON
+protocol 3, and SDK 2.3.x, which accepts protocol 2 and 3 workers. Check the
+worker's `protocol_version` and `capabilities` (for example `cpu_inference_v1`)
+before requesting newer functionality; a newer SDK does not upgrade a separately
+installed worker.
 
 ## Legacy Engine workflow
 
@@ -76,7 +77,7 @@ python api/colorcorrect.py devices
 python api/colorcorrect.py detect --json '{"image":"test_images/ColorCard_Big.JPG","handshake_out":"chart.json"}'
 ```
 
-For Windows shells with JSON-quoting differences, put parameters in a UTF-8 JSON file and use `--json @request.json`, or pipe JSON through `--json -`. The CLI writes progress to stderr and one result object to stdout; exit code 0 means complete success, 1 means failure (including partial batch failure). `--engine`, `--root`, `--policy` and `--timeout` work for every command. The CLI defaults to `auto`. Legacy `Engine()` retains its `cpu` policy default, which selects CPU LUT processing while detection follows Auto.
+For Windows shells with JSON-quoting differences, put parameters in a UTF-8 JSON file and use `--json @request.json`, or pipe JSON through `--json -`. The CLI writes progress to stderr and one result object to stdout; exit code 0 means complete success, 1 means failure (including partial batch failure). `--engine`, `--root`, `--policy` and `--timeout` work for every command. The CLI and `Engine()` both default to the `auto` policy. Pass `policy="cpu"` (CLI `--policy cpu`) to select CPU LUT processing while detection follows Auto.
 
 Python import after installing the SDK:
 
@@ -127,12 +128,13 @@ For contributor checks and execution records, see
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="cpu", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="auto", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
 | `devices()` | List/probe CPU/GPU assignment | none |
 | `warmup()` | Initialize chart detector | none |
+| `request("setup_probe", **options)` | Verify inference and correction setup | none |
 | `detect(image, **options)` | Detect chart geometry | chart image |
 | `fit(image, *, output, report, model_out, **options)` | Calibrate FFC→GC→WB→CC | image, handshake in options, artifact paths |
 | `apply(model, images, output_dir, **options)` | Apply saved model to one/many images | model JSON, image path(s), destination |
@@ -141,33 +143,101 @@ For contributor checks and execution records, see
 | `request(command, **parameters)` | Complete native protocol escape hatch | command + documented JSON fields |
 | `close()` | Stop worker and release pipes | none |
 
-Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply; `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
+Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. An Engine that is garbage-collected or still open at interpreter exit asks its worker to shut down and then terminates it, but explicit closing is the supported way to flush deferred work. `Engine.protocol_version` reports the worker's protocol (2 when the ready event omits it); other versions are refused at startup. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply (including its `code`; typed-SDK errors expose it as `ColorCorrectError.code`); `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
 
 A timeout, corrupt protocol, interrupted call or failing progress callback terminates that worker before reuse. The next call starts a fresh worker; last-fit state and caches are lost. Save model paths explicitly. The timeout covers each command; initial worker startup has a separate timeout. `close()` waits for an in-flight request, then asks the worker to flush deferred preview PNGs and acknowledge shutdown (up to 10 seconds, bounded by the client timeout). It then terminates a child that is still running, including after an acknowledgement. A resulting nonzero child cleanup code does not by itself indicate an incomplete operation; inspect the operation reply and saved artifacts. Configure request timeouts to bound in-flight work. Termination cannot undo already written output files. This is a trusted local file-processing API, not a sandbox or authenticated service; do not expose it directly to untrusted network requests.
 
 ## NDJSON protocol (all native operations)
 
-Launch `ccp-engine` with the same runtime environment as the app. Its first stdout line is `{"ok":true,"event":"ready",...}`. Write one JSON object followed by a newline and flush. Consume zero or more `{"type":"progress","message":"..."}` lines, then one final reply containing `ok`. Send one request at a time: there are no request IDs or multiplexing. Drain stderr concurrently to avoid a pipe deadlock. End with `{"cmd":"shutdown"}` (alias `quit`) or close stdin. No GUI needs to be running.
+Launch `ccp-engine` with the same runtime environment as the app. Its first stdout line is `{"ok":true,"event":"ready",...}`. Write one UTF-8 JSON object followed by a newline and flush. Consume zero or more `{"type":"progress","message":"..."}` lines, then one final reply containing `ok`. Send one request at a time: there are no request IDs or multiplexing. Drain stderr concurrently to avoid a pipe deadlock. End with `{"cmd":"shutdown"}` (alias `quit`) or close stdin. No GUI needs to be running.
+
+A line that is not valid UTF-8 or not valid JSON gets an `invalid_request` error reply and the worker keeps reading. A request that hits an internal bug gets an `internal_error` reply instead of terminating the worker.
+
+### Ready event
+
+| Field | Meaning |
+|---|---|
+| `ok`, `event` | Always `true` and `"ready"` |
+| `protocol_version` | `3` for this engine (`2` for 0.2.x–0.3.0 workers). Protocol 3 only adds error `code`s; requests and successful replies are unchanged |
+| `capabilities` | Feature markers: `custom_references_v1`, `chart_identity_v1`, `combined_lut65_v1`, `cpu_inference_v1` |
+| `patch_sampling` | Exact seeded sampling contract, `random-lcg32-v1`; absent on workers that only support grid sampling |
+| `portable_lut` | `true` when the worker was built with the portable wgpu LUT path |
+| `device`, `warmed`, `title` | Initial device state (`pending` until a warmup or detection), warm state, and a display title |
+
+### Commands and common fields
+
+| Command | Purpose |
+|---|---|
+| `devices` | Probe backends and report the planned assignment |
+| `setup_probe` | Warm the detector and verify one tiny LUT correction; reports `setup_verified` |
+| `warmup` | Initialize the chart detector |
+| `detect` | Detect chart geometry and write a handshake |
+| `run` | Fit (calibrate) and optionally correct the chart image |
+| `apply` | Apply a saved model to one or more images |
+| `preview_stage` | Render one cumulative stage preview |
+| `export_cube` | Export the global transform as a `.cube` LUT |
+| `shutdown` (alias `quit`) | Flush deferred previews, remove worker temp files and exit |
+
+Command names are case-insensitive. Fields accepted by every request:
+
+| Field | Meaning / default |
+|---|---|
+| `cmd` (alias `command`) | Command name (required) |
+| `policy` (alias `device`) | Inference/correction policy; see `devices`. When omitted, the policy from the last `warmup`, `detect` or `run` applies (initially `auto`) |
+| `lut_device` | `auto`, `cpu` or `gpu` LUT application for this request (`gpu` when omitted, subject to `policy`); `auto` uses CPU for images under about 1 MP |
+| `cpu_lut` | `true` forces CPU LUT application for this request (false) |
+| `fast_mode` | Boolean, `run`/`apply`/`preview_stage` only (false); rejected elsewhere |
+
+Removed fields fail explicitly rather than being ignored: `cc_method` and the `video`/`video_grade` commands.
+
+### Errors
+
+Every failed reply has `ok:false`, a human-readable `error`, and, from protocol 3, a stable `code`. Branch on `code`; display `error`. Failed `apply` rows carry their own `code`; when every row fails, the batch reply's `code` is the first failed row's code. Protocol-2 workers send no `code`, so clients that support both should fall back to the message (the SDK keeps its historical `"built without"` match only for code-less replies).
+
+| `code` | Meaning |
+|---|---|
+| `invalid_request` | Missing, malformed, unknown-valued or out-of-range request fields; invalid JSON or UTF-8; missing `cmd` |
+| `unsupported_command` | Unknown or removed command |
+| `unsupported_capability` | This worker build or runtime lacks the requested feature (also produced client-side by the SDK capability checks) |
+| `invalid_model` | A saved model cannot be parsed as a model or fails validation (coefficient shapes, finite values, kind/feature consistency) |
+| `image_too_large` | An input image exceeds the decode cap (200 MP by default; set `CCP_MAX_IMAGE_MEGAPIXELS` in the worker environment to change it) |
+| `image_decode_failed` | An input image cannot be decoded or uses an unsupported encoding (RAW, 16-bit, empty image, invalid ICC profile) |
+| `no_chart_detected` | Detection ran but found no usable chart |
+| `inference_failed` | Chart, white-plane or warmup inference could not run (missing model, runtime or device failure) |
+| `processing_failed` | Fitting or correction failed on otherwise valid input (for example a singular fit or failed FFC fit) |
+| `io_error` | A file could not be read, created or written (missing input, unwritable output, failed preview PNG) |
+| `internal_error` | Unexpected internal failure; the worker stays usable |
+
+The SDK also reports `shutdown_failure` when the worker acknowledged shutdown but exited with a nonzero code. Timeouts and cancellation are client-side: the SDK raises `TimeoutError` / `ProcessingTimeoutError` and terminates the worker; no worker reply carries those as codes.
 
 ### `devices` / `warmup`
 
 Optional `policy`: `auto`, `cpu`, `cpu-inference`, `directml` (alias `dml`), `webgpu`, or `vulkan`. Auto tries eligible GPU routes, then explicitly selected CPU inference. `cpu` selects CPU correction with Auto detection; `cpu-inference` explicitly selects CPU detection and requires capability `cpu_inference_v1`. Explicit GPU policies select only that inference route; Vulkan uses the WebGPU route with its Vulkan graphics backend. GPU correction retains independent CPU recovery. Unsupported policy strings normalize to `auto` for legacy compatibility; they do not enable other inference engines.
 
-Detection options below also apply to warmup. `devices` returns the planned `assignment`, backend availability and runtime diagnostics; planning alone does not prove execution. `warmup` returns `warmed`, `device`, `title`, or an error. Inspect the completed operation's backend diagnostics for actual execution.
+Detection options below also apply to warmup. A failed warmup reply carries `code` `inference_failed` (or `unsupported_capability` for a build without chart inference). `devices` returns the planned `assignment`, backend availability and runtime diagnostics; planning alone does not prove execution. `warmup` returns `warmed`, `device`, `title`, or an error. Inspect the completed operation's backend diagnostics for actual execution.
+
+### `setup_probe`
+
+Accepts the `warmup` options plus `force_cpu` (false), which verifies the CPU LUT path instead of the GPU one. Returns `setup_verified`, `inference` (the embedded warmup reply) and `correction` (`status` `verified` with `backend` and `fallback`, or `failed` with `error`). `ok` equals `setup_verified`; when false the reply adds `code` and `error` from whichever check failed.
 
 ### `detect`
 
-Required `image`. Optional `handshake_out` (otherwise a temporary JSON file); `conf` detector confidence (native default), `crop` patch sampling fraction (default .75), `prefer` chart preference, `allow_recall` (true), `policy`. Returns `handshake` path, `n_charts`, `chart_type`, `cached`, and detection diagnostics. The returned path is authoritative even for cache hits. The handshake holds chart faces and patch quadrilaterals (`patch_obbs` / `patch_cells`), and can be inspected or supplied as a JSON object to `run` for manually provided chart geometry. Keep its patch IDs aligned with the matching bundled chart reference.
+Required `image` (aliases `input`, `image_path`). Optional `handshake_out` (alias `json_out`; otherwise a temporary JSON file); `conf` detector confidence (native default), `crop` patch sampling fraction (default .75), `prefer` chart preference, `allow_recall` (true), `policy`, `bypass_cache` (false: neither read nor populate the detection cache), `retry_inference` (false: reset inference sessions and clear the detection cache first, for example after changing devices). Returns `handshake` path, `n_charts`, `chart_type`, `cached`, and detection diagnostics (`device`, `detect_backend`, `provider`, `fallback`, `inference`, `recall_source`). The returned path is authoritative even for cache hits. The handshake holds chart faces and patch quadrilaterals (`patch_obbs` / `patch_cells`), and can be inspected or supplied as a JSON object to `run` for manually provided chart geometry. Keep its patch IDs aligned with the matching bundled chart reference.
+
+Every fresh detection is a new snapshot: the handshake gets a unique `snapshot_id`, and each entry in `charts` gets `chart_id` = `<snapshot_id>:chart-<index>` plus the same `snapshot_id` (the top-level `chart_id` names chart 0). `reference_assignments` refer to these IDs, and one `run` cannot combine charts from different snapshots.
+
+The cache holds the 64 most recently used detections per worker, keyed by the image's path, size and modification time, the detection settings, the model files and the runtime. Without `handshake_out` the worker writes `ccp-detect-*.json` to the system temporary folder; it keeps the newest 64 such files and deletes all of them (and its private `ccp-cache-*.json` copies) when it exits. Supply `handshake_out` for a handshake that must outlive the worker. A detection that finds no chart fails with `code` `no_chart_detected`.
 
 ### `run` (Python `fit`)
 
-Required `image`, `handshake` (path or JSON object), `output`. Always provide `report` and `model_out` to avoid the native defaults `report.json`/`model.json` in cwd.
+Required `image` (aliases `input`, `image_path`), `handshake` (path or JSON object), `output` (alias `output_path`). Always provide `report` and `model_out` to avoid the native defaults `report.json`/`model.json` in cwd.
 
 | Field | Meaning / native default |
 |---|---|
 | `model` | `ccm`, `rpcc2` (default), `rpcc3`, `linear`, `pls`, `nn` |
 | `face`, `use_all` | Zero-based detected chart face (0); combine detected faces (false) |
-| `crop`, `fit_samples` | Interior patch crop (.75); samples per axis within each patch (9, a 9×9 grid) |
+| `crop`, `fit_samples` | Interior patch crop (.75); samples per axis within each patch (9, a 9×9 grid; 1–200) |
+| `samples_per_patch`, `sampling_seed` | Exact random draws per patch (1–4096) with an unsigned 32-bit seed (0); requires `patch_sampling` `random-lcg32-v1` and cannot be combined with `fit_samples` |
 | `do_ffc`, `white`, `crop_rect` | FFC (defaults on when white supplied), white image, optional integer pixel rectangle string `x1,y1,x2,y2` |
 | `do_gc`, `do_wb`, `do_cc` | Enable automatic range-safe GC, WB, CC (all true); no GC degree |
 | `do_sat`, `skip_saturated` | Saturated-patch extrapolation (true), skip saturated fit samples (false) |
@@ -182,8 +252,10 @@ Required `image`, `handshake` (path or JSON object), `output`. Always provide `r
 | `write_output` | Write final image (true); false still writes report/model |
 | `preview_dir`, `preview_mode` | Optional preview artifacts; `none`, `corrected` (default), `all`, or stage name |
 | `lut_out` | Optional .cube export, excluding spatial FFC |
+| `reference_profiles` | Custom chart reference profiles (requires `custom_references_v1`): objects with `version` (1), `id`, `name`, `revision`, `chart`, `color_space`, `white_point`, `scale`, `order` and one `values` triple per patch |
+| `reference_assignments` | Which profile each detected chart uses (requires `chart_identity_v1`): objects with `chart_id` (from the handshake), `profile_id` and `profile_revision` |
 
-FFC options in `ffc`: `method` (`linear`, `poly` default, `pls`, `nn`), `bins` (50), `smooth` (5, positive odd window), `degree` (5), `nn_max_iter` (10000), `tol` (1e-8), `cut_off` (1.3), `max_val` (1.8). This is independent of CC's NN settings. Explicitly enabling FFC without a `white` path is rejected by both the Python API and native worker. An unusable supplied white image can still cause FFC fitting to be skipped; inspect `report_json.do_ffc` and warnings rather than assuming it ran.
+FFC options in `ffc`: `method` (`linear`, `poly` default, `pls`, `nn`), `bins` (50; 2–1000), `smooth` (alias `smooth_window`; 5, odd window 1–255, even values round up), `degree` (5; 1–10), `nn_max_iter` (alias `max_iter`; 10000; 1–100000), `tol` (1e-8), `cut_off` (1.3), `max_val` (1.8). Out-of-range values of an enabled FFC fail with `invalid_request`; the desktop app offers bins 4–200, smooth 1–51, degree 1–7 and 50–20000 iterations. This is independent of CC's NN settings. Explicitly enabling FFC without a `white` path is rejected by both the Python API and native worker. An unusable supplied white image can still cause FFC fitting to be skipped; inspect `report_json.do_ffc` and warnings rather than assuming it ran.
 
 NN options in `nn`: `hidden_layers` array (1–4 widths, each 4–512; Python also accepts a single integer), `hidden_size` fallback (100), `optimizer` (`adam`, `sgd`, `rmsprop`), `batch_norm` (false), `dropout` (0, range 0–.8), `epochs` (10000), `patience` (1500), `lr` (.001), `tol` (1e-6). Example: `{"hidden_layers":[128,64,32],"optimizer":"rmsprop","batch_norm":true,"dropout":0.1}`. The worker clamps several numeric parameters; use documented ranges rather than relying on silent normalization.
 
@@ -191,17 +263,17 @@ Reply: `output`, `report`, `model_out`, `lut_out`, `preview_dir`, `chart_type`, 
 
 ### `apply`
 
-Required `model` (saved JSON), `images` (array), `output_dir`. Optional `output_format`: `jpg` default or `png`; `write_output`, `preview_dir`, `preview_mode`, `policy`; stage toggles `do_gc`/`do_wb`/`do_cc` default to saved model state. **`do_ffc` defaults false even if the model was fitted with FFC.** Supply `do_ffc:true`, `white`, and compatible FFC options when needed. FFC is spatial and is not stored as a portable global correction matrix.
+Required `model` (saved JSON; aliases `model_path`, `model_in`), `images` (array of nonempty path strings; any other entry rejects the whole request), `output_dir` (alias `output`; created if needed, and a creation failure is reported before any image is processed). Saved models are validated on load; a corrupt or crafted model fails with `invalid_model`. Optional `output_format`: `jpg` default or `png`; `write_output`, `preview_dir`, `preview_mode`, `policy`; stage toggles `do_gc`/`do_wb`/`do_cc` default to saved model state. **`do_ffc` defaults false even if the model was fitted with FFC.** Supply `do_ffc:true`, `white`, and compatible FFC options when needed. FFC is spatial and is not stored as a portable global correction matrix.
 
-Results are an array with `ok`, `image`, `output`, optional `error`/`ffc_skipped`. Duplicate file stems within a batch get distinct suffixes. Each image is processed sequentially to bound memory. `metrics_hidden:true` means there are no measured chart errors for these scene images.
+Results are an array with `ok`, `image`, `output`, optional `error`/`code`/`ffc_skipped`. Duplicate file stems within a batch get distinct suffixes. Each image is processed sequentially to bound memory. `metrics_hidden:true` means there are no measured chart errors for these scene images.
 
 ### `preview_stage`
 
-Required `model`, `image`, `preview_dir`; `stage`: `ffc`, `gc`, `wb`, `cc` or `corrected`. Stages are cumulative: GC includes FFC if explicitly enabled; WB includes prior stages. Apply's FFC and stage options also apply. No final full-resolution image is written. The preview directory contains native preview artifacts; PNG encodes may finish asynchronously while a `.rgb` preview is immediately available to the GUI.
+Required `model`, `image`, `preview_dir`; `stage`: `ffc`, `gc`, `wb`, `cc` or `corrected`. Stages are cumulative: GC includes FFC if explicitly enabled; WB includes prior stages. Apply's FFC and stage options also apply. No final full-resolution image is written. The preview directory contains native preview artifacts: a `.rgb` sidecar for the GUI and a PNG. Every PNG written for a request is complete before its reply is sent; a PNG that cannot be written fails the request with `io_error`. At most four PNG encodes run concurrently.
 
 ### `export_cube`
 
-Required `path`; provide explicit `model` (otherwise native worker uses its last successful fit). `size` defaults to the native LUT size, Python helper explicitly defaults to 33 and limits 2–129. The export honors explicit model paths even after another fit. A .cube only represents the global transform; it cannot encode FFC. Export files can be large at high grid sizes.
+Required `path` (aliases `output`, `lut_out`); provide explicit `model` (alias `model_path`; otherwise native worker uses its last successful fit). `size` defaults to the native LUT size, Python helper explicitly defaults to 33 and limits 2–129. The export honors explicit model paths even after another fit. A .cube only represents the global transform; it cannot encode FFC. Export files can be large at high grid sizes.
 
 ## Color-space contract and scientific caution
 

@@ -7,9 +7,9 @@ explicit CPU recovery when GPU execution is unavailable or fails. LUT applicatio
 uses wgpu with CPU recovery. `backend="cpu"` retains CPU correction with Auto
 detection; `backend="cpu-inference"` explicitly selects CPU detection.
 
-CPU inference requires the 0.2.2 native engine or another worker declaring
-`cpu_inference_v1`. Older 0.2.1 packages use GPU inference; updating the wheel
-does not replace that engine. On macOS, the native SDK root is
+CPU inference requires a native engine declaring `cpu_inference_v1` (0.2.2 and
+later, including the current 0.3.x engine). Older 0.2.1 packages use GPU
+inference; updating the wheel does not replace that engine. On macOS, the native SDK root is
 `/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
 
 Prefer the familiar `ColorCorrection(Config(save_path=...))` workflow if you used
