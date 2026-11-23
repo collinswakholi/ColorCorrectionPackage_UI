@@ -1664,6 +1664,9 @@
                        DockPanel.Dock="Left" IsHitTestVisible="False">
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Busy}"/>
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Busy}"/>
+                    <!-- Drawn last so the last error stays visible over the busy/ready dot. -->
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ErrorBrush}"
+                             IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </Panel>
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             AutomationProperties.LiveSetting="Polite">
@@ -1672,6 +1675,7 @@
                                ToolTip.Tip="{Binding AccelHint}"/>
                     <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               Classes.error="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                ToolTip.Tip="{Binding ErrorMessage}"
                                AutomationProperties.AutomationId="StatusBarText"
                                AutomationProperties.Name="{Binding Status}"/>

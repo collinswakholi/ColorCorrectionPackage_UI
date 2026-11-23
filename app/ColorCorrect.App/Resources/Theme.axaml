@@ -37,6 +37,10 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
 
+    <!-- Status text after an error: colored, the detail stays in the tooltip and the log. -->
+    <Style Selector="TextBlock.caption.error">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+    </Style>
     <Style Selector="TextBlock.caption">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
         <Setter Property="FontSize"   Value="12" />
