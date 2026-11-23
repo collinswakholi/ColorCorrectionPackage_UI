@@ -764,10 +764,10 @@
                                             </CheckBox>
                                         </DockPanel>
                                     </Border>
-                                    <TextBlock x:Name="ProcessSummary" Text="{Binding ProcessSummary}" Classes="caption"
+                                    <TextBlock x:Name="ProcessSummary" Text="{Binding Settings.ProcessSummary}" Classes="caption"
                                                Margin="0,2,0,6" TextWrapping="Wrap"
                                                AutomationProperties.AutomationId="ProcessSummary"
-                                               AutomationProperties.Name="{Binding ProcessSummary}"/>
+                                               AutomationProperties.Name="{Binding Settings.ProcessSummary}"/>
                                     <CheckBox x:Name="NoSatToggle" IsChecked="{Binding Settings.SkipSaturated}"
                                               FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,4"
                                               MinWidth="0" HorizontalAlignment="Stretch"

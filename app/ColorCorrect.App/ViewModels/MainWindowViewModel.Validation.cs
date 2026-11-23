@@ -40,7 +40,7 @@ public partial class MainWindowViewModel
 
     private string? OperationError(bool fit, LoadedFileState files) =>
         Settings.ValidationError(fit, files.ModelChanged, files.WhiteChanged,
-            () => File.Exists(Settings.WhiteImagePath), ShowPls, ShowCcIterParams, ShowNn);
+            () => File.Exists(Settings.WhiteImagePath), Settings.ShowPls, Settings.ShowCcIterParams, Settings.ShowNn);
     public string ValidationMessage => CachedOperationError(!WillUseLoadedModel) ?? "";
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationMessage);
     private void RefreshValidation()

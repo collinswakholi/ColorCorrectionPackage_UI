@@ -144,4 +144,16 @@ public partial class CorrectionSettingsViewModel : ViewModelBase
             ?? NumberError(nameof(NnEpochs), NnEpochs, "Epochs", 50, 20000, true)
             ?? NumberError(nameof(NnPatience), NnPatience, "Patience", 1, 5000, true);
     }
+
+    // ---- moved from MainWindowViewModel ----
+    [ObservableProperty] private bool _showDegree = true;
+    [ObservableProperty] private bool _showPolyCombinations = true;
+    [ObservableProperty] private bool _showPls;
+    [ObservableProperty] private bool _showNn;
+    [ObservableProperty] private bool _showCcIterParams;
+    [ObservableProperty] private string _degreeLabel = "Polynomial degree";
+    [ObservableProperty] private bool _showFfcNn;
+    [ObservableProperty] private bool _showFfcIter;
+    [ObservableProperty] private string _ccSummary = "Linear · degree 2";
+    [ObservableProperty] private string _processSummary = "FFC off · GC 5 · WB · CC Root polynomial";
 }

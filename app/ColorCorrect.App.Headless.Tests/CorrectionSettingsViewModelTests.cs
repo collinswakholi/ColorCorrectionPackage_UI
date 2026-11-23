@@ -41,11 +41,11 @@ public sealed class CorrectionSettingsViewModelTests
         {
             var nn = vm.FfcFitMethods.Single(m => m.Value == "nn");
             vm.Settings.SelectedFfcFitMethod = nn;
-            Assert.True(vm.ShowFfcNn);
-            Assert.True(vm.ShowFfcIter);
+            Assert.True(vm.Settings.ShowFfcNn);
+            Assert.True(vm.Settings.ShowFfcIter);
             vm.Settings.SelectedFfcFitMethod = vm.FfcFitMethods.First(m => m.Value != "nn" && m.Value != "pls");
-            Assert.False(vm.ShowFfcNn);
-            Assert.False(vm.ShowFfcIter);
+            Assert.False(vm.Settings.ShowFfcNn);
+            Assert.False(vm.Settings.ShowFfcIter);
         }
         finally
         {

@@ -293,8 +293,8 @@ public sealed class MainWindowHeadlessTests
             vm.Settings.NnBatchNormalization = true;
             vm.Settings.NnDropout = 0.25m;
 
-            Assert.True(vm.ShowNn);
-            Assert.False(vm.ShowPolyCombinations);
+            Assert.True(vm.Settings.ShowNn);
+            Assert.False(vm.Settings.ShowPolyCombinations);
             Assert.True(vm.NnSettingsValid);
             Assert.False(vm.HasHiddenLayersError);
             Assert.Equal("rmsprop", vm.Settings.SelectedNnOptimizer.Value);

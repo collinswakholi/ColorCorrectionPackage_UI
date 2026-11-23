@@ -146,11 +146,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _detectSummary = "Waiting for detect";
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _currentStage = "";
-    [ObservableProperty] private string _ccSummary = "Linear · degree 2";
-    [ObservableProperty] private string _processSummary = "FFC off · GC 5 · WB · CC Root polynomial";
     [ObservableProperty] private string _savedModelSummary = "";
     [ObservableProperty] private bool _hasSavedModelSummary;
-    [ObservableProperty] private string _degreeLabel = "Polynomial degree";
     [ObservableProperty] private string _modelLabel = "No model loaded";
     [ObservableProperty] private string _modelIoStatus = "";
     [ObservableProperty] private string _loadedModelPath = "";
@@ -280,11 +277,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _showLattice = true;
     [ObservableProperty] private bool _showSample = true;
     [ObservableProperty] private bool _showDim = true;
-    [ObservableProperty] private bool _showDegree = true;
-    [ObservableProperty] private bool _showPolyCombinations = true;
-    [ObservableProperty] private bool _showPls;
-    [ObservableProperty] private bool _showNn;
-    [ObservableProperty] private bool _showCcIterParams;
     [ObservableProperty] private bool _isLightTheme;
     [ObservableProperty] private bool _libraryExpanded;
     [ObservableProperty] private bool _processExpanded = true;
@@ -311,8 +303,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     public string WorkerChip => ShortenWorkerLine(WorkerLine);
-    public bool NnSettingsValid => !ShowNn || CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
-    public bool HasHiddenLayersError => ShowNn && !CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
+    public bool NnSettingsValid => !Settings.ShowNn || CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
+    public bool HasHiddenLayersError => Settings.ShowNn && !CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out _);
     public string HiddenLayersError => CorrectionOptions.TryParseHiddenLayers(Settings.HiddenLayersText, out _, out var error) ? "" : error;
     public bool ShowSessionNavigation => Session.Count > 1;
     public bool CanNavigatePrevious => Active is not null && Session.IndexOf(Active) > 0;
@@ -1820,12 +1812,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void SyncDegreeAndAdvanced()
     {
         var method = CorrectionOptions.CanonicalMethod(Settings.SelectedMethod.Value);
-        ShowDegree = method != "ccm";
-        ShowPolyCombinations = method == "linear";
-        ShowPls = method == "pls";
-        ShowNn = method == "nn";
-        ShowCcIterParams = method is "pls" or "nn";
-        DegreeLabel = method == "rpcc" ? "Root degree" : "Polynomial degree";
+        Settings.ShowDegree = method != "ccm";
+        Settings.ShowPolyCombinations = method == "linear";
+        Settings.ShowPls = method == "pls";
+        Settings.ShowNn = method == "nn";
+        Settings.ShowCcIterParams = method is "pls" or "nn";
+        Settings.DegreeLabel = method == "rpcc" ? "Root degree" : "Polynomial degree";
         var keep = Settings.SelectedDegree?.Value ?? "2";
         DegreeOptions.Clear();
         if (method == "rpcc")
@@ -1853,8 +1845,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void UpdateCcSummary()
     {
         var options = BuildOptions();
-        CcSummary = options.Summary();
-        ProcessSummary = BuildProcessSummary(options);
+        Settings.CcSummary = options.Summary();
+        Settings.ProcessSummary = BuildProcessSummary(options);
         RefreshIdlePipeline();
     }
 

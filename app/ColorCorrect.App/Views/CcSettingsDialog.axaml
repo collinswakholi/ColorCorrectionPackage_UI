@@ -59,14 +59,14 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock x:Name="DegreeLabel" Text="{Binding DegreeLabel}" Classes="settingsLabel"
-                               IsVisible="{Binding ShowDegree}"/>
+                    <TextBlock x:Name="DegreeLabel" Text="{Binding Settings.DegreeLabel}" Classes="settingsLabel"
+                               IsVisible="{Binding Settings.ShowDegree}"/>
                     <ComboBox x:Name="DegreeSelect" Classes="config"
                               ItemsSource="{Binding DegreeOptions}"
                               SelectedItem="{Binding Settings.SelectedDegree}"
-                              IsVisible="{Binding ShowDegree}" Margin="0,0,0,10"
+                              IsVisible="{Binding Settings.ShowDegree}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
-                              AutomationProperties.Name="{Binding DegreeLabel}">
+                              AutomationProperties.Name="{Binding Settings.DegreeLabel}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Label}" AutomationProperties.Name="{Binding Label}"/>
@@ -75,7 +75,7 @@
                     </ComboBox>
                     <CheckBox x:Name="PolyCombinationsToggle" Margin="0,0,0,10"
                               IsChecked="{Binding Settings.IncludeCombinations}"
-                              IsVisible="{Binding ShowPolyCombinations}"
+                              IsVisible="{Binding Settings.ShowPolyCombinations}"
                               AutomationProperties.Name="Include combination terms">
                         <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}"
                                    Text="Include combination terms"/>
@@ -87,14 +87,14 @@
                              AutomationProperties.Name="Samples per patch side"
                              ToolTip.Tip="Grid points per side: 3 gives 9 samples averaged into one color per patch."/>
 
-                    <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
+                    <StackPanel IsVisible="{Binding Settings.ShowPls}" Margin="0,0,0,10">
                         <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>
                         <TextBox Classes="config"
                                  Text="{Binding Settings.PlsComponentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="PLS components"/>
                     </StackPanel>
 
-                    <StackPanel IsVisible="{Binding ShowNn}">
+                    <StackPanel IsVisible="{Binding Settings.ShowNn}">
                         <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,4,0,10"/>
                         <TextBlock Text="NEURAL NETWORK" Classes="subheading"
                                    Foreground="{DynamicResource PrimaryBrush}" Margin="0,0,0,8"/>
@@ -148,7 +148,7 @@
                                  AutomationProperties.Name="Patience"/>
                     </StackPanel>
 
-                    <StackPanel IsVisible="{Binding ShowCcIterParams}" Margin="0,0,0,10">
+                    <StackPanel IsVisible="{Binding Settings.ShowCcIterParams}" Margin="0,0,0,10">
                         <TextBlock Text="Tolerance" Classes="settingsLabel"/>
                         <TextBox Classes="config"
                                  Text="{Binding Settings.NnTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

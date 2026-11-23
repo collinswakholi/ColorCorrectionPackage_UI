@@ -64,12 +64,12 @@
                 <TextBlock Text="Polynomial degree (1–7)" Classes="settingsLabel" IsVisible="{Binding ShowFfcDegree}"/>
                 <TextBox Classes="config" Text="{Binding Settings.FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          AutomationProperties.Name="FFC degree" IsVisible="{Binding ShowFfcDegree}"/>
-                <StackPanel IsVisible="{Binding ShowFfcIter}" Margin="0,0,0,10">
+                <StackPanel IsVisible="{Binding Settings.ShowFfcIter}" Margin="0,0,0,10">
                     <TextBlock Text="Tolerance" Classes="settingsLabel"/>
                     <TextBox Classes="config" Text="{Binding Settings.FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC tolerance"/>
                 </StackPanel>
-                <StackPanel IsVisible="{Binding ShowFfcNn}" Margin="0,0,0,10">
+                <StackPanel IsVisible="{Binding Settings.ShowFfcNn}" Margin="0,0,0,10">
                     <TextBlock Text="NN max iterations" Classes="settingsLabel"/>
                     <TextBox Classes="config" Text="{Binding Settings.FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC NN max iterations"/>

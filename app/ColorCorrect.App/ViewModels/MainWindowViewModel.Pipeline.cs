@@ -35,8 +35,6 @@ public partial class MainWindowViewModel
     [ObservableProperty] private NamedValue _selectedProcessingDevice = new("auto", "Auto (recommended)");
 
     [ObservableProperty] private string _cropRect = "";
-    [ObservableProperty] private bool _showFfcNn;
-    [ObservableProperty] private bool _showFfcIter;
     [ObservableProperty] private string _stageName = "Original";
     [ObservableProperty] private bool _isStagePreviewLoading;
     [ObservableProperty] private string _stagePreviewLoadingLabel = "";
@@ -453,8 +451,8 @@ public partial class MainWindowViewModel
     private void OnSelectedFfcFitMethodChanged(NamedValue value)
     {
         OnPropertyChanged(nameof(ShowFfcDegree));
-        ShowFfcNn = value.Value == "nn";
-        ShowFfcIter = value.Value is "nn" or "pls";
+        Settings.ShowFfcNn = value.Value == "nn";
+        Settings.ShowFfcIter = value.Value is "nn" or "pls";
         RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
