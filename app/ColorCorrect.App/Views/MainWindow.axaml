@@ -1244,7 +1244,7 @@
                                       VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
                         <Grid x:Name="PanelDeltaE" RowDefinitions="Auto,*" Margin="14" RowSpacing="8">
                             <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
-                                       Text="Fit a chart still to see per-stage ΔE."
+                                       Text="{Binding DeltaEPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding HasMetrics}">
                                 <Border Classes="metricTile" Margin="0,0,8,8">
@@ -1433,7 +1433,7 @@
                         <Grid x:Name="PanelColor" Margin="14">
                             <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="Fit a chart still to see color scatter."
+                                       Text="{Binding ColorPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding HasMetrics}">
                                 <Border Classes="plotCard">
@@ -1479,7 +1479,7 @@
                                        HorizontalAlignment="Right" IsVisible="{Binding HasMetrics}"/>
                             <TextBlock Grid.Row="1" Classes="caption" IsVisible="{Binding !HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="Fit a chart still to see rendition."
+                                       Text="{Binding RenditionPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="PlotHoverHost" Grid.Row="1" ColumnDefinitions="*,12,*"
                                   MinHeight="160" ClipToBounds="True" IsVisible="{Binding HasMetrics}">

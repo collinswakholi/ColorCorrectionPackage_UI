@@ -253,10 +253,41 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _saveProgress;
     [ObservableProperty] private string _jobProgressPct = "0%";
     [ObservableProperty] private string _saveProgressLabel = "";
-    [ObservableProperty] private bool _hasSession;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
+    private bool _hasSession;
     [ObservableProperty] private bool _hasImage;
     [ObservableProperty] private bool _hasCorrected;
-    [ObservableProperty] private bool _hasMetrics;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
+    private bool _hasMetrics;
+
+    /// <summary>True while a fit or model apply runs for the active still (drives the analysis panels).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
+    private bool _isApplying;
+
+    /// <summary>Reason the last fit or apply failed; empty after a success or a new run.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
+    private string _analysisFailure = "";
+
+    public string DeltaEPlaceholder => AnalysisPlaceholder("per-stage ΔE");
+
+    public string ColorPlaceholder => AnalysisPlaceholder("the color scatter");
+
+    public string RenditionPlaceholder => AnalysisPlaceholder("the chart rendition");
+
+    /// <summary>One message per analysis state: empty session, ready to fit, fitting, or failed.</summary>
+    private string AnalysisPlaceholder(string what)
+    {
+        if (IsApplying) return $"Fitting… {char.ToUpperInvariant(what[0])}{what[1..]} appears here when the run finishes.";
+        if (!string.IsNullOrWhiteSpace(AnalysisFailure))
+            return $"The last fit failed: {AnalysisFailure} See the Log tab for details.";
+        return HasSession
+            ? $"Detect the chart, then select Fit + apply to see {what}."
+            : $"Add a chart still, then select Fit + apply to see {what}.";
+    }
     [ObservableProperty] private bool _hasSaveItems;
     [ObservableProperty] private bool _hasCatalogFolders;
     [ObservableProperty] private bool _hasWhiteRef;

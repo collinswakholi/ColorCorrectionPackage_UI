@@ -183,6 +183,8 @@ public partial class MainWindowViewModel
         await OnUi(() =>
         {
             Busy = true;
+            IsApplying = true;
+            AnalysisFailure = "";
             BeginPipeline(fit ? "fit" : "apply");
             CurrentStage = fit ? "CC" : "Apply model";
             Status = fit
@@ -222,6 +224,7 @@ public partial class MainWindowViewModel
             await OnUi(() =>
             {
                 Status = fit ? "Apply failed." : "Model apply failed.";
+                AnalysisFailure = Sentence(ex.Message);
                 Log("Apply", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
             }).ConfigureAwait(false);
         }
@@ -230,11 +233,22 @@ public partial class MainWindowViewModel
             await OnUi(() =>
             {
                 Busy = false;
+                IsApplying = false;
                 EndPipeline();
                 NotifyRunCommands();
             }).ConfigureAwait(false);
             _run.Release();
         }
+    }
+
+    /// <summary>Trim an engine message to one sentence ending in a period.</summary>
+    private static string Sentence(string? message)
+    {
+        var text = (message ?? "").Trim();
+        var newline = text.IndexOfAny([(char)13, (char)10]);
+        if (newline >= 0) text = text[..newline].TrimEnd();
+        if (text.Length == 0) return "the engine reported an error.";
+        return text.EndsWith('.') ? text : text + ".";
     }
 
     [RelayCommand(CanExecute = nameof(CanBatchFit))]
@@ -646,6 +660,7 @@ public partial class MainWindowViewModel
         if (!outcome.Ok)
         {
             var error = string.IsNullOrWhiteSpace(outcome.Error) ? "Correction failed." : outcome.Error.Trim();
+            AnalysisFailure = Sentence(error);
 
             Status = fitted ? "Apply failed." : "Model apply failed.";
             var details = new List<string>(CorrectionSettingsDetails(item.Handshake, applyOnly: !fitted));
