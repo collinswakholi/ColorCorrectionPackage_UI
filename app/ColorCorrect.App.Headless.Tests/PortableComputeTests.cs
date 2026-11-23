@@ -143,7 +143,7 @@ public sealed class PortableComputeTests
             File.WriteAllText(file, "bbbb"); File.SetLastWriteTimeUtc(file, stamp);
             var replaced = key.Invoke(vm, [item]);
             Assert.NotEqual(first, replaced);
-            vm.Crop = .5;
+            vm.Stage.Crop = .5;
             var cropped = key.Invoke(vm, [item]);
             Assert.NotEqual(replaced, cropped);
             vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
@@ -221,11 +221,11 @@ public sealed class PortableComputeTests
         {
             IsCorrected = true, ModelPath = "missing-model.json", PreviewDir = "missing-previews",
         };
-        vm.Session.Add(item); vm.Workspace.Active = item; vm.StageName = "GC";
+        vm.Session.Add(item); vm.Workspace.Active = item; vm.Stage.StageName = "GC";
         var method = typeof(MainWindowViewModel).GetMethod("EnsureStagePreviewAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
         await Assert.IsAssignableFrom<Task>(method.Invoke(vm, ["GC"]));
-        Assert.False(vm.IsStagePreviewLoading);
-        Assert.NotEqual("GC", vm.StageName);
+        Assert.False(vm.Stage.IsStagePreviewLoading);
+        Assert.NotEqual("GC", vm.Stage.StageName);
         Assert.Contains(vm.LogEntries, row => row.Message.Contains("Could not load GC preview"));
     }
 

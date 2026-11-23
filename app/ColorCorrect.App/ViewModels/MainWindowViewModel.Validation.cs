@@ -148,13 +148,13 @@ public partial class MainWindowViewModel
                 Settings.FfcNnMaxIter = Number("nn_max_iter", 10000); Settings.FfcTol = Number("tol", 0.00000001m);
                 Settings.FfcCutOff = Number("cut_off", 1.3m); Settings.FfcMaxVal = Number("max_val", 1.8m);
             }
-            CropRect = "";
+            Stage.CropRect = "";
             if (model.TryGetProperty("python_api", out var metadata) && metadata.ValueKind == JsonValueKind.Object)
             {
                 if (metadata.TryGetProperty("white", out var white) && white.ValueKind == JsonValueKind.String) Settings.WhiteImagePath = white.GetString() ?? "";
                 if (metadata.TryGetProperty("white_sha256", out var hash) && hash.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(Settings.WhiteImagePath))
                     _loadedWhiteIdentity = new(Settings.WhiteImagePath, hash.GetString() ?? "");
-                if (metadata.TryGetProperty("crop_rect", out var crop) && crop.ValueKind == JsonValueKind.String) CropRect = crop.GetString() ?? "";
+                if (metadata.TryGetProperty("crop_rect", out var crop) && crop.ValueKind == JsonValueKind.String) Stage.CropRect = crop.GetString() ?? "";
             }
             ClearNumericDrafts();
         }

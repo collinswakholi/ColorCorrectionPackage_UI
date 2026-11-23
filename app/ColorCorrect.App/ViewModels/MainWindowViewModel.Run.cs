@@ -19,7 +19,7 @@ public partial class MainWindowViewModel
     private int _engineGeneration;
 
     private string DetectionFailureKey(SessionItemViewModel item) =>
-        $"{AssetIdentity.Capture(item.Path).Sha256}:{Crop:R}:{Compute.SelectedAccelPolicy.Value}:{_engineGeneration}";
+        $"{AssetIdentity.Capture(item.Path).Sha256}:{Stage.Crop:R}:{Compute.SelectedAccelPolicy.Value}:{_engineGeneration}";
 
     private async Task AutoDetectIfNeededAsync(SessionItemViewModel item)
     {
@@ -84,7 +84,7 @@ public partial class MainWindowViewModel
         try
         {
             var requestKey = await Task.Run(() => DetectionFailureKey(item), cancel).ConfigureAwait(false);
-            var result = await _worker.DetectAsync(item.Path, Crop, cancellationToken: cancel, retryInference: retryInference).ConfigureAwait(false);
+            var result = await _worker.DetectAsync(item.Path, Stage.Crop, cancellationToken: cancel, retryInference: retryInference).ConfigureAwait(false);
             if (item.DetectGeneration != seq)
             {
                 return;
@@ -180,9 +180,9 @@ public partial class MainWindowViewModel
         var seq = ++item.ApplyGeneration;
         var handshake = item.Handshake;
         var options = BuildOptions();
-        var face = OverlayFaceChoice;
-        var useAll = UseAllFaces;
-        var crop = Crop;
+        var face = Stage.OverlayFaceChoice;
+        var useAll = Stage.UseAllFaces;
+        var crop = Stage.Crop;
         var modelPath = LoadedModelPath;
         var cancel = BeginJob();
         var elapsed = Stopwatch.StartNew();
@@ -311,8 +311,8 @@ public partial class MainWindowViewModel
         var cancel = BeginJob();
         var options = CaptureBatchOptions(BuildOptions(), BatchPreviewResults);
         var modelPath = LoadedModelPath;
-        var crop = Crop;
-        var useAll = UseAllFaces;
+        var crop = Stage.Crop;
+        var useAll = Stage.UseAllFaces;
         Dictionary<SessionItemViewModel, BatchFitSnapshot> fitSnapshots = [];
         // One batch captures one set of assets, even if files are replaced while later
         // images wait in the queue. Per-image results then own their own replay copies.
@@ -732,7 +732,7 @@ public partial class MainWindowViewModel
         {
             if (!string.IsNullOrWhiteSpace(outcome.PreviewDir))
             {
-                LastPreviewDir = outcome.PreviewDir;
+                Stage.LastPreviewDir = outcome.PreviewDir;
             }
 
             ApplyReport(item.Report);
@@ -742,13 +742,13 @@ public partial class MainWindowViewModel
             if (item.PreviewSuppressed)
             {
                 _previewGeneration++;
-                SetPreview(OriginalPreview, null);
-                Workspace.HasCorrected = false; ShowCorrected = false; StageName = "Original";
+                SetPreview(Stage.OriginalPreview, null);
+                Workspace.HasCorrected = false; Stage.ShowCorrected = false; Stage.StageName = "Original";
             }
             else _ = LoadCorrectedPreviewAsync(item);
-            if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(LastPreviewDir))
+            if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(Stage.LastPreviewDir))
             {
-                StageName = "Corrected";
+                Stage.StageName = "Corrected";
                 ApplyStagePreview();
                 NotifyStageRadios();
             }

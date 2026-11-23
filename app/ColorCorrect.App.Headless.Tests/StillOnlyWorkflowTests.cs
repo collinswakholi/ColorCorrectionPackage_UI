@@ -119,8 +119,8 @@ public sealed class StillOnlyWorkflowTests
         Assert.Null(vm.Workspace.Active);
         Assert.False(vm.Workspace.HasImage);
         Assert.False(vm.ShowStillPreview);
-        Assert.Null(vm.Preview);
-        Assert.Null(vm.OriginalPreview);
+        Assert.Null(vm.Stage.Preview);
+        Assert.Null(vm.Stage.OriginalPreview);
         Assert.False(vm.DetectCommand.CanExecute(null));
         Assert.False(vm.ApplyCommand.CanExecute(null));
         Assert.Contains("Video is not supported", vm.Status);

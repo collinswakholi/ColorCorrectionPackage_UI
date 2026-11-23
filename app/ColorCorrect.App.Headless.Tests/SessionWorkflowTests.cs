@@ -36,8 +36,8 @@ public sealed class SessionWorkflowTests
         Assert.False(vm.Compute.Phase2Teacher);
         Assert.False(vm.UseLoadedModel);
         Assert.Equal("adobe-rgb-1998", vm.Settings.SelectedInputSpace.Value);
-        Assert.Equal(0.6, vm.Crop, 6);
-        Assert.Equal(vm.Crop, vm.OverlayCrop);
+        Assert.Equal(0.6, vm.Stage.Crop, 6);
+        Assert.Equal(vm.Stage.Crop, vm.Stage.OverlayCrop);
     }
 
     [AvaloniaFact]
@@ -46,7 +46,7 @@ public sealed class SessionWorkflowTests
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
             Settings = { HiddenLayersText = "[64, 32]", NnDropout = 0.3m, NnBatchNormalization = true, DoWb = true },
-            Crop = 0.55,
+            Stage = { Crop = 0.55 },
         };
         vm.Settings.SelectedMethod = vm.Methods.Single(item => item.Value == "nn");
         vm.Settings.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "sgd");
@@ -57,6 +57,6 @@ public sealed class SessionWorkflowTests
         Assert.True(vm.Settings.NnBatchNormalization);
         Assert.Equal(0.3m, vm.Settings.NnDropout);
         Assert.True(vm.Settings.DoWb);
-        Assert.Equal(0.55, vm.Crop, 6);
+        Assert.Equal(0.55, vm.Stage.Crop, 6);
     }
 }

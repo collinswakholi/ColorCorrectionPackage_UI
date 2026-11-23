@@ -62,15 +62,15 @@ public partial class MainWindowViewModel
             // A bitmap decode scheduled before the edit must never reattach the
             // old result after the current result associations have been cleared.
             _previewGeneration++;
-            LastPreviewDir = "";
+            Stage.LastPreviewDir = "";
             Workspace.HasCorrected = false;
-            ShowCorrected = false;
-            StageName = "Original";
-            SetPreview(OriginalPreview, null);
+            Stage.ShowCorrected = false;
+            Stage.StageName = "Original";
+            SetPreview(Stage.OriginalPreview, null);
             ApplyReport(null);
             NotifyStageRadios();
             RefreshOverlay();
-            if (OriginalPreview is null && System.IO.File.Exists(item.Path))
+            if (Stage.OriginalPreview is null && System.IO.File.Exists(item.Path))
                 _ = LoadPreviewsAsync(item, _previewGeneration);
         }
         RefreshSessionUi();

@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Stage.PropertyChanged += OnStageStateChanged;
         Compute.PropertyChanged += OnComputeStateChanged;
         Workspace.PropertyChanged += OnWorkspaceStateChanged;
         Settings.DraftEdited += (_, _) => RefreshValidation();
@@ -153,27 +154,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _outputDir = "";
     [ObservableProperty] private string _batchLabel = "";
     [ObservableProperty] private string _batchProgressPct = "0%";
-    [ObservableProperty] private string _overlayBadge = "";
     [ObservableProperty] private string _themeLabel = "Light";
     [ObservableProperty] private string _themeHint = "Switch to light theme";
-    [ObservableProperty] private Bitmap? _originalPreview;
-    [ObservableProperty] private Bitmap? _correctedPreview;
-    [ObservableProperty] private Bitmap? _preview;
-    [ObservableProperty] private HandshakeDocument? _overlayHandshake;
-    [ObservableProperty] private FfcPlane? _overlayPlane;
-    [ObservableProperty] private Rect _overlayPlaneRect;
-    [ObservableProperty] private bool _showPlane = true;
     private FfcPlane? _loadedModelPlane;
-    [ObservableProperty] private double _overlayCrop = 0.75;
     [ObservableProperty] private NamedValue _selectedOutputFormat = new("png", "PNG");
-    [ObservableProperty] private double _crop = 0.75;
-    [ObservableProperty] private double _naturalWidth = 1;
-    [ObservableProperty] private double _naturalHeight = 1;
-    [ObservableProperty] private double _overlayScaleX = 1;
-    [ObservableProperty] private double _overlayScaleY = 1;
     [ObservableProperty] private double _batchProgress;
-    [ObservableProperty] private int _faceIndex;
-    [ObservableProperty] private int _overlayFaceChoice;
     [ObservableProperty] private bool _busy = true;
     [ObservableProperty] private bool _isBatching;
     [ObservableProperty] private bool _showBatchProgress;
@@ -204,8 +189,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _canSaveCc;
     [ObservableProperty] private bool _canSaveReport;
     [ObservableProperty] private bool _hasReport;
-    [ObservableProperty] private bool _showCorrected;
-    [ObservableProperty] private bool _showFacePicker;
 
     /// <summary>Correction settings (stages, FFC, color spaces, CC model and its parameters).</summary>
     public CorrectionSettingsViewModel Settings { get; } = new();
@@ -296,12 +279,30 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(e.PropertyName);
     }
 
+    /// <summary>The image stage: preview bitmaps, chart and plane overlay geometry, crop, face choice, display toggles and the selected processing stage.</summary>
+    public StageViewModel Stage { get; } = new();
+
+    private void OnStageStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(StageViewModel.ShowPlane): OnShowPlaneChanged(Stage.ShowPlane); break;
+            case nameof(StageViewModel.Crop): OnCropChanged(Stage.Crop); break;
+            case nameof(StageViewModel.FaceIndex): OnFaceIndexChanged(Stage.FaceIndex); break;
+            case nameof(StageViewModel.ShowCorrected): OnShowCorrectedChanged(Stage.ShowCorrected); break;
+            case nameof(StageViewModel.ShowLattice): OnShowLatticeChanged(Stage.ShowLattice); break;
+            case nameof(StageViewModel.ShowSample): OnShowSampleChanged(Stage.ShowSample); break;
+            case nameof(StageViewModel.ShowDim): OnShowDimChanged(Stage.ShowDim); break;
+            case nameof(StageViewModel.StageName): OnStageNameChanged(Stage.StageName); break;
+            case nameof(StageViewModel.IsStagePreviewLoading): OnIsStagePreviewLoadingChanged(Stage.IsStagePreviewLoading); break;
+            case nameof(StageViewModel.LastPreviewDir): OnLastPreviewDirChanged(Stage.LastPreviewDir); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
-    [ObservableProperty] private bool _useAllFaces;
-    [ObservableProperty] private bool _showLattice = true;
-    [ObservableProperty] private bool _showSample = true;
-    [ObservableProperty] private bool _showDim = true;
     [ObservableProperty] private bool _isLightTheme;
     [ObservableProperty] private bool _libraryExpanded;
     [ObservableProperty] private bool _processExpanded = true;
@@ -311,7 +312,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<string> FaceOptions { get; } = [];
     public string? SelectedFace
     {
-        get => FaceIndex >= 0 && FaceIndex < FaceOptions.Count ? FaceOptions[FaceIndex] : null;
+        get => Stage.FaceIndex >= 0 && Stage.FaceIndex < FaceOptions.Count ? FaceOptions[Stage.FaceIndex] : null;
         set
         {
             if (value is null)
@@ -320,9 +321,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
 
             var index = FaceOptions.IndexOf(value);
-            if (index >= 0 && index != FaceIndex)
+            if (index >= 0 && index != Stage.FaceIndex)
             {
-                FaceIndex = index;
+                Stage.FaceIndex = index;
             }
         }
     }
@@ -348,7 +349,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public string NextSessionHint => CanNavigateNext
         ? $"Next image · {Session[Session.IndexOf(Workspace.Active!) + 1].DisplayName} (Alt+Right)"
         : "No next image";
-    public string CropLabel => Crop.ToString("0.00");
+    public string CropLabel => Stage.Crop.ToString("0.00");
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
     public bool HasWorkerError => Compute.WorkerStartupComplete && !Compute.WorkerReady;
@@ -420,20 +421,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : "Detect the chart, then Fit + apply.";
     public bool ShowStillPreview => Workspace.HasImage;
     public bool ShowChartSection => Workspace.HasImage;
-    public bool ShowChartOverlay => OverlayHandshake is { Ok: true };
+    public bool ShowChartOverlay => Stage.OverlayHandshake is { Ok: true };
     public bool ShowOverlayLegend => ShowChartOverlay;
-    public bool ShowPlaneOverlay => OverlayPlane is not null;
+    public bool ShowPlaneOverlay => Stage.OverlayPlane is not null;
     public bool ShowOverlayChrome => ShowChartOverlay || ShowPlaneOverlay;
     public bool ShowPlaneToggle => ShowPlaneOverlay;
-    public string PlaneBadge => OverlayPlane?.Badge ?? "";
+    public string PlaneBadge => Stage.OverlayPlane?.Badge ?? "";
     public bool ShowOriginal
     {
-        get => !ShowCorrected;
+        get => !Stage.ShowCorrected;
         set
         {
             if (value)
             {
-                ShowCorrected = false;
+                Stage.ShowCorrected = false;
             }
         }
     }
@@ -624,7 +625,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     public void PeekColor(int x, int y, bool pin, bool showLoupe = true)
     {
-        var bitmap = Preview;
+        var bitmap = Stage.Preview;
         if (bitmap is null || !TryBitmapSize(bitmap, out var previewWidth, out var previewHeight))
         {
             if (showLoupe)
@@ -707,14 +708,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Session.Clear();
         Workspace.Active = null;
         _rangeAnchor = null;
-        LastPreviewDir = "";
+        Stage.LastPreviewDir = "";
         SetPreview(null, null);
-        OverlayHandshake = null;
+        Stage.OverlayHandshake = null;
         ApplyReport(null);
         Compute.DetectSummary = "Waiting for detect";
         Workspace.HasImage = false;
         Workspace.HasCorrected = false;
-        ShowFacePicker = false;
+        Stage.ShowFacePicker = false;
         FaceOptions.Clear();
         ClearPicker();
         Log("Session", "Cleared session images.", LogLevel.Warning);
@@ -768,9 +769,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(LastPreviewDir) && !Directory.Exists(LastPreviewDir))
+        if (!string.IsNullOrWhiteSpace(Stage.LastPreviewDir) && !Directory.Exists(Stage.LastPreviewDir))
         {
-            LastPreviewDir = "";
+            Stage.LastPreviewDir = "";
         }
 
         if (!string.IsNullOrWhiteSpace(LoadedModelPath) && !File.Exists(LoadedModelPath))
@@ -1394,12 +1395,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void DisposeUiResources()
     {
-        var original = OriginalPreview;
-        var corrected = CorrectedPreview;
-        var displayed = Preview;
-        Preview = null;
-        OriginalPreview = null;
-        CorrectedPreview = null;
+        var original = Stage.OriginalPreview;
+        var corrected = Stage.CorrectedPreview;
+        var displayed = Stage.Preview;
+        Stage.Preview = null;
+        Stage.OriginalPreview = null;
+        Stage.CorrectedPreview = null;
         ClearStageBitmaps();
         foreach (var item in Session)
         {
@@ -1428,13 +1429,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         var gen = ++_previewGeneration;
-        LastPreviewDir = Directory.Exists(item.PreviewDir) ? item.PreviewDir : "";
-        if (StageName != "Original")
+        Stage.LastPreviewDir = Directory.Exists(item.PreviewDir) ? item.PreviewDir : "";
+        if (Stage.StageName != "Original")
         {
-            StageName = "Original";
+            Stage.StageName = "Original";
         }
 
-        ShowCorrected = false;
+        Stage.ShowCorrected = false;
         Workspace.HasCorrected = false;
         ClearPicker();
         SetPreview(null, null);
@@ -1458,9 +1459,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         MaybeAutoDetect();
         OnPropertyChanged(nameof(IsResultPreviewSuppressed));
-        if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(LastPreviewDir) && item.IsCorrected)
+        if (!item.PreviewSuppressed && !string.IsNullOrWhiteSpace(Stage.LastPreviewDir) && item.IsCorrected)
         {
-            StageName = "Corrected";
+            Stage.StageName = "Corrected";
             ApplyStagePreview();
         }
     }
@@ -1471,10 +1472,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         var handshake = item.Handshake;
         if (handshake is null || handshake.ChartCount <= 1)
         {
-            ShowFacePicker = false;
-            UseAllFaces = false;
-            FaceIndex = 0;
-            OverlayFaceChoice = 0;
+            Stage.ShowFacePicker = false;
+            Stage.UseAllFaces = false;
+            Stage.FaceIndex = 0;
+            Stage.OverlayFaceChoice = 0;
             return;
         }
 
@@ -1485,8 +1486,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         FaceOptions.Add("All charts");
-        ShowFacePicker = true;
-        FaceIndex = item.UseAllFaces
+        Stage.ShowFacePicker = true;
+        Stage.FaceIndex = item.UseAllFaces
             ? FaceOptions.Count - 1
             : Math.Clamp(item.FaceChoice, 0, Math.Max(0, FaceOptions.Count - 2));
         OnPropertyChanged(nameof(SelectedFace));
@@ -1495,26 +1496,26 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void SyncFaceChoice()
     {
-        UseAllFaces = ShowFacePicker && FaceOptions.Count > 0 && FaceIndex == FaceOptions.Count - 1 && FaceOptions[^1] == "All charts";
-        OverlayFaceChoice = UseAllFaces ? 0 : Math.Max(0, FaceIndex);
+        Stage.UseAllFaces = Stage.ShowFacePicker && FaceOptions.Count > 0 && Stage.FaceIndex == FaceOptions.Count - 1 && FaceOptions[^1] == "All charts";
+        Stage.OverlayFaceChoice = Stage.UseAllFaces ? 0 : Math.Max(0, Stage.FaceIndex);
         if (Workspace.Active is not null)
         {
-            Workspace.Active.UseAllFaces = UseAllFaces;
-            if (!UseAllFaces)
+            Workspace.Active.UseAllFaces = Stage.UseAllFaces;
+            if (!Stage.UseAllFaces)
             {
-                Workspace.Active.FaceChoice = OverlayFaceChoice;
+                Workspace.Active.FaceChoice = Stage.OverlayFaceChoice;
             }
         }
     }
 
     private void SetPreview(Bitmap? original, Bitmap? corrected)
     {
-        var oldOriginal = OriginalPreview;
-        var oldCorrected = CorrectedPreview;
-        var oldPreview = Preview;
-        OriginalPreview = original;
-        CorrectedPreview = corrected;
-        Preview = null;
+        var oldOriginal = Stage.OriginalPreview;
+        var oldCorrected = Stage.CorrectedPreview;
+        var oldPreview = Stage.Preview;
+        Stage.OriginalPreview = original;
+        Stage.CorrectedPreview = corrected;
+        Stage.Preview = null;
         UpdateDisplayedPreview();
         foreach (var bitmap in new[] { oldOriginal, oldCorrected, oldPreview }.Distinct()) DisposeIfUnused(bitmap);
     }
@@ -1533,8 +1534,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         // Display properties and both caches share bitmap instances. Releasing a
         // display slot does not release a stage still owned by the same result.
-        if (ReferenceEquals(candidate, Preview) || ReferenceEquals(candidate, OriginalPreview)
-            || ReferenceEquals(candidate, CorrectedPreview) || _stageBitmaps.ContainsValue(candidate))
+        if (ReferenceEquals(candidate, Stage.Preview) || ReferenceEquals(candidate, Stage.OriginalPreview)
+            || ReferenceEquals(candidate, Stage.CorrectedPreview) || _stageBitmaps.ContainsValue(candidate))
         {
             return;
         }
@@ -1570,20 +1571,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void UpdateDisplayedPreview()
     {
-        if (!string.IsNullOrWhiteSpace(LastPreviewDir))
+        if (!string.IsNullOrWhiteSpace(Stage.LastPreviewDir))
         {
             ApplyStagePreview();
         }
 
-        if (Preview is null || !TryBitmapSize(Preview, out _, out _))
+        if (Stage.Preview is null || !TryBitmapSize(Stage.Preview, out _, out _))
         {
-            Preview = ShowCorrected && CorrectedPreview is not null ? CorrectedPreview : OriginalPreview;
+            Stage.Preview = Stage.ShowCorrected && Stage.CorrectedPreview is not null ? Stage.CorrectedPreview : Stage.OriginalPreview;
         }
         if (_sourceWidth > 1 && _sourceHeight > 1)
         {
             Workspace.ImageMeta = $"{_sourceWidth} × {_sourceHeight}";
         }
-        else if (Preview is not null && TryBitmapSize(Preview, out var width, out var height))
+        else if (Stage.Preview is not null && TryBitmapSize(Stage.Preview, out var width, out var height))
         {
             SetSourceSize(width, height);
         }
@@ -1650,25 +1651,25 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void RefreshOverlay()
     {
-        var original = StageName == "Original";
+        var original = Stage.StageName == "Original";
         var handshake = original ? Workspace.Active?.Handshake : null;
-        OverlayHandshake = handshake is { Ok: true } ? handshake : null;
+        Stage.OverlayHandshake = handshake is { Ok: true } ? handshake : null;
         // Plane is detected on the white card. Draw it only on that still.
         var plane = original && ActiveIsWhiteRef()
             ? _loadedModelPlane ?? Workspace.Active?.FfcPlane ?? Session.Select(item => item.FfcPlane).FirstOrDefault(p => p is { IsValid: true })
             : null;
-        OverlayPlane = plane is { IsValid: true } ? plane : null;
-        OverlayBadge = OverlayHandshake is { Ok: true }
-            ? ColorSpaces.ChartLabel(OverlayHandshake.ChartType)
-            : OverlayPlane?.Badge ?? "";
-        if (OverlayPlane is { } p)
+        Stage.OverlayPlane = plane is { IsValid: true } ? plane : null;
+        Stage.OverlayBadge = Stage.OverlayHandshake is { Ok: true }
+            ? ColorSpaces.ChartLabel(Stage.OverlayHandshake.ChartType)
+            : Stage.OverlayPlane?.Badge ?? "";
+        if (Stage.OverlayPlane is { } p)
         {
             var (x, y, w, h) = p.MapToSource(Math.Max(1, _sourceWidth), Math.Max(1, _sourceHeight));
-            OverlayPlaneRect = new Rect(x, y, w, h);
+            Stage.OverlayPlaneRect = new Rect(x, y, w, h);
         }
         else
         {
-            OverlayPlaneRect = default;
+            Stage.OverlayPlaneRect = default;
         }
 
         OnPropertyChanged(nameof(ShowChartOverlay));
@@ -1819,7 +1820,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             DoWb = Settings.DoWb,
             DoCc = Settings.DoCc,
             WhiteImagePath = Settings.WhiteImagePath,
-            CropRect = CropRect,
+            CropRect = Stage.CropRect,
             FfcFitMethod = Settings.SelectedFfcFitMethod?.Value ?? "poly",
             FfcBins = (int)Math.Clamp(Settings.FfcBins, 4, 200),
             FfcSmoothWindow = (int)Math.Clamp(Settings.FfcSmoothWindow, 1, 51),
@@ -2178,16 +2179,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : [],
         ActivePath = includeItems ? Workspace.Active?.Path ?? "" : "",
         Options = BuildOptions(),
-        Crop = Crop,
+        Crop = Stage.Crop,
         Theme = IsLightTheme ? "Light" : "Dark",
         TrustedOutputDirs = _trusted.ToList(),
         CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
         ForceCpu = Compute.ForceCpu,
         AccelPolicy = Compute.SelectedAccelPolicy.Value,
-        ShowLattice = ShowLattice,
-        ShowSample = ShowSample,
-        ShowDim = ShowDim,
-        ShowPlane = ShowPlane,
+        ShowLattice = Stage.ShowLattice,
+        ShowSample = Stage.ShowSample,
+        ShowDim = Stage.ShowDim,
+        ShowPlane = Stage.ShowPlane,
     };
 
     private void RestoreSession()
@@ -2218,8 +2219,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
 
             ApplyOptions(state.Options);
-            Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
-            OverlayCrop = Crop;
+            Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
+            Stage.OverlayCrop = Stage.Crop;
             IsLightTheme = string.Equals(state.Theme, "Light", StringComparison.OrdinalIgnoreCase);
             var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
                 ? state.AccelPolicy
@@ -2227,10 +2228,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             Compute.SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
             Compute.ForceCpu = state.ForceCpu || policy == "cpu";
             _worker.Policy = Compute.SelectedAccelPolicy.Value;
-            ShowLattice = state.ShowLattice ?? true;
-            ShowSample = state.ShowSample ?? true;
-            ShowDim = state.ShowDim ?? true;
-            ShowPlane = state.ShowPlane ?? true;
+            Stage.ShowLattice = state.ShowLattice ?? true;
+            Stage.ShowSample = state.ShowSample ?? true;
+            Stage.ShowDim = state.ShowDim ?? true;
+            Stage.ShowPlane = state.ShowPlane ?? true;
 
             LoadCatalog();
             RefreshSessionUi();
@@ -2254,8 +2255,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             if (state.HasOptions)
             {
                 ApplyOptions(state.Options);
-                Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
-                OverlayCrop = Crop;
+                Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
+                Stage.OverlayCrop = Stage.Crop;
             }
             RestoreWorkingItemsCore(state);
             var skipped = state.Items.Count - Session.Count;
@@ -2280,12 +2281,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Session.Clear();
         Workspace.Active = null;
         _rangeAnchor = null;
-        LastPreviewDir = "";
+        Stage.LastPreviewDir = "";
         SetPreview(null, null);
-        OverlayHandshake = null;
+        Stage.OverlayHandshake = null;
         Workspace.HasImage = false;
         Workspace.HasCorrected = false;
-        ShowFacePicker = false;
+        Stage.ShowFacePicker = false;
         FaceOptions.Clear();
         ClearPicker();
         ApplyReport(null);
@@ -2402,7 +2403,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.DoWb = options.DoWb;
         Settings.DoCc = options.DoCc;
         Settings.WhiteImagePath = options.WhiteImagePath;
-        CropRect = options.CropRect;
+        Stage.CropRect = options.CropRect;
         Settings.SelectedFfcFitMethod = Pick(FfcFitMethods, string.IsNullOrWhiteSpace(options.FfcFitMethod) ? "poly" : options.FfcFitMethod);
         Settings.FfcBins = Math.Clamp(options.FfcBins, 4, 200);
         Settings.FfcSmoothWindow = Math.Clamp(options.FfcSmoothWindow, 1, 51);
@@ -2543,25 +2544,25 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void SyncDisplaySize()
     {
-        if (Preview is not null && TryBitmapSize(Preview, out var width, out var height))
+        if (Stage.Preview is not null && TryBitmapSize(Stage.Preview, out var width, out var height))
         {
-            NaturalWidth = width;
-            NaturalHeight = height;
+            Stage.NaturalWidth = width;
+            Stage.NaturalHeight = height;
         }
         else if (_sourceWidth > 1)
         {
             var scale = Math.Min(1.0, PreviewMaxWidth / (double)_sourceWidth);
-            NaturalWidth = Math.Max(1, _sourceWidth * scale);
-            NaturalHeight = Math.Max(1, _sourceHeight * scale);
+            Stage.NaturalWidth = Math.Max(1, _sourceWidth * scale);
+            Stage.NaturalHeight = Math.Max(1, _sourceHeight * scale);
         }
         else
         {
-            NaturalWidth = 1;
-            NaturalHeight = 1;
+            Stage.NaturalWidth = 1;
+            Stage.NaturalHeight = 1;
         }
 
-        OverlayScaleX = NaturalWidth / Math.Max(1, _sourceWidth);
-        OverlayScaleY = NaturalHeight / Math.Max(1, _sourceHeight);
+        Stage.OverlayScaleX = Stage.NaturalWidth / Math.Max(1, _sourceWidth);
+        Stage.OverlayScaleY = Stage.NaturalHeight / Math.Max(1, _sourceHeight);
     }
 
     private static int MapSourceToPreview(int source, int sourceExtent, int previewExtent)
@@ -2692,7 +2693,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             {
                 var evict = _originalCache.FirstOrDefault(row =>
                     !PathIdentity.Equal(row.Key, path)
-                    && !ReferenceEquals(row.Value.Bitmap, OriginalPreview));
+                    && !ReferenceEquals(row.Value.Bitmap, Stage.OriginalPreview));
                 if (evict.Key is null)
                 {
                     break;
@@ -2793,7 +2794,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
             if (item.PreviewSuppressed) { corrected?.Dispose(); corrected = null; }
             SetPreview(original, corrected);
-            Workspace.HasCorrected = CorrectedPreview is not null;
+            Workspace.HasCorrected = Stage.CorrectedPreview is not null;
             ReleaseIfUncached(original);
         }).ConfigureAwait(false);
     }
@@ -2832,11 +2833,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 return;
             }
 
-            SetPreview(OriginalPreview, corrected);
-            Workspace.HasCorrected = CorrectedPreview is not null;
-            if (Workspace.HasCorrected && StageName is "Original" or "Corrected")
+            SetPreview(Stage.OriginalPreview, corrected);
+            Workspace.HasCorrected = Stage.CorrectedPreview is not null;
+            if (Workspace.HasCorrected && Stage.StageName is "Original" or "Corrected")
             {
-                ShowCorrected = true;
+                Stage.ShowCorrected = true;
             }
         }).ConfigureAwait(false);
     }
@@ -3027,18 +3028,18 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void OnNnEpochsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnNnPatienceChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnNnTolChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnShowLatticeChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnShowSampleChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnShowDimChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnShowPlaneChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnShowLatticeChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnShowSampleChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnShowDimChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnShowPlaneChanged(bool value) { if (!_restoring) ScheduleSave(); }
     private void OnSampleQueryChanged(string value) => RefreshFilteredSamples();
     private void OnSelectedGroupChanged(string value) => RefreshFilteredSamples();
-    partial void OnCropChanged(double value)
+    private void OnCropChanged(double value)
     {
         OnPropertyChanged(nameof(CropLabel));
         if (_restoring)
         {
-            OverlayCrop = value;
+            Stage.OverlayCrop = value;
             return;
         }
 
@@ -3051,7 +3052,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             try
             {
                 await Task.Delay(80, token).ConfigureAwait(false);
-                await OnUi(() => OverlayCrop = value).ConfigureAwait(false);
+                await OnUi(() => Stage.OverlayCrop = value).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -3062,7 +3063,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     partial void OnBatchProgressChanged(double value) => BatchProgressPct = $"{value:0}%";
     partial void OnJobProgressChanged(double value) => JobProgressPct = $"{value:0}%";
 
-    partial void OnFaceIndexChanged(int value)
+    private void OnFaceIndexChanged(int value)
     {
         OnPropertyChanged(nameof(SelectedFace));
         SyncFaceChoice();
@@ -3128,12 +3129,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnHasCorrectedChanged(bool value) => OnPropertyChanged(nameof(HasStageCorrected));
 
-    partial void OnShowCorrectedChanged(bool value)
+    private void OnShowCorrectedChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowOriginal));
-        if (value && StageName != "Corrected")
+        if (value && Stage.StageName != "Corrected")
         {
-            StageName = "Corrected";
+            Stage.StageName = "Corrected";
         }
 
         UpdateDisplayedPreview();

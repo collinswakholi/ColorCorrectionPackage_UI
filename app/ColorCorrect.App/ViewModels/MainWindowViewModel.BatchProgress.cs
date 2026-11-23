@@ -134,7 +134,7 @@ public partial class MainWindowViewModel
         item.PreviewSuppressed = false;
         OnPropertyChanged(nameof(IsResultPreviewSuppressed));
         await LoadCorrectedPreviewAsync(item);
-        StageName = "Corrected";
+        Stage.StageName = "Corrected";
         ApplyStagePreview();
         NotifyStageRadios();
         ScheduleSave();

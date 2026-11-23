@@ -174,7 +174,7 @@ public sealed class CompletedWorkflowTests
             vm.RestoreLoadedModelSettings(model);
             Assert.Equal(method, vm.Settings.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.Settings.FfcBins); Assert.Equal(3m, vm.Settings.FfcSmoothWindow);
             Assert.Equal(4m, vm.Settings.FfcDegree); Assert.Equal(90m, vm.Settings.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.Settings.FfcTol);
-            Assert.Equal("1,2,30,40", vm.CropRect); Assert.False(vm.Settings.DoGc); Assert.True(vm.Settings.DoFfc);
+            Assert.Equal("1,2,30,40", vm.Stage.CropRect); Assert.False(vm.Settings.DoGc); Assert.True(vm.Settings.DoFfc);
             Assert.Null(vm.OperationError(false));
             File.WriteAllText(white, "white B"); Assert.Contains("white reference changed", vm.OperationError(false));
             File.WriteAllText(white, "white A"); File.WriteAllText(model, "{}"); Assert.Contains("model changed", vm.OperationError(false));

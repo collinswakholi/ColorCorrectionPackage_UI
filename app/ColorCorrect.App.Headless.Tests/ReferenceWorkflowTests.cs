@@ -61,7 +61,7 @@ public sealed class ReferenceWorkflowTests
         using var item=new SessionItemViewModel("reference-workflow-missing.png");item.ApplyHandshake(Handshake("s"));
         vm.Session.Add(item);vm.Workspace.Active=item;
         item.IsCorrected=true;item.IncludeInSave=true;item.CorrectedPath=corrected;item.ModelPath=model;item.PreviewDir=directory;
-        vm.LastPreviewDir=directory;vm.Workspace.HasCorrected=true;vm.ShowCorrected=true;
+        vm.Stage.LastPreviewDir=directory;vm.Workspace.HasCorrected=true;vm.Stage.ShowCorrected=true;
         var generation=item.ApplyGeneration;
         try
         {
@@ -69,7 +69,7 @@ public sealed class ReferenceWorkflowTests
             vm.AssignReference(item,"s:a",Profile("new-reference"));
             Assert.False(item.IsCorrected);Assert.False(item.IncludeInSave);Assert.False(item.HasSaveable);
             Assert.Empty(item.CorrectedPath);Assert.Empty(item.ModelPath);Assert.Empty(item.PreviewDir);
-            Assert.False(vm.Workspace.HasCorrected);Assert.False(vm.ShowCorrected);Assert.Empty(vm.LastPreviewDir);Assert.Null(vm.CorrectedPreview);
+            Assert.False(vm.Workspace.HasCorrected);Assert.False(vm.Stage.ShowCorrected);Assert.Empty(vm.Stage.LastPreviewDir);Assert.Null(vm.Stage.CorrectedPreview);
             Assert.True(item.ApplyGeneration>generation);
             Assert.True(File.Exists(corrected));Assert.True(File.Exists(model));
         }

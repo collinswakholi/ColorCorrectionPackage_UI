@@ -105,12 +105,12 @@ public sealed class MainWindowHeadlessTests
                 // A cold decode is asynchronous. Never compare a transient blank
                 // canvas to the populated reference, or depend on a warm disk cache.
                 var previewDeadline = DateTime.UtcNow.AddSeconds(10);
-                while ((vm.OriginalPreview is null || vm.FilteredSamples.Any(item => item.Thumb is null)) && DateTime.UtcNow < previewDeadline)
+                while ((vm.Stage.OriginalPreview is null || vm.FilteredSamples.Any(item => item.Thumb is null)) && DateTime.UtcNow < previewDeadline)
                 {
                     await Task.Delay(20);
                     Dispatcher.UIThread.RunJobs();
                 }
-                Assert.NotNull(vm.OriginalPreview);
+                Assert.NotNull(vm.Stage.OriginalPreview);
                 Assert.All(vm.FilteredSamples, item => Assert.NotNull(item.Thumb));
                 Dispatcher.UIThread.RunJobs();
 

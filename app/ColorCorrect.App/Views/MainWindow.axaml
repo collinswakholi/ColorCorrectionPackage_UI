@@ -658,10 +658,10 @@
                                     <TextBlock x:Name="DetectStatus" Text="{Binding CurrentStage}" Classes="caption"
                                                Margin="0,0,0,6" IsVisible="{Binding Busy}"/>
                                     <TextBlock Text="Chart face" Classes="caption" Margin="0,0,0,4"
-                                               IsVisible="{Binding ShowFacePicker}"/>
+                                               IsVisible="{Binding Stage.ShowFacePicker}"/>
                                     <ComboBox x:Name="ChartFaceSelect" Classes="config"
                                               ItemsSource="{Binding FaceOptions}" SelectedItem="{Binding SelectedFace}"
-                                              IsVisible="{Binding ShowFacePicker}" Margin="0,0,0,6"
+                                              IsVisible="{Binding Stage.ShowFacePicker}" Margin="0,0,0,6"
                                               HorizontalAlignment="Stretch" PlaceholderText="Select face"
                                               AutomationProperties.Name="Chart face selector">
                                         <ComboBox.ItemTemplate>
@@ -675,7 +675,7 @@
                                                    Margin="0,0,8,0"
                                                    Text="{Binding CropLabel, StringFormat='Crop {0}'}"
                                                    Classes="caption" VerticalAlignment="Center"/>
-                                        <Slider x:Name="CropInset" Minimum="0.05" Maximum="1" Value="{Binding Crop}"
+                                        <Slider x:Name="CropInset" Minimum="0.05" Maximum="1" Value="{Binding Stage.Crop}"
                                                 MinWidth="0" MinHeight="28" VerticalAlignment="Center"
                                                 ToolTip.Tip="Patch inset for detect and fit. Used on still images."
                                                 AutomationProperties.Name="Patch crop inset"/>
@@ -1055,7 +1055,7 @@
                                     </StackPanel>
 
                                     <controls:ZoomPanView x:Name="OriginalStage" IsVisible="{Binding ShowStillPreview}">
-                                        <Grid Width="{Binding NaturalWidth}" Height="{Binding NaturalHeight}"
+                                        <Grid Width="{Binding Stage.NaturalWidth}" Height="{Binding Stage.NaturalHeight}"
                                               Cursor="Cross"
                                               PointerMoved="OnStageMoved"
                                               PointerExited="OnStageExited"
@@ -1077,20 +1077,20 @@
                                                               AutomationProperties.Name="Copy pixel color"/>
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
-                                            <Image x:Name="InputImage" Source="{Binding Preview}" Stretch="Fill"/>
+                                            <Image x:Name="InputImage" Source="{Binding Stage.Preview}" Stretch="Fill"/>
                                             <controls:ChartOverlay x:Name="QuadOverlay"
-                                                                   Handshake="{Binding OverlayHandshake}"
-                                                                   FaceChoice="{Binding OverlayFaceChoice}"
-                                                                   Crop="{Binding OverlayCrop}"
-                                                                   UseAllFaces="{Binding UseAllFaces}"
-                                                                   ShowLattice="{Binding ShowLattice}"
-                                                                   ShowSample="{Binding ShowSample}"
-                                                                   ShowDim="{Binding ShowDim}"
-                                                                   ShowPlane="{Binding ShowPlane}"
-                                                                   PlaneRect="{Binding OverlayPlaneRect}"
+                                                                   Handshake="{Binding Stage.OverlayHandshake}"
+                                                                   FaceChoice="{Binding Stage.OverlayFaceChoice}"
+                                                                   Crop="{Binding Stage.OverlayCrop}"
+                                                                   UseAllFaces="{Binding Stage.UseAllFaces}"
+                                                                   ShowLattice="{Binding Stage.ShowLattice}"
+                                                                   ShowSample="{Binding Stage.ShowSample}"
+                                                                   ShowDim="{Binding Stage.ShowDim}"
+                                                                   ShowPlane="{Binding Stage.ShowPlane}"
+                                                                   PlaneRect="{Binding Stage.OverlayPlaneRect}"
                                                                    DisplayScale="{Binding #OriginalStage.Scale}"
-                                                                   OverlayScaleX="{Binding OverlayScaleX}"
-                                                                   OverlayScaleY="{Binding OverlayScaleY}"
+                                                                   OverlayScaleX="{Binding Stage.OverlayScaleX}"
+                                                                   OverlayScaleY="{Binding Stage.OverlayScaleY}"
                                                                    IsHitTestVisible="False"/>
                                             <Canvas IsHitTestVisible="False">
                                                 <Border x:Name="PickerPin" Classes="pickerPin"
@@ -1128,7 +1128,7 @@
                                     <Border x:Name="OverlayBadge" Classes="overlayBadge"
                                             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"
                                             IsVisible="{Binding ShowOverlayChrome}">
-                                        <TextBlock Text="{Binding OverlayBadge}" Classes="caption"
+                                        <TextBlock Text="{Binding Stage.OverlayBadge}" Classes="caption"
                                                    Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     </Border>
                                     <Border x:Name="OverlayLegend" Classes="overlayStrip"
@@ -1136,19 +1136,19 @@
                                             IsVisible="{Binding ShowOverlayChrome}">
                                         <controls:FitWrapPanel Orientation="Horizontal">
                                             <ToggleButton x:Name="ToggleDim" Content="Focus" Theme="{StaticResource OverlayToggleButton}"
-                                                          IsChecked="{Binding ShowDim}"
+                                                          IsChecked="{Binding Stage.ShowDim}"
                                                           IsVisible="{Binding ShowOverlayLegend}"
                                                           AutomationProperties.Name="Focus chart"/>
                                             <ToggleButton x:Name="ToggleLattice" Content="Lattice" Theme="{StaticResource OverlayToggleButton}"
-                                                          IsChecked="{Binding ShowLattice}"
+                                                          IsChecked="{Binding Stage.ShowLattice}"
                                                           IsVisible="{Binding ShowOverlayLegend}"
                                                           AutomationProperties.Name="Show lattice"/>
                                             <ToggleButton x:Name="ToggleSample" Content="Sample" Theme="{StaticResource OverlayToggleButton}"
-                                                          IsChecked="{Binding ShowSample}"
+                                                          IsChecked="{Binding Stage.ShowSample}"
                                                           IsVisible="{Binding ShowOverlayLegend}"
                                                           AutomationProperties.Name="Show sample cells"/>
                                             <ToggleButton x:Name="TogglePlane" Content="Plane" Theme="{StaticResource OverlayToggleButton}"
-                                                          IsChecked="{Binding ShowPlane}"
+                                                          IsChecked="{Binding Stage.ShowPlane}"
                                                           IsVisible="{Binding ShowPlaneToggle}"
                                                           AutomationProperties.Name="Show FFC plane"/>
                                         </controls:FitWrapPanel>
@@ -1157,7 +1157,7 @@
                                         <Border x:Name="PickerLoupe" Classes="pickerLoupe"
                                                 Canvas.Left="{Binding Picker.LoupeLeft}" Canvas.Top="{Binding Picker.LoupeTop}"
                                                 IsVisible="{Binding Picker.ShowLoupe}">
-                                            <controls:PickerLoupeControl Source="{Binding Preview}"
+                                            <controls:PickerLoupeControl Source="{Binding Stage.Preview}"
                                                                          PixelX="{Binding Picker.LoupePixelX}"
                                                                          PixelY="{Binding Picker.LoupePixelY}"/>
                                         </Border>
@@ -1183,13 +1183,13 @@
                                         </StackPanel>
                                     </Border>
                                     <Border x:Name="StageLoading" Classes="stageLoading"
-                                            IsVisible="{Binding IsStagePreviewLoading}"
-                                            AutomationProperties.Name="{Binding StagePreviewLoadingLabel}">
+                                            IsVisible="{Binding Stage.IsStagePreviewLoading}"
+                                            AutomationProperties.Name="{Binding Stage.StagePreviewLoadingLabel}">
                                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                                             <Path Classes="spinner" Width="32" Height="32"
                                                   Data="{StaticResource SpinnerGeometry}"
                                                   Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="3"/>
-                                            <TextBlock Text="{Binding StagePreviewLoadingLabel}" Classes="caption"
+                                            <TextBlock Text="{Binding Stage.StagePreviewLoadingLabel}" Classes="caption"
                                                        HorizontalAlignment="Center"
                                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>

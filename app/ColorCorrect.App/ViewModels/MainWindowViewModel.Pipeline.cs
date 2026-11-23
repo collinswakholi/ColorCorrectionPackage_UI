@@ -33,12 +33,7 @@ public partial class MainWindowViewModel
         new("auto", "Auto (recommended)"), new("cpu", "CPU"), new("gpu", "GPU")
     };
 
-    [ObservableProperty] private string _cropRect = "";
-    [ObservableProperty] private string _stageName = "Original";
-    [ObservableProperty] private bool _isStagePreviewLoading;
-    [ObservableProperty] private string _stagePreviewLoadingLabel = "";
     private bool _accelSync;
-    [ObservableProperty] private string _lastPreviewDir = "";
     private readonly Dictionary<string, Bitmap> _stageBitmaps = new(StringComparer.OrdinalIgnoreCase);
     private string _usedDetect = "";
     private string _detectFallback = "";
@@ -50,43 +45,43 @@ public partial class MainWindowViewModel
 
     public bool IsStageOriginal
     {
-        get => StageName == "Original";
-        set { if (value) StageName = "Original"; }
+        get => Stage.StageName == "Original";
+        set { if (value) Stage.StageName = "Original"; }
     }
 
     public bool IsStageFfc
     {
-        get => StageName == "FFC";
-        set { if (value) StageName = "FFC"; }
+        get => Stage.StageName == "FFC";
+        set { if (value) Stage.StageName = "FFC"; }
     }
 
     public bool IsStageGc
     {
-        get => StageName == "GC";
-        set { if (value) StageName = "GC"; }
+        get => Stage.StageName == "GC";
+        set { if (value) Stage.StageName = "GC"; }
     }
 
     public bool IsStageWb
     {
-        get => StageName == "WB";
-        set { if (value) StageName = "WB"; }
+        get => Stage.StageName == "WB";
+        set { if (value) Stage.StageName = "WB"; }
     }
 
     public bool IsStageCc
     {
-        get => StageName == "CC";
-        set { if (value) StageName = "CC"; }
+        get => Stage.StageName == "CC";
+        set { if (value) Stage.StageName = "CC"; }
     }
 
     public bool IsStageCorrected
     {
-        get => StageName == "Corrected";
-        set { if (value) StageName = "Corrected"; }
+        get => Stage.StageName == "Corrected";
+        set { if (value) Stage.StageName = "Corrected"; }
     }
 
-    public bool IsFfcPreviewLoading => IsStagePreviewLoading && StageName == "FFC";
-    public bool IsGcPreviewLoading => IsStagePreviewLoading && StageName == "GC";
-    public bool IsWbPreviewLoading => IsStagePreviewLoading && StageName == "WB";
+    public bool IsFfcPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "FFC";
+    public bool IsGcPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "GC";
+    public bool IsWbPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "WB";
 
     public bool HasStageFfc => ResultStageEnabled(Workspace.Active, "ffc") && (Workspace.Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
     public bool HasStageGc => ResultStageEnabled(Workspace.Active, "gc") && (Workspace.Active?.IsCorrected == true || StageFileExists("gc.jpg"));
@@ -101,7 +96,7 @@ public partial class MainWindowViewModel
     public bool ShowFfcDegree => Settings.SelectedFfcFitMethod.Value != "linear";
 
     private bool StageFileExists(string file) =>
-        ResolvePreviewFile(LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
+        ResolvePreviewFile(Stage.LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
 
     internal static string? ResolvePreviewFile(string? dir, string stem)
     {
@@ -391,18 +386,18 @@ public partial class MainWindowViewModel
         }).ConfigureAwait(false);
     }
 
-    partial void OnStageNameChanged(string value)
+    private void OnStageNameChanged(string value)
     {
         if (value == "Corrected")
         {
-            if (!ShowCorrected)
+            if (!Stage.ShowCorrected)
             {
-                ShowCorrected = true;
+                Stage.ShowCorrected = true;
             }
         }
-        else if (ShowCorrected)
+        else if (Stage.ShowCorrected)
         {
-            ShowCorrected = false;
+            Stage.ShowCorrected = false;
         }
 
         NotifyStageRadios();
@@ -534,7 +529,7 @@ public partial class MainWindowViewModel
         }
     }
     private void OnPhase2TeacherChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnLastPreviewDirChanged(string value)
+    private void OnLastPreviewDirChanged(string value)
     {
         ClearStageBitmaps();
         NotifyStageRadios();
@@ -567,24 +562,24 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsWbPreviewLoading));
     }
 
-    partial void OnIsStagePreviewLoadingChanged(bool value) => NotifyStageRadios();
+    private void OnIsStagePreviewLoadingChanged(bool value) => NotifyStageRadios();
 
     private static bool IsDeferredStage(string stage) =>
         stage is "FFC" or "GC" or "WB";
 
     private bool HasReadyStageBitmap(string stage)
     {
-        var stem = StagePreviewStem(stage, ResolvePreviewFile(LastPreviewDir, "cc") is not null);
+        var stem = StagePreviewStem(stage, ResolvePreviewFile(Stage.LastPreviewDir, "cc") is not null);
         return _stageBitmaps.ContainsKey(stem);
     }
 
     private void SyncStagePreviewLoading()
     {
-        var loading = IsDeferredStage(StageName)
+        var loading = IsDeferredStage(Stage.StageName)
             && Workspace.Active?.IsCorrected == true
-            && !HasReadyStageBitmap(StageName);
-        IsStagePreviewLoading = loading;
-        StagePreviewLoadingLabel = loading ? $"Loading {StageName}" : "";
+            && !HasReadyStageBitmap(Stage.StageName);
+        Stage.IsStagePreviewLoading = loading;
+        Stage.StagePreviewLoadingLabel = loading ? $"Loading {Stage.StageName}" : "";
     }
 
     private static string StagePreviewStem(string stage, bool preferCc)
@@ -611,8 +606,8 @@ public partial class MainWindowViewModel
 
     private void ShowStageBitmap(Bitmap next)
     {
-        var old = Preview;
-        Preview = next;
+        var old = Stage.Preview;
+        Stage.Preview = next;
         DisposeIfUnused(old);
 
         SyncStagePreviewLoading();
@@ -620,47 +615,47 @@ public partial class MainWindowViewModel
 
     private void ApplyStagePreview()
     {
-        if (Workspace.Active?.PreviewSuppressed == true && StageName != "Original") return;
-        if (StageName == "Original")
+        if (Workspace.Active?.PreviewSuppressed == true && Stage.StageName != "Original") return;
+        if (Stage.StageName == "Original")
         {
-            if (OriginalPreview is not null)
+            if (Stage.OriginalPreview is not null)
             {
-                ShowStageBitmap(OriginalPreview);
+                ShowStageBitmap(Stage.OriginalPreview);
             }
 
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(LastPreviewDir))
+        if (string.IsNullOrWhiteSpace(Stage.LastPreviewDir))
         {
-            if (StageName == "Corrected" && CorrectedPreview is not null)
+            if (Stage.StageName == "Corrected" && Stage.CorrectedPreview is not null)
             {
-                Preview = CorrectedPreview;
+                Stage.Preview = Stage.CorrectedPreview;
             }
-            else if (OriginalPreview is not null)
+            else if (Stage.OriginalPreview is not null)
             {
-                Preview = OriginalPreview;
+                Stage.Preview = Stage.OriginalPreview;
             }
 
             return;
         }
 
-        var name = StagePreviewStem(StageName, ResolvePreviewFile(LastPreviewDir, "cc") is not null);
+        var name = StagePreviewStem(Stage.StageName, ResolvePreviewFile(Stage.LastPreviewDir, "cc") is not null);
         if (_stageBitmaps.TryGetValue(name, out var cached))
         {
             ShowStageBitmap(cached);
             return;
         }
 
-        var path = ResolvePreviewFile(LastPreviewDir, name);
+        var path = ResolvePreviewFile(Stage.LastPreviewDir, name);
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
 
         var gen = ++_stageLoadGen;
-        var stage = StageName;
-        var dir = LastPreviewDir;
+        var stage = Stage.StageName;
+        var dir = Stage.LastPreviewDir;
         _ = Task.Run(async () =>
         {
             Bitmap? next = null;
@@ -675,7 +670,7 @@ public partial class MainWindowViewModel
 
             await OnUi(() =>
             {
-                if (gen != _stageLoadGen || next is null || LastPreviewDir != dir)
+                if (gen != _stageLoadGen || next is null || Stage.LastPreviewDir != dir)
                 {
                     next?.Dispose();
                     return;
@@ -684,7 +679,7 @@ public partial class MainWindowViewModel
                 if (_stageBitmaps.TryGetValue(name, out var existing))
                 {
                     next.Dispose();
-                    if (StageName == stage)
+                    if (Stage.StageName == stage)
                     {
                         ShowStageBitmap(existing);
                     }
@@ -693,7 +688,7 @@ public partial class MainWindowViewModel
                 }
 
                 _stageBitmaps[name] = next;
-                if (StageName == stage)
+                if (Stage.StageName == stage)
                 {
                     ShowStageBitmap(next);
                 }
@@ -735,7 +730,7 @@ public partial class MainWindowViewModel
         }
 
         var model = item.CompletedContext?.Model.Path ?? "";
-        var previewDir = !string.IsNullOrWhiteSpace(item.PreviewDir) ? item.PreviewDir : LastPreviewDir;
+        var previewDir = !string.IsNullOrWhiteSpace(item.PreviewDir) ? item.PreviewDir : Stage.LastPreviewDir;
         if (!File.Exists(model) || string.IsNullOrWhiteSpace(previewDir))
         {
             FailStagePreview(stage);
@@ -775,8 +770,8 @@ public partial class MainWindowViewModel
 
     internal void FailStagePreview(string stage)
     {
-        StageName = HasStageCorrected ? "Corrected" : "Original";
-        IsStagePreviewLoading = false;
+        Stage.StageName = HasStageCorrected ? "Corrected" : "Original";
+        Stage.IsStagePreviewLoading = false;
         Log("Preview", $"Could not load {stage} preview. Check that the saved model and its assets are available.", LogLevel.Warning);
     }
 

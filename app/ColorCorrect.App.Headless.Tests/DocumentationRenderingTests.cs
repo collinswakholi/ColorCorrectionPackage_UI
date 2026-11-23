@@ -34,12 +34,12 @@ public sealed class DocumentationRenderingTests
             vm.UseWhitePath(Path.Combine(corpus, "blank.jpg"));
             vm.AddPaths([Path.Combine(corpus, "chart.jpg"), Path.Combine(corpus, "sample.jpg")]);
             var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (vm.OriginalPreview is null && DateTime.UtcNow < deadline)
+            while (vm.Stage.OriginalPreview is null && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(20);
                 Dispatcher.UIThread.RunJobs();
             }
-            Assert.NotNull(vm.OriginalPreview);
+            Assert.NotNull(vm.Stage.OriginalPreview);
             Dispatcher.UIThread.RunJobs();
             var processTop = window.ProcessToggle.TranslatePoint(default, window.SidebarScroll);
             Assert.NotNull(processTop);

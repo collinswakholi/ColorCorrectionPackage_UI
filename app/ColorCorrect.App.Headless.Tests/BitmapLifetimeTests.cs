@@ -20,7 +20,7 @@ public sealed class BitmapLifetimeTests
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         using var bitmap = PreviewRgb.FromRgb(2, 2, new byte[12]);
         var cache = (Dictionary<string, Bitmap>)typeof(MainWindowViewModel).GetField("_stageBitmaps", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
-        cache["corrected"] = bitmap; vm.Preview = bitmap;
+        cache["corrected"] = bitmap; vm.Stage.Preview = bitmap;
         typeof(MainWindowViewModel).GetMethod("SetPreview", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(vm, [null, null]);
         Assert.Equal(2, cache["corrected"].PixelSize.Width);
         cache.Clear();
@@ -91,23 +91,23 @@ public sealed class BitmapLifetimeTests
             var (loaded, error) = SessionStore.TryLoadFrom(session); Assert.Null(error);
             window.Show(); vm.RestoreWorkingItems(loaded);
             var stages = (Dictionary<string, Bitmap>)typeof(MainWindowViewModel).GetField("_stageBitmaps", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm)!;
-            await Until(() => vm.Preview is not null && vm.CorrectedPreview is not null && stages.ContainsKey("corrected"));
+            await Until(() => vm.Stage.Preview is not null && vm.Stage.CorrectedPreview is not null && stages.ContainsKey("corrected"));
             Assert.True(vm.Workspace.Active!.IsMissing);
             Assert.True(SessionStore.Write(Path.Combine(root, "unresolved.json"), loaded));
             vm.Dialogs = new RelinkDialogs(moved);
             await vm.RelinkImageCommand.ExecuteAsync(null);
-            await Until(() => vm.OriginalPreview is not null && vm.Workspace.Active?.Thumb is not null);
+            await Until(() => vm.Stage.OriginalPreview is not null && vm.Workspace.Active?.Thumb is not null);
             Assert.False(vm.Workspace.Active!.IsMissing); Assert.NotNull(vm.Workspace.Active.CompletedContext); Assert.Equal(moved, vm.Workspace.Active.Path);
             for (var cycle = 0; cycle < 5; cycle++)
             {
                 foreach (var stage in new[] { "GC", "Corrected", "Original" })
                 {
-                    vm.StageName = stage;
-                    await Until(() => stage == "Original" ? ReferenceEquals(vm.Preview, vm.OriginalPreview)
-                        : stages.TryGetValue(stage.ToLowerInvariant(), out var stageBitmap) && ReferenceEquals(vm.Preview, stageBitmap));
+                    vm.Stage.StageName = stage;
+                    await Until(() => stage == "Original" ? ReferenceEquals(vm.Stage.Preview, vm.Stage.OriginalPreview)
+                        : stages.TryGetValue(stage.ToLowerInvariant(), out var stageBitmap) && ReferenceEquals(vm.Stage.Preview, stageBitmap));
                     Dispatcher.UIThread.RunJobs();
                     using var rendered = window.CaptureRenderedFrame(); Assert.NotNull(rendered);
-                    Assert.True(vm.Preview!.PixelSize.Width > 0);
+                    Assert.True(vm.Stage.Preview!.PixelSize.Width > 0);
                 }
             }
         }
