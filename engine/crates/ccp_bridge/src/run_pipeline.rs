@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
@@ -12,7 +13,8 @@ use rayon::prelude::*;
 use ccp_core::color::RgbColorSpace;
 use ccp_core::ffc::{
     apply_ffc_gc_fused_inplace, apply_ffc_inplace, apply_ffc_pixel, compute_multiplier,
-    sample_gain_at, FfcFitMethod, FfcFitParams, Upsample,
+    sample_gain_at, FfcFitMethod, FfcFitParams, Upsample, FFC_BINS_RANGE, FFC_DEGREE_RANGE,
+    FFC_NN_MAX_ITER_RANGE, FFC_SMOOTH_RANGE,
 };
 use ccp_core::honest::{cross_validate_correction, delta_e00_in_space};
 use ccp_core::lut::{write_cube, LutPipeline, DEFAULT_LUT_SIZE};
@@ -963,19 +965,44 @@ fn requested_ffc_method(req: &Value) -> Result<FfcFitMethod> {
     }
 }
 
-fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> FfcFitParams {
+fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> Result<FfcFitParams> {
     let ffc = req.get("ffc").cloned().unwrap_or(Value::Null);
-    let mut smooth = json_i64(&ffc, &["smooth", "smooth_window"], 5) as i32;
+    let ranged = |keys: &[&str], name: &str, default: i64, range: RangeInclusive<i64>| {
+        let value = json_i64(&ffc, keys, default);
+        if range.contains(&value) {
+            Ok(value)
+        } else {
+            Err(Error::Message(format!(
+                "ffc.{name} must be an integer from {} to {} (got {value})",
+                range.start(),
+                range.end()
+            )))
+        }
+    };
+    let mut smooth = ranged(
+        &["smooth", "smooth_window"],
+        "smooth_window",
+        5,
+        FFC_SMOOTH_RANGE,
+    )?;
     if smooth % 2 == 0 {
         smooth += 1;
     }
-    FfcFitParams {
+    let bins = ranged(&["bins"], "bins", 50, FFC_BINS_RANGE)?;
+    let degree = ranged(&["degree"], "degree", 5, FFC_DEGREE_RANGE)?;
+    let nn_max_iter = ranged(
+        &["nn_max_iter", "max_iter"],
+        "nn_max_iter",
+        10_000,
+        FFC_NN_MAX_ITER_RANGE,
+    )?;
+    Ok(FfcFitParams {
         method,
-        bins: json_i64(&ffc, &["bins"], 50).max(2) as usize,
-        smooth_window: smooth.max(1),
-        degree: json_i64(&ffc, &["degree"], 5).max(1) as usize,
+        bins: bins as usize,
+        smooth_window: smooth as i32,
+        degree: degree as usize,
         upsample: Upsample::Cubic,
-        nn_max_iter: json_i64(&ffc, &["nn_max_iter", "max_iter"], 10_000).max(1) as usize,
+        nn_max_iter: nn_max_iter as usize,
         tol: {
             let v = json_f64(&ffc, &["tol"], json_f64(req, &["ffc_tol"], 1e-8));
             if v.is_finite() && v > 0.0 {
@@ -994,7 +1021,7 @@ fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> FfcFitParams {
             &["max_val", "ffc_max_val"],
             json_f64(req, &["ffc_max_val"], 1.8),
         ) as f32,
-    }
+    })
 }
 
 fn mapping_from_req(req: &Value) -> MappingOptions {
@@ -1787,7 +1814,7 @@ pub fn run_from_json_ex(
     let crop_rect = json_str(req, &["crop_rect"]).map(str::to_string);
 
     let ffc_params = if do_ffc {
-        ffc_params_from_req(req, requested_ffc_method(req)?)
+        ffc_params_from_req(req, requested_ffc_method(req)?)?
     } else {
         FfcFitParams::default()
     };
@@ -2317,24 +2344,40 @@ impl ApplyOptions {
     }
 
     /// Keep the historical Rust constructor infallible for library callers.
+    /// Out-of-range FFC parameters fall back to the saved/default parameters;
+    /// use [`ApplyOptions::try_from_req`] to reject them instead.
     pub fn from_req(req: &Value, saved: &SavedPipeline) -> Self {
-        Self::with_method(
-            req,
-            saved,
-            requested_ffc_method(req).unwrap_or(FfcFitMethod::Poly),
-        )
+        let method = requested_ffc_method(req).unwrap_or(FfcFitMethod::Poly);
+        let ffc = Self::ffc_from_req(req, saved, method)
+            .unwrap_or_else(|_| saved.ffc_params.clone().unwrap_or_default());
+        Self::with_params(req, saved, ffc)
     }
 
     pub fn try_from_req(req: &Value, saved: &SavedPipeline) -> Result<Self> {
-        let method = if json_bool(req, &["do_ffc"], false) {
-            requested_ffc_method(req)?
+        let ffc = if json_bool(req, &["do_ffc"], false) {
+            let ffc = Self::ffc_from_req(req, saved, requested_ffc_method(req)?)?;
+            ffc.validate()?;
+            ffc
         } else {
-            FfcFitMethod::Poly
+            Self::ffc_from_req(req, saved, FfcFitMethod::Poly)
+                .unwrap_or_else(|_| FfcFitParams::default())
         };
-        Ok(Self::with_method(req, saved, method))
+        Ok(Self::with_params(req, saved, ffc))
     }
 
-    fn with_method(req: &Value, saved: &SavedPipeline, method: FfcFitMethod) -> Self {
+    fn ffc_from_req(
+        req: &Value,
+        saved: &SavedPipeline,
+        method: FfcFitMethod,
+    ) -> Result<FfcFitParams> {
+        if req.get("ffc").is_some() || req.get("ffc_method").is_some() {
+            ffc_params_from_req(req, method)
+        } else {
+            Ok(saved.ffc_params.clone().unwrap_or_default())
+        }
+    }
+
+    fn with_params(req: &Value, saved: &SavedPipeline, ffc: FfcFitParams) -> Self {
         Self {
             fast_mode: json_bool(req, &["fast_mode"], false),
             do_ffc: json_bool(req, &["do_ffc"], false),
@@ -2345,11 +2388,7 @@ impl ApplyOptions {
                 .filter(|s| !s.is_empty())
                 .map(PathBuf::from),
             crop_rect: json_str(req, &["crop_rect"]).map(str::to_string),
-            ffc: if req.get("ffc").is_some() || req.get("ffc_method").is_some() {
-                ffc_params_from_req(req, method)
-            } else {
-                saved.ffc_params.clone().unwrap_or_default()
-            },
+            ffc,
             write_output: json_bool(req, &["write_output"], true),
             preview_mode: PreviewMode::from_req(req),
             ffc_cache: None,
@@ -3084,6 +3123,51 @@ mod tests {
         assert_eq!(
             requested_ffc_method(&json!({"ffc_method":"Polynomial"})).unwrap(),
             FfcFitMethod::Poly
+        );
+    }
+
+    #[test]
+    fn ffc_rejects_out_of_range_active_params_and_accepts_ui_ranges() {
+        let saved = SavedPipeline::default();
+        for (key, bad) in [
+            ("bins", json!(1)),
+            ("bins", json!(1_000_001)),
+            ("degree", json!(0)),
+            ("degree", json!(1_000)),
+            ("smooth_window", json!(0)),
+            ("smooth_window", json!(100_001)),
+            ("nn_max_iter", json!(0)),
+            ("nn_max_iter", json!(1_000_000_000_i64)),
+        ] {
+            let mut req = json!({"do_ffc":true, "ffc":{"method":"nn", key:bad}});
+            let error = ApplyOptions::try_from_req(&req, &saved).unwrap_err();
+            assert!(error.to_string().contains(key), "{key}: {error}");
+            req["do_ffc"] = json!(false);
+            assert!(ApplyOptions::try_from_req(&req, &saved).is_ok());
+            let run = json!({"image":"missing.jpg", "output":"out.jpg", "white":"w.jpg",
+                "do_ffc":true, "ffc":{"method":"nn", key:bad}, "handshake":classic_handshake(40, 30)});
+            let error = run_from_json(&run, &mut |_| {}).unwrap_err();
+            assert!(error.to_string().contains(key), "run {key}: {error}");
+        }
+        // Every value the desktop UI can send (bins 4-200, odd smooth 1-51,
+        // degree 1-7, iterations 50-20000) and the SDK defaults stay valid.
+        for (bins, smooth, degree, iters) in
+            [(4, 1, 1, 50), (200, 51, 7, 20_000), (50, 5, 5, 10_000)]
+        {
+            let req = json!({"do_ffc":true, "ffc":{"method":"nn", "bins":bins,
+                "smooth_window":smooth, "degree":degree, "nn_max_iter":iters}});
+            let options = ApplyOptions::try_from_req(&req, &saved).unwrap();
+            assert_eq!(options.ffc.bins, bins);
+            assert_eq!(options.ffc.degree, degree);
+        }
+        // Historical even-window rounding is preserved.
+        let req = json!({"do_ffc":true, "ffc":{"smooth":4}});
+        assert_eq!(
+            ApplyOptions::try_from_req(&req, &saved)
+                .unwrap()
+                .ffc
+                .smooth_window,
+            5
         );
     }
 

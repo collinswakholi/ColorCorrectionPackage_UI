@@ -69,6 +69,46 @@ impl Default for FfcFitParams {
     }
 }
 
+/// Accepted FFC grid bins per axis (desktop UI offers 4–200).
+pub const FFC_BINS_RANGE: std::ops::RangeInclusive<i64> = 2..=1000;
+/// Accepted odd smoothing window (desktop UI offers 1–51). Even values round up.
+pub const FFC_SMOOTH_RANGE: std::ops::RangeInclusive<i64> = 1..=255;
+/// Accepted polynomial surface degree (desktop UI offers 1–7).
+pub const FFC_DEGREE_RANGE: std::ops::RangeInclusive<i64> = 1..=10;
+/// Accepted NN surface iterations (desktop UI offers 50–20000).
+pub const FFC_NN_MAX_ITER_RANGE: std::ops::RangeInclusive<i64> = 1..=100_000;
+
+fn check_ffc_range(name: &str, value: i64, range: &std::ops::RangeInclusive<i64>) -> Result<()> {
+    if range.contains(&value) {
+        Ok(())
+    } else {
+        Err(Error::InvalidArgument(format!(
+            "ffc.{name} must be an integer from {} to {} (got {value})",
+            range.start(),
+            range.end()
+        )))
+    }
+}
+
+impl FfcFitParams {
+    /// Reject parameters that would make the fit unbounded in time or memory.
+    pub fn validate(&self) -> Result<()> {
+        let as_i64 = |v: usize| i64::try_from(v).unwrap_or(i64::MAX);
+        check_ffc_range("bins", as_i64(self.bins), &FFC_BINS_RANGE)?;
+        check_ffc_range(
+            "smooth_window",
+            i64::from(self.smooth_window),
+            &FFC_SMOOTH_RANGE,
+        )?;
+        check_ffc_range("degree", as_i64(self.degree), &FFC_DEGREE_RANGE)?;
+        check_ffc_range(
+            "nn_max_iter",
+            as_i64(self.nn_max_iter),
+            &FFC_NN_MAX_ITER_RANGE,
+        )
+    }
+}
+
 /// Keep a usable (cut-off, ceiling) pair. Invalid numbers fall back to CCP_rs 1.3 → 1.8.
 pub fn sanitize_ffc_extremity(cut_off: f32, max_val: f32) -> (f32, f32) {
     let cut = if cut_off.is_finite() && cut_off > 0.0 {
@@ -663,6 +703,7 @@ pub fn compute_multiplier(
     crop_rect: Option<[i32; 4]>,
     params: &FfcFitParams,
 ) -> Result<Array2<f32>> {
+    params.validate()?;
     fit_gain_map(white, crop_rect, params)
 }
 
