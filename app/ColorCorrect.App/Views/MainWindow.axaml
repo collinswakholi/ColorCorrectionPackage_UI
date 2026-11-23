@@ -1011,34 +1011,34 @@
                             </Border>
                         </DockPanel>
                         <Border x:Name="ColorPickerReadout" Grid.Row="1" Classes="pickerReadout" Margin="0,8,0,0"
-                                IsVisible="{Binding HasPicker}"
+                                IsVisible="{Binding Picker.HasPick}"
                                 AutomationProperties.Name="Color hover readout">
                             <Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                                     <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="{DynamicResource RadiusMd}"
                                             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                            Background="{Binding PickerBrush}" VerticalAlignment="Center"/>
+                                            Background="{Binding Picker.Brush}" VerticalAlignment="Center"/>
                                     <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,16,2">
                                             <TextBlock Text="xy" Classes="pickerLabel"/>
-                                            <TextBlock x:Name="PickerPixel" Text="{Binding PickerPixel}" Classes="pickerValue"/>
+                                            <TextBlock x:Name="PickerPixel" Text="{Binding Picker.Pixel}" Classes="pickerValue"/>
                                             <Border Classes="hoverHex" VerticalAlignment="Center">
-                                                <TextBlock x:Name="PickerRgb" Text="{Binding PickerHex}" Classes="pickerValue"/>
+                                                <TextBlock x:Name="PickerRgb" Text="{Binding Picker.Hex}" Classes="pickerValue"/>
                                             </Border>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <TextBlock Text="R" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding PickerR}" Classes="pickerValue"/>
+                                            <TextBlock Text="{Binding Picker.R}" Classes="pickerValue"/>
                                             <TextBlock Text="G" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding PickerG}" Classes="pickerValue"/>
+                                            <TextBlock Text="{Binding Picker.G}" Classes="pickerValue"/>
                                             <TextBlock Text="B" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding PickerB}" Classes="pickerValue"/>
+                                            <TextBlock Text="{Binding Picker.B}" Classes="pickerValue"/>
                                             <TextBlock Text="L" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding PickerL}" Classes="pickerValue"/>
+                                            <TextBlock Text="{Binding Picker.L}" Classes="pickerValue"/>
                                             <TextBlock Text="a" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding PickerA}" Classes="pickerValue"/>
+                                            <TextBlock Text="{Binding Picker.A}" Classes="pickerValue"/>
                                             <TextBlock Text="b" Classes="pickerLabel"/>
-                                            <TextBlock x:Name="PickerLab" Text="{Binding PickerLabB}" Classes="pickerValue"/>
+                                            <TextBlock x:Name="PickerLab" Text="{Binding Picker.LabB}" Classes="pickerValue"/>
                                         </StackPanel>
                                     </WrapPanel>
                                 </Grid>
@@ -1094,8 +1094,8 @@
                                                                    IsHitTestVisible="False"/>
                                             <Canvas IsHitTestVisible="False">
                                                 <Border x:Name="PickerPin" Classes="pickerPin"
-                                                        Canvas.Left="{Binding PinX}" Canvas.Top="{Binding PinY}"
-                                                        IsVisible="{Binding ShowPin}"/>
+                                                        Canvas.Left="{Binding Picker.PinX}" Canvas.Top="{Binding Picker.PinY}"
+                                                        IsVisible="{Binding Picker.ShowPin}"/>
                                             </Canvas>
                                         </Grid>
                                     </controls:ZoomPanView>
@@ -1155,16 +1155,16 @@
                                     </Border>
                                     <Canvas IsHitTestVisible="False">
                                         <Border x:Name="PickerLoupe" Classes="pickerLoupe"
-                                                Canvas.Left="{Binding LoupeLeft}" Canvas.Top="{Binding LoupeTop}"
-                                                IsVisible="{Binding ShowLoupe}">
+                                                Canvas.Left="{Binding Picker.LoupeLeft}" Canvas.Top="{Binding Picker.LoupeTop}"
+                                                IsVisible="{Binding Picker.ShowLoupe}">
                                             <controls:PickerLoupeControl Source="{Binding Preview}"
-                                                                         PixelX="{Binding LoupePixelX}"
-                                                                         PixelY="{Binding LoupePixelY}"/>
+                                                                         PixelX="{Binding Picker.LoupePixelX}"
+                                                                         PixelY="{Binding Picker.LoupePixelY}"/>
                                         </Border>
                                         <Border x:Name="StageHoverCard" Classes="hoverCard"
-                                                Canvas.Left="{Binding HoverCardLeft}" Canvas.Top="{Binding HoverCardTop}"
+                                                Canvas.Left="{Binding Picker.HoverCardLeft}" Canvas.Top="{Binding Picker.HoverCardTop}"
                                                 IsVisible="False">
-                                            <controls:HoverReadoutControl DataContext="{Binding StageHover}"/>
+                                            <controls:HoverReadoutControl DataContext="{Binding Picker.StageHover}"/>
                                         </Border>
                                     </Canvas>
                                     <Border x:Name="ResultPreviewOff" IsVisible="{Binding IsResultPreviewSuppressed}"
@@ -1531,9 +1531,9 @@
                                 </Border>
                                 <Canvas x:Name="PlotHoverLayer" Grid.ColumnSpan="3" IsHitTestVisible="False">
                                     <Border x:Name="PlotHoverCard" Classes="hoverCard"
-                                            Canvas.Left="{Binding PlotHover.Left}" Canvas.Top="{Binding PlotHover.Top}"
-                                            IsVisible="{Binding PlotHover.IsVisible}">
-                                        <controls:HoverReadoutControl DataContext="{Binding PlotHover}"/>
+                                            Canvas.Left="{Binding Picker.PlotHover.Left}" Canvas.Top="{Binding Picker.PlotHover.Top}"
+                                            IsVisible="{Binding Picker.PlotHover.IsVisible}">
+                                        <controls:HoverReadoutControl DataContext="{Binding Picker.PlotHover}"/>
                                     </Border>
                                 </Canvas>
                             </Grid>

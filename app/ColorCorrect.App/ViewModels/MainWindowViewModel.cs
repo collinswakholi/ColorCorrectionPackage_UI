@@ -41,14 +41,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private bool _settingsSaveWarned;
     private CancellationTokenSource? _cropCts;
     private SessionItemViewModel? _rangeAnchor;
-    private PickedColor? _lastPick;
-    private int _peekX;
-    private int _peekY;
     private int _previewGeneration;
     private int _sourceWidth = 1;
     private int _sourceHeight = 1;
-    private int _plotHoverIndex = -1;
-    private bool _pickerPinned;
     private bool _started;
     private bool _restoring;
     private readonly bool _persistenceEnabled;
@@ -167,17 +162,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _sampleQuery = "";
     [ObservableProperty] private string _selectedGroup = "All";
     [ObservableProperty] private string _imageMeta = "";
-    [ObservableProperty] private string _pickerHint = "Hover for RGB / Lab · scroll to zoom · drag to pan";
-    [ObservableProperty] private string _pickerPixel = "";
-    [ObservableProperty] private string _pickerRgb = "";
-    [ObservableProperty] private string _pickerLab = "";
-    [ObservableProperty] private string _pickerR = "";
-    [ObservableProperty] private string _pickerG = "";
-    [ObservableProperty] private string _pickerB = "";
-    [ObservableProperty] private string _pickerHex = "";
-    [ObservableProperty] private string _pickerL = "";
-    [ObservableProperty] private string _pickerA = "";
-    [ObservableProperty] private string _pickerLabB = "";
     [ObservableProperty] private string _meanAfter = "--";
     [ObservableProperty] private string _meanBefore = "--";
     [ObservableProperty] private string _meanQuality = "";
@@ -196,7 +180,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _overlayBadge = "";
     [ObservableProperty] private string _themeLabel = "Light";
     [ObservableProperty] private string _themeHint = "Switch to light theme";
-    [ObservableProperty] private IBrush? _pickerBrush;
     [ObservableProperty] private Bitmap? _originalPreview;
     [ObservableProperty] private Bitmap? _correctedPreview;
     [ObservableProperty] private Bitmap? _preview;
@@ -223,14 +206,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _naturalHeight = 1;
     [ObservableProperty] private double _overlayScaleX = 1;
     [ObservableProperty] private double _overlayScaleY = 1;
-    [ObservableProperty] private double _loupeLeft;
-    [ObservableProperty] private double _loupeTop;
-    [ObservableProperty] private double _hoverCardLeft;
-    [ObservableProperty] private double _hoverCardTop;
-    [ObservableProperty] private double _pinX;
-    [ObservableProperty] private double _pinY;
-    [ObservableProperty] private int _loupePixelX;
-    [ObservableProperty] private int _loupePixelY;
     [ObservableProperty] private double _batchProgress;
     [ObservableProperty] private decimal _fitSamples = 1;
     [ObservableProperty] private decimal _plsComponents;
@@ -309,11 +284,11 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _canSaveReport;
     [ObservableProperty] private bool _hasSelected;
     [ObservableProperty] private bool _hasReport;
-    [ObservableProperty] private bool _hasPicker;
-    [ObservableProperty] private bool _showLoupe;
-    [ObservableProperty] private bool _showPin;
     [ObservableProperty] private bool _showCorrected;
     [ObservableProperty] private bool _showFacePicker;
+
+    /// <summary>Color picker, loupe, pin and hover-card state.</summary>
+    public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _useAllFaces;
     [ObservableProperty] private bool _showLattice = true;
     [ObservableProperty] private bool _showSample = true;
@@ -371,8 +346,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public string NextSessionHint => CanNavigateNext
         ? $"Next image · {Session[Session.IndexOf(Active!) + 1].DisplayName} (Alt+Right)"
         : "No next image";
-    public ColorHoverState StageHover { get; } = new();
-    public ColorHoverState PlotHover { get; } = new();
     public string CropLabel => Crop.ToString("0.00");
     public bool HasLoadedModel => File.Exists(LoadedModelPath);
     public bool WillUseLoadedModel => UseLoadedModel && HasLoadedModel;
@@ -654,7 +627,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             if (showLoupe)
             {
-                ShowLoupe = false;
+                Picker.HideLoupe();
             }
 
             return;
@@ -662,12 +635,12 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         var previewX = Math.Clamp(x, 0, previewWidth - 1);
         var previewY = Math.Clamp(y, 0, previewHeight - 1);
-        if (_pickerPinned && !pin)
+        if (Picker.IsPinned && !pin)
         {
             return;
         }
 
-        if (!pin && HasPicker && previewX == _peekX && previewY == _peekY)
+        if (!pin && Picker.HasPick && previewX == Picker.PreviewX && previewY == Picker.PreviewY)
         {
             return;
         }
@@ -676,7 +649,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             if (showLoupe)
             {
-                ShowLoupe = false;
+                Picker.HideLoupe();
             }
 
             return;
@@ -684,120 +657,20 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         var sourceX = MapPreviewToSource(previewX, previewWidth, _sourceWidth);
         var sourceY = MapPreviewToSource(previewY, previewHeight, _sourceHeight);
-        var picked = sampled with { X = sourceX, Y = sourceY };
-        _lastPick = picked;
-        _peekX = previewX;
-        _peekY = previewY;
-        HasPicker = true;
-        PickerHint = "";
-        PickerPixel = picked.Pixel;
-        PickerRgb = picked.Rgb;
-        PickerLab = picked.Lab;
-        PickerR = picked.R.ToString();
-        PickerG = picked.G.ToString();
-        PickerB = picked.B.ToString();
-        PickerHex = picked.Hex;
-        PickerL = picked.L.ToString("0.00");
-        PickerA = picked.A.ToString("0.00");
-        PickerLabB = picked.LabB.ToString("0.00");
-        if (PickerBrush is SolidColorBrush brush)
-        {
-            brush.Color = picked.Color;
-        }
-        else
-        {
-            PickerBrush = new SolidColorBrush(picked.Color);
-        }
-
-        LoupePixelX = previewX;
-        LoupePixelY = previewY;
-        ShowLoupe = showLoupe;
-        if (pin)
-        {
-            _pickerPinned = true;
-            ShowPin = true;
-            PinX = x;
-            PinY = y;
-        }
+        Picker.Show(sampled with { X = sourceX, Y = sourceY }, previewX, previewY, showLoupe, pin, x, y);
     }
 
-    public void PlaceLoupe(double pointerX, double pointerY, double hostW, double hostH)
-    {
-        const double size = 88;
-        const double offset = 18;
-        var left = pointerX + offset;
-        var top = pointerY - size - 8;
-        if (left + size > hostW - 8)
-        {
-            left = pointerX - size - offset;
-        }
+    public void PlaceLoupe(double pointerX, double pointerY, double hostW, double hostH) =>
+        Picker.PlaceLoupe(pointerX, pointerY, hostW, hostH);
 
-        if (top < 8)
-        {
-            top = pointerY + offset;
-        }
+    public void HideLoupe() => Picker.HideLoupe();
 
-        LoupeLeft = Math.Max(0, left);
-        LoupeTop = Math.Max(0, top);
+    public void PeekPlot(PatchRow row, int index, bool corrected, double x, double y, double hostW, double hostH) =>
+        Picker.PeekPlot(row, index, corrected, x, y, hostW, hostH);
 
-        const double cardW = 252;
-        const double cardH = 118;
-        const double gap = 10;
-        var cardLeft = LoupeLeft + size + gap;
-        var cardTop = LoupeTop + (size - cardH) / 2;
-        if (cardLeft + cardW > hostW - 8)
-        {
-            cardLeft = LoupeLeft - cardW - gap;
-        }
+    public void HidePlotHover() => Picker.HidePlotHover();
 
-        if (cardLeft < 8)
-        {
-            cardLeft = Math.Clamp(pointerX + offset, 8, Math.Max(8, hostW - cardW - 8));
-            cardTop = LoupeTop + size + gap;
-            if (cardTop + cardH > hostH - 8)
-            {
-                cardTop = LoupeTop - cardH - gap;
-            }
-        }
-
-        HoverCardLeft = Math.Clamp(cardLeft, 8, Math.Max(8, hostW - cardW - 8));
-        HoverCardTop = Math.Clamp(cardTop, 8, Math.Max(8, hostH - cardH - 8));
-    }
-
-    public void HideLoupe() => ShowLoupe = false;
-
-    public void PeekPlot(PatchRow row, int index, bool corrected, double x, double y, double hostW, double hostH)
-    {
-        if (index != _plotHoverIndex || !PlotHover.IsVisible)
-        {
-            PlotHover.ShowPatch(row, corrected);
-            _plotHoverIndex = index;
-        }
-
-        PlotHover.Place(x, y, hostW, hostH, 392, 206);
-    }
-
-    public void HidePlotHover()
-    {
-        _plotHoverIndex = -1;
-        PlotHover.Hide();
-    }
-
-    public void ClearPicker()
-    {
-        _lastPick = null;
-        _pickerPinned = false;
-        HasPicker = false;
-        ShowLoupe = false;
-        ShowPin = false;
-        StageHover.Hide();
-        HidePlotHover();
-        PickerHint = "Hover for RGB / Lab. Right-click a point to copy. Esc clears the pin.";
-        PickerPixel = PickerRgb = PickerLab = "";
-        PickerR = PickerG = PickerB = PickerHex = "";
-        PickerL = PickerA = PickerLabB = "";
-        PickerBrush = null;
-    }
+    public void ClearPicker() => Picker.Clear();
 
     [RelayCommand]
     private async Task OpenImagesAsync()
@@ -1052,7 +925,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private async Task CopyPickerTextAsync(string? part)
     {
-        if (_lastPick is not { } pick || Dialogs is null)
+        if (Picker.LastPick is not { } pick || Dialogs is null)
         {
             Status = "Right-click a point on the image first.";
             return;
@@ -3316,9 +3189,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
 
         UpdateDisplayedPreview();
-        if (HasPicker)
+        if (Picker.HasPick)
         {
-            PeekColor(_peekX, _peekY, pin: _pickerPinned, showLoupe: ShowLoupe);
+            PeekColor(Picker.PreviewX, Picker.PreviewY, pin: Picker.IsPinned, showLoupe: Picker.ShowLoupe);
         }
     }
 }
