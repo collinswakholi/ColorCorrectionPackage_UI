@@ -37,6 +37,10 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
 
+    <!-- Status text after an error: colored, the detail stays in the tooltip and the log. -->
+    <Style Selector="TextBlock.caption.error">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+    </Style>
     <Style Selector="TextBlock.caption">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
         <Setter Property="FontSize"   Value="12" />
@@ -73,7 +77,7 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="Transparent"
                         BorderThickness="2"
-                        CornerRadius="6"
+                        CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -116,7 +120,7 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="6"
+                        CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -173,7 +177,7 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="Transparent"
                         BorderThickness="2"
-                        CornerRadius="4"
+                        CornerRadius="{DynamicResource RadiusSm}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -312,7 +316,7 @@
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="Template">
             <ControlTemplate>
-                <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                <Border x:Name="Bd" Background="Transparent" CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}" BorderThickness="0">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -347,7 +351,7 @@
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="Template">
             <ControlTemplate>
-                <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                <Border x:Name="Bd" Background="Transparent" CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}" BorderThickness="1"
                         BorderBrush="Transparent">
                     <ContentPresenter HorizontalAlignment="Center"
@@ -542,7 +546,7 @@
         <Setter Property="Foreground"   Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="Background"   Value="Transparent" />
         <Setter Property="Padding"      Value="4,3" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     </Style>
     <Style Selector="ListBoxItem:pointerover">
         <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
@@ -587,7 +591,7 @@
             <ControlTemplate>
                 <Border x:Name="PART_Border"
                         Background="{TemplateBinding Background}"
-                        CornerRadius="6"
+                        CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -639,7 +643,7 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="ThumbBd" Background="Transparent"
-                        CornerRadius="6" Padding="{TemplateBinding Padding}"
+                        CornerRadius="{DynamicResource RadiusMd}" Padding="{TemplateBinding Padding}"
                         BorderThickness="2" BorderBrush="Transparent">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       ContentTemplate="{TemplateBinding ContentTemplate}" />
@@ -681,7 +685,7 @@
         <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="8,8" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Margin" Value="0,0,0,8" />
@@ -739,14 +743,14 @@
     <Style Selector="Border.brandMark">
         <Setter Property="Width" Value="32" />
         <Setter Property="Height" Value="32" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="Margin" Value="0,0,10,0" />
     </Style>
 
     <Style Selector="Border.overlayBadge">
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="8,3" />
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -755,14 +759,14 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
         <Setter Property="Padding" Value="4,1" />
         <Setter Property="MaxWidth" Value="96" />
     </Style>
 
     <Style Selector="Border.pickerReadout">
         <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="MinWidth" Value="0" />
@@ -771,7 +775,7 @@
     </Style>
 
     <Style Selector="TextBlock.pickerLabel">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="VerticalAlignment" Value="Center" />
@@ -779,7 +783,7 @@
     </Style>
 
     <Style Selector="TextBlock.pickerValue">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -798,20 +802,20 @@
     </Style>
 
     <Style Selector="TextBlock.hoverTitle">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="LineHeight" Value="18" />
     </Style>
 
     <Style Selector="TextBlock.hoverMeta">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
     </Style>
 
     <Style Selector="TextBlock.hoverLabel">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="LetterSpacing" Value="0.4" />
@@ -824,7 +828,7 @@
     </Style>
 
     <Style Selector="TextBlock.hoverValue">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -832,14 +836,14 @@
     </Style>
 
     <Style Selector="TextBlock.hoverExtra">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
 
     <Style Selector="TextBlock.hoverDelta">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
@@ -848,7 +852,7 @@
 
     <Style Selector="Border.hoverHex">
         <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
         <Setter Property="Padding" Value="6,1" />
     </Style>
 
@@ -875,20 +879,20 @@
 
     <Style Selector="TextBlock.logLine">
         <Setter Property="FontFamily" Value="Consolas, Cascadia Mono, monospace" />
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="LineHeight" Value="17" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <Style Selector="TextBlock.logLine.detail">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="Opacity" Value="0.82" />
         <Setter Property="Margin" Value="22,0,0,1" />
     </Style>
 
     <Style Selector="TextBlock.logStamp">
         <Setter Property="FontFamily" Value="Consolas, Cascadia Mono, monospace" />
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="Foreground" Value="{DynamicResource LogTimeBrush}" />
         <Setter Property="Margin" Value="0,0,8,0" />
     </Style>
@@ -905,7 +909,7 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="2" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
     <Style Selector="Border.thumbTile.Selected">
@@ -931,14 +935,14 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="LetterSpacing" Value="1.2"/>
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Background="{TemplateBinding Background}"
-                        Padding="{TemplateBinding Padding}" CornerRadius="4">
+                        Padding="{TemplateBinding Padding}" CornerRadius="{DynamicResource RadiusSm}">
                     <Grid ColumnDefinitions="12,*">
                         <Path x:Name="ClosedSectionChevron"
                               Data="M 1.5,0.5 L 6.5,5 L 1.5,9.5"
@@ -976,7 +980,7 @@
         <Setter Property="MinWidth" Value="0"/>
         <Setter Property="HorizontalAlignment" Value="Stretch"/>
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="HeaderTemplate">
             <DataTemplate x:DataType="x:String">
@@ -1000,7 +1004,7 @@
         </Setter>
     </ControlTheme>
     <ControlTheme x:Key="RunButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSubheading}" />
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="18,10" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -1015,7 +1019,7 @@
         </Style>
     </ControlTheme>
     <ControlTheme x:Key="TinyButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="Padding" Value="10,7" />
         <Setter Property="MinHeight" Value="36" />
     </ControlTheme>
@@ -1023,7 +1027,7 @@
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="MinHeight" Value="28"/>
         <Setter Property="MinWidth" Value="0"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
     </ControlTheme>
     <ControlTheme x:Key="TinyIconButton" TargetType="Button" BasedOn="{StaticResource TinyButton}">
         <Setter Property="Padding" Value="6" />
@@ -1076,7 +1080,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="MinHeight" Value="32" />
@@ -1086,7 +1090,7 @@
             <ControlTemplate>
                 <Border x:Name="PART_Border"
                         Background="{TemplateBinding Background}"
-                        CornerRadius="6"
+                        CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -1112,7 +1116,7 @@
         <Setter Property="Background" Value="{DynamicResource CardBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
@@ -1120,7 +1124,7 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="12" />
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -1132,7 +1136,7 @@
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="Padding" Value="8,4" />
         <Setter Property="Margin" Value="0,0,6,6" />
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}" />
         <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -1191,7 +1195,7 @@
     <Style Selector="Expander.section">
         <Setter Property="Theme" Value="{StaticResource SectionExpander}" />
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -1215,7 +1219,7 @@
         <Setter Property="Margin" Value="0,0,0,6" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     </Style>
 
@@ -1224,7 +1228,7 @@
         <Setter Property="Padding" Value="6,10" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     </Style>
 
@@ -1232,7 +1236,7 @@
         <Setter Property="Background" Value="{DynamicResource LogBgBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="12,12" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
@@ -1241,7 +1245,7 @@
         <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="2" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -1250,7 +1254,7 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="8,3" />
         <Setter Property="Margin" Value="0,2,0,0" />
         <Setter Property="HorizontalAlignment" Value="Left" />
@@ -1259,7 +1263,7 @@
 
     <Style Selector="Border.countBadge">
         <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -1268,7 +1272,7 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Padding" Value="3" />
     </Style>
 
@@ -1276,7 +1280,7 @@
         <Setter Property="Background" Value="{DynamicResource StageBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource StageGateBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
@@ -1288,7 +1292,7 @@
 
     <Style Selector="TextBlock.metricValue">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
-        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeHeading}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="LetterSpacing" Value="-0.4" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -1306,7 +1310,7 @@
 
     <Style Selector="Border.catalogTile">
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -1369,7 +1373,7 @@
         <Setter Property="MinHeight" Value="32" />
     </Style>
     <Style Selector="Border#Sidebar.narrow TextBlock.subheading">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Button">
         <Setter Property="MinWidth" Value="0" />
@@ -1395,7 +1399,7 @@
     <Style Selector="Border#Sidebar.narrow Button.sourceAction">
         <Setter Property="MinHeight" Value="30" />
         <Setter Property="Padding" Value="6,3" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="Margin" Value="0,0,4,4" />
     </Style>
     <Style Selector="Border#Sidebar.narrow StackPanel.thumbCell">
@@ -1417,7 +1421,7 @@
     </Style>
     <Style Selector="Border#Sidebar.narrow RadioButton">
         <Setter Property="Padding" Value="8,4" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Border.accelChip">
         <Setter Property="MaxWidth" Value="220" />
@@ -1440,11 +1444,11 @@
     <Style Selector="Border#Sidebar.tight Button.sourceAction">
         <Setter Property="MinHeight" Value="32" />
         <Setter Property="Padding" Value="6,3" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="Margin" Value="0,0,4,4" />
     </Style>
     <Style Selector="Border#Sidebar.tight Button#RunButton">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="12,8" />
     </Style>
@@ -1469,7 +1473,7 @@
     </Style>
     <Style Selector="Border#Sidebar TextBlock.sectionLabel">
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
         <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
@@ -1479,7 +1483,7 @@
     </Style>
     <Style Selector="Border#Sidebar Border.dropZone">
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="12,10" />
     </Style>
     <Style Selector="Border#Sidebar Border.dropZone.is-dragging">
@@ -1501,7 +1505,7 @@
     </Style>
 
     <Style Selector="TextBlock.tileName">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="Margin" Value="0,4,0,0" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -1532,7 +1536,7 @@
 
     <Style Selector="Border.stageRow">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="4,2" />
         <Setter Property="Margin" Value="0,0,0,2" />
     </Style>
@@ -1552,7 +1556,7 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="8,4" />
     </Style>
 
@@ -1632,7 +1636,7 @@
     </Style>
     <Style Selector="Window.compact TabItem">
         <Setter Property="Padding" Value="10,0" />
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="MinHeight" Value="36" />
     </Style>
 

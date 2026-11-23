@@ -11,7 +11,7 @@
         KeyDown="OnKeyDown">
     <Border Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-            CornerRadius="12" Margin="8" Padding="20">
+            CornerRadius="{DynamicResource RadiusXl}" Margin="8" Padding="20">
         <DockPanel>
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
                         HorizontalAlignment="Right" Margin="0,16,0,0">
@@ -21,7 +21,7 @@
                         AutomationProperties.Name="Continue"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock x:Name="TitleText" Classes="heading" FontSize="15" Margin="0,0,0,8"
+                <TextBlock x:Name="TitleText" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" Margin="0,0,0,8"
                            TextWrapping="Wrap"/>
                 <TextBlock x:Name="MessageText" TextWrapping="Wrap" Classes="body" LineHeight="20"/>
             </StackPanel>

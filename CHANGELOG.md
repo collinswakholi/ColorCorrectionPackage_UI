@@ -14,6 +14,10 @@
 - Preview PNGs are complete before a request returns, failed preview writes are reported, and at most four preview encodes run at once.
 - Python SDK: read and check the worker protocol version (2 and 3 are supported), classify errors by `code` when the worker sends one (exposed as `ColorCorrectError.code`), stop the worker of an Engine that is garbage-collected without `close()`, treat `Shutdown`/`QUIT` like `shutdown`, and accept `setup_probe` in the command-line tool.
 - Update the API protocol reference for protocol 3: every command and request field, the ready event, detection snapshot and chart IDs, error codes, and the `auto` default policy.
+- Text and status colors meet WCAG AA contrast in both themes (muted text, light focus ring, error/warning/success, ΔE quality ramp), and the "fair" and "warning" ΔE bands are distinct in the dark theme.
+- New design tokens for type sizes, corner radii and spacing; views use them instead of fixed values.
+- The ΔE, Color Analysis and Chart rendition panels say whether the session is empty, a fit is running, or the last fit failed and why.
+- The status bar turns red while the last message is an error.
 
 ## 0.3.0
 

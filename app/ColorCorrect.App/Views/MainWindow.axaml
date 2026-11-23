@@ -35,7 +35,7 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}"/>
             <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -44,7 +44,7 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border x:Name="DisclosureBorder" Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" Padding="8,6">
+                            BorderBrush="Transparent" BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}" Padding="8,6">
                         <Grid ColumnDefinitions="*,12">
                             <ContentPresenter Content="{TemplateBinding Content}"
                                               ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -77,7 +77,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="HeaderTemplate">
                 <DataTemplate x:DataType="x:String">
-                    <TextBlock Text="{Binding}" FontSize="13" FontWeight="Medium"
+                    <TextBlock Text="{Binding}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Medium"
                                Foreground="{DynamicResource TextPrimaryBrush}"/>
                 </DataTemplate>
             </Setter>
@@ -125,10 +125,10 @@
                            PlacementConstraintAdjustment="SlideX,SlideY">
                         <Border x:Name="ProcessingSettingsPanel" Background="{DynamicResource PopupBrush}"
                                 BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                BorderThickness="1" CornerRadius="8" Padding="20" Width="392"
+                                BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}" Padding="20" Width="392"
                                 AutomationProperties.Name="Processing settings panel">
                             <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="Processing settings" FontSize="15" FontWeight="SemiBold"
+                                <TextBlock DockPanel.Dock="Top" Text="Processing settings" FontSize="{DynamicResource FontSizeSubheading}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,16"/>
                                 <ScrollViewer x:Name="ProcessingSettingsScroll" MaxHeight="440"
                                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -168,7 +168,7 @@
                                                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                                   AutomationProperties.Name="Use previous processing method"
                                                   ToolTip.Tip="For comparing or reproducing older results. Slower; evaluates gamma and white balance separately. Fast processing is the default for every device.">
-                                            <TextBlock Text="Compatibility mode" FontSize="13"/>
+                                            <TextBlock Text="Compatibility mode" FontSize="{DynamicResource FontSizeBody}"/>
                                         </CheckBox>
                                         <TextBlock Text="Reproduce older results. Slower processing." Classes="caption"
                                                    TextWrapping="Wrap" LineHeight="17" Margin="28,2,0,12"/>
@@ -196,7 +196,7 @@
                                                         <DataTemplate x:DataType="vm:AccelRow">
                                                             <StackPanel Margin="0,0,0,12">
                                                                 <Grid ColumnDefinitions="*,Auto">
-                                                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                                    <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBodySm}" FontWeight="SemiBold"
                                                                                TextWrapping="Wrap" Margin="0,0,8,0"/>
                                                                     <TextBlock Grid.Column="1" Text="{Binding Status}" Classes="caption"/>
                                                                 </Grid>
@@ -248,7 +248,7 @@
                            PlacementConstraintAdjustment="SlideX,SlideY" IsLightDismissEnabled="True">
                         <Border Background="{DynamicResource PopupBrush}"
                                 BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                BorderThickness="1" CornerRadius="8" Padding="16" MinWidth="380">
+                                BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}" Padding="16" MinWidth="380">
                             <StackPanel>
                                 <TextBlock Text="SAVE" Classes="subheading" Margin="0,0,0,10"/>
                                 <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled">
@@ -257,7 +257,7 @@
                                             <DataTemplate x:DataType="vm:SessionItemViewModel">
                                                 <CheckBox IsChecked="{Binding IncludeInSave}" Margin="0,0,0,3"
                                                           IsEnabled="{Binding HasSaveable}">
-                                                    <TextBlock Text="{Binding FileName}" FontSize="12"/>
+                                                    <TextBlock Text="{Binding FileName}" FontSize="{DynamicResource FontSizeBodySm}"/>
                                                 </CheckBox>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -266,28 +266,28 @@
                                 <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="0,8,0,10"/>
                                 <TextBlock Text="INCLUDE" Classes="caption" Margin="0,0,0,6"/>
                                 <CheckBox IsChecked="{Binding SaveCorrected}" IsEnabled="{Binding CanSaveCorrected}"
-                                          FontSize="12" Margin="0,0,0,3">
-                                    <TextBlock Text="Corrected (full size)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
+                                    <TextBlock Text="Corrected (full size)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <CheckBox IsChecked="{Binding SaveFfc}" IsEnabled="{Binding CanSaveFfc}"
-                                          FontSize="12" Margin="0,0,0,3">
-                                    <TextBlock Text="FFC (preview)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
+                                    <TextBlock Text="FFC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <CheckBox IsChecked="{Binding SaveGc}" IsEnabled="{Binding CanSaveGc}"
-                                          FontSize="12" Margin="0,0,0,3">
-                                    <TextBlock Text="GC (preview)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
+                                    <TextBlock Text="GC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <CheckBox IsChecked="{Binding SaveWb}" IsEnabled="{Binding CanSaveWb}"
-                                          FontSize="12" Margin="0,0,0,3">
-                                    <TextBlock Text="WB (preview)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
+                                    <TextBlock Text="WB (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <CheckBox IsChecked="{Binding SaveCc}" IsEnabled="{Binding CanSaveCc}"
-                                          FontSize="12" Margin="0,0,0,3">
-                                    <TextBlock Text="CC (preview)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,3">
+                                    <TextBlock Text="CC (preview)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <CheckBox IsChecked="{Binding SaveReport}" IsEnabled="{Binding CanSaveReport}"
-                                          FontSize="12" Margin="0,0,0,8">
-                                    <TextBlock Text="Report (JSON)" FontSize="12"/>
+                                          FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,8">
+                                    <TextBlock Text="Report (JSON)" FontSize="{DynamicResource FontSizeBodySm}"/>
                                 </CheckBox>
                                 <TextBlock Text="FORMAT" Classes="caption" Margin="0,0,0,4"/>
                                 <ComboBox Classes="config" ItemsSource="{Binding OutputFormats}"
@@ -379,7 +379,7 @@
                                     <Rectangle Classes="dropDash" HorizontalAlignment="Stretch"
                                                VerticalAlignment="Stretch"/>
                                     <StackPanel Spacing="6">
-                                        <TextBlock Text="Drop stills" FontWeight="Medium" FontSize="12"
+                                        <TextBlock Text="Drop stills" FontWeight="Medium" FontSize="{DynamicResource FontSizeBodySm}"
                                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                                    HorizontalAlignment="Center" TextWrapping="Wrap"
                                                    TextAlignment="Center"/>
@@ -499,7 +499,7 @@
                                                             <Image Source="{Binding Thumb}" Stretch="UniformToFill"
                                                                    AutomationProperties.Name="{Binding SessionAutomationName}"/>
                                                         </Border>
-                                                        <Border Width="8" Height="8" CornerRadius="4" Margin="4,4,0,0"
+                                                        <Border Width="8" Height="8" CornerRadius="{DynamicResource RadiusSm}" Margin="4,4,0,0"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                                                 Background="{DynamicResource SuccessBrush}"
                                                                 IsVisible="{Binding IsCorrected}"
@@ -523,7 +523,7 @@
                                                                        TextTrimming="CharacterEllipsis"/>
                                                         </Border>
                                                         <Button Content="×" Theme="{StaticResource IconButton}" Classes="thumbClose"
-                                                                FontSize="11" Padding="0"
+                                                                FontSize="{DynamicResource FontSizeCaption}" Padding="0"
                                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                                                 Tag="{Binding}" Click="OnRemoveThumbClick"
                                                                 ToolTip.Tip="Remove from session"
@@ -562,7 +562,7 @@
                                             <DataTemplate x:DataType="vm:CatalogFolderViewModel">
                                                 <Border Classes="folderChip" ToolTip.Tip="{Binding Path}">
                                                     <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <TextBlock Text="{Binding Name}" FontSize="11"
+                                                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeCaption}"
                                                                    VerticalAlignment="Center"/>
                                                         <Button Content="×" Theme="{StaticResource IconButton}"
                                                                 MinWidth="28" MinHeight="28" Padding="0"
@@ -687,10 +687,10 @@
                                                 <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoFfc}" FontSize="12"
+                                            <CheckBox IsChecked="{Binding DoFfc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable FFC">
-                                                <TextBlock Text="FFC · Flat field" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock Text="FFC · Flat field" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
                                             </CheckBox>
                                         </DockPanel>
                                     </Border>
@@ -724,18 +724,18 @@
                                                 <Path Data="{StaticResource InfoIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoGc}" FontSize="12"
+                                            <CheckBox IsChecked="{Binding DoGc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable GC">
-                                                <TextBlock Text="GC · Tone response" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock Text="GC · Tone response" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
                                             </CheckBox>
                                         </DockPanel>
                                     </Border>
                                     <Border Classes="stageRow">
-                                        <CheckBox IsChecked="{Binding DoWb}" FontSize="12"
+                                        <CheckBox IsChecked="{Binding DoWb}" FontSize="{DynamicResource FontSizeBodySm}"
                                                   MinWidth="0" HorizontalAlignment="Stretch"
                                                   AutomationProperties.Name="Enable WB">
-                                            <TextBlock Text="WB · White balance" FontSize="12" TextWrapping="Wrap"/>
+                                            <TextBlock Text="WB · White balance" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
                                         </CheckBox>
                                     </Border>
                                     <Border Classes="stageRow">
@@ -747,10 +747,10 @@
                                                 <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoCc}" FontSize="12"
+                                            <CheckBox IsChecked="{Binding DoCc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable CC">
-                                                <TextBlock Text="CC · Color fit" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock Text="CC · Color fit" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
                                             </CheckBox>
                                         </DockPanel>
                                     </Border>
@@ -759,10 +759,10 @@
                                                AutomationProperties.AutomationId="ProcessSummary"
                                                AutomationProperties.Name="{Binding ProcessSummary}"/>
                                     <CheckBox x:Name="NoSatToggle" IsChecked="{Binding SkipSaturated}"
-                                              FontSize="12" Margin="0,0,0,4"
+                                              FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,4"
                                               MinWidth="0" HorizontalAlignment="Stretch"
                                               AutomationProperties.Name="Skip saturated patches">
-                                        <TextBlock Text="Skip saturated patches" TextWrapping="Wrap" FontSize="12"/>
+                                        <TextBlock Text="Skip saturated patches" TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}"/>
                                     </CheckBox>
                                 </StackPanel>
                             </Expander>
@@ -831,7 +831,7 @@
                             <Border IsVisible="{Binding HasWorkerError}"
                                     Background="{DynamicResource DangerLightBrush}"
                                     BorderBrush="{DynamicResource ErrorBrush}"
-                                    BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8"
+                                    BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}" Padding="10" Margin="0,0,0,8"
                                     AutomationProperties.Name="Engine recovery"
                                     AutomationProperties.LiveSetting="Assertive">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -954,7 +954,7 @@
                                                  IsEnabled="{Binding HasStageFfc}"
                                                  AutomationProperties.Name="FFC stage">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="FFC" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text="FFC" FontSize="{DynamicResource FontSizeBodySm}" VerticalAlignment="Center"/>
                                             <Path Classes="spinner" Width="11" Height="11"
                                                   Data="{StaticResource SpinnerGeometry}"
                                                   Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
@@ -967,7 +967,7 @@
                                                  IsEnabled="{Binding HasStageGc}"
                                                  AutomationProperties.Name="GC stage">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="GC" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text="GC" FontSize="{DynamicResource FontSizeBodySm}" VerticalAlignment="Center"/>
                                             <Path Classes="spinner" Width="11" Height="11"
                                                   Data="{StaticResource SpinnerGeometry}"
                                                   Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
@@ -980,7 +980,7 @@
                                                  IsEnabled="{Binding HasStageWb}"
                                                  AutomationProperties.Name="WB stage">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="WB" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text="WB" FontSize="{DynamicResource FontSizeBodySm}" VerticalAlignment="Center"/>
                                             <Path Classes="spinner" Width="11" Height="11"
                                                   Data="{StaticResource SpinnerGeometry}"
                                                   Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2"
@@ -1005,7 +1005,7 @@
                                 AutomationProperties.Name="Color hover readout">
                             <Grid>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                                    <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="6"
+                                    <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="{DynamicResource RadiusMd}"
                                             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                                             Background="{Binding PickerBrush}" VerticalAlignment="Center"/>
                                     <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1161,7 +1161,7 @@
                                             HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="12"
                                             Background="{DynamicResource SurfaceBrush}"
                                             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                            CornerRadius="8" Padding="12,8" MaxWidth="360">
+                                            CornerRadius="{DynamicResource RadiusLg}" Padding="12,8" MaxWidth="360">
                                         <StackPanel Spacing="6">
                                             <TextBlock Text="Result ready · Preview off" FontWeight="SemiBold"
                                                        HorizontalAlignment="Center" TextWrapping="Wrap"/>
@@ -1244,7 +1244,7 @@
                                       VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
                         <Grid x:Name="PanelDeltaE" RowDefinitions="Auto,*" Margin="14" RowSpacing="8">
                             <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
-                                       Text="Fit a chart still to see per-stage ΔE."
+                                       Text="{Binding DeltaEPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding HasMetrics}">
                                 <Border Classes="metricTile" Margin="0,0,8,8">
@@ -1257,7 +1257,7 @@
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Fit mean ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MeanAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold">
+                                                   FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
                                                     <Binding Path="MeanAfterValue"/>
@@ -1281,7 +1281,7 @@
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Median ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MedianAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold">
+                                                   FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
                                                     <Binding Path="MedianAfterValue"/>
@@ -1305,7 +1305,7 @@
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Max ΔE"/>
                                         <TextBlock Grid.Column="1" Text="{Binding MaxAfterValue, Converter={StaticResource DEQualityText}}"
-                                                   FontSize="11" FontWeight="SemiBold">
+                                                   FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
                                                     <Binding Path="MaxAfterValue"/>
@@ -1417,7 +1417,7 @@
                                                        FontWeight="SemiBold" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
-                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotDeltaE" MinHeight="180"
                                                                        Kind="StageBars" Report="{Binding Report}"/>
                                         </Border>
@@ -1433,7 +1433,7 @@
                         <Grid x:Name="PanelColor" Margin="14">
                             <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="Fit a chart still to see color scatter."
+                                       Text="{Binding ColorPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding HasMetrics}">
                                 <Border Classes="plotCard">
@@ -1454,7 +1454,7 @@
                                                        Classes="caption" FontWeight="SemiBold" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
-                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" Report="{Binding Report}"/>
                                         </Border>
                                     </Grid>
@@ -1463,7 +1463,7 @@
                                     <Grid RowDefinitions="Auto,*">
                                         <TextBlock Text="Residual" Classes="caption"
                                                    FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" Report="{Binding Report}"/>
                                         </Border>
                                     </Grid>
@@ -1479,7 +1479,7 @@
                                        HorizontalAlignment="Right" IsVisible="{Binding HasMetrics}"/>
                             <TextBlock Grid.Row="1" Classes="caption" IsVisible="{Binding !HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="Fit a chart still to see rendition."
+                                       Text="{Binding RenditionPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="PlotHoverHost" Grid.Row="1" ColumnDefinitions="*,12,*"
                                   MinHeight="160" ClipToBounds="True" IsVisible="{Binding HasMetrics}">
@@ -1501,7 +1501,7 @@
                                                        FontWeight="SemiBold" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
-                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotRenditionOriginal" Kind="RenditionOriginal"
                                                                        Report="{Binding Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
@@ -1512,7 +1512,7 @@
                                     <Grid RowDefinitions="Auto,*">
                                         <TextBlock Text="Corrected vs reference" Classes="caption"
                                                    FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="4">
+                                        <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotRenditionCorrected" Kind="RenditionCorrected"
                                                                        Report="{Binding Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
@@ -1532,7 +1532,7 @@
                                       IsExpanded="False"
                                       IsVisible="{Binding HasMetrics}">
                                 <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                        CornerRadius="8" Margin="0,8,0,0" ClipToBounds="True">
+                                        CornerRadius="{DynamicResource RadiusLg}" Margin="0,8,0,0" ClipToBounds="True">
                                     <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                                   VerticalScrollBarVisibility="Disabled">
                                     <Grid RowDefinitions="Auto,*" MinWidth="420">
@@ -1550,17 +1550,17 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:PatchRowViewModel">
                                                         <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="10,6">
-                                                            <TextBlock Text="{Binding Name}" FontSize="12"/>
-                                                            <TextBlock Grid.Column="1" Text="{Binding Before}" FontSize="12"/>
-                                                            <TextBlock Grid.Column="2" Text="{Binding After}" FontSize="12"/>
-                                                            <TextBlock Grid.Column="3" Text="{Binding Sat}" FontSize="12"/>
-                                                            <Border Grid.Column="4" Width="18" Height="18" CornerRadius="4"
+                                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBodySm}"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Before}" FontSize="{DynamicResource FontSizeBodySm}"/>
+                                                            <TextBlock Grid.Column="2" Text="{Binding After}" FontSize="{DynamicResource FontSizeBodySm}"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Sat}" FontSize="{DynamicResource FontSizeBodySm}"/>
+                                                            <Border Grid.Column="4" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
                                                                     BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                                                                     Background="{Binding Measured}"/>
-                                                            <Border Grid.Column="5" Width="18" Height="18" CornerRadius="4"
+                                                            <Border Grid.Column="5" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
                                                                     BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                                                                     Background="{Binding Reference}"/>
-                                                            <Border Grid.Column="6" Width="18" Height="18" CornerRadius="4"
+                                                            <Border Grid.Column="6" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
                                                                     BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                                                                     Background="{Binding Corrected}"/>
                                                         </Grid>
@@ -1588,7 +1588,7 @@
                 <ScrollViewer x:Name="BatchMenuScroll" MaxHeight="420" HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="Batch" Classes="heading" FontSize="14" Margin="0,0,0,8"/>
+                    <TextBlock Text="Batch" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" Margin="0,0,0,8"/>
                     <TextBlock Text="Add stills to Session first."
                                Classes="caption" TextWrapping="Wrap" Margin="0,0,0,10"
                                IsVisible="{Binding !HasSession}"/>
@@ -1599,7 +1599,7 @@
                                 <DataTemplate x:DataType="vm:SessionItemViewModel">
                                     <CheckBox IsChecked="{Binding IncludeInBatch}" Margin="0,0,0,4"
                                               >
-                                        <TextBlock Text="{Binding FileName}" FontSize="12"
+                                        <TextBlock Text="{Binding FileName}" FontSize="{DynamicResource FontSizeBodySm}"
                                                    TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
                                     </CheckBox>
                                 </DataTemplate>
@@ -1664,6 +1664,9 @@
                        DockPanel.Dock="Left" IsHitTestVisible="False">
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Busy}"/>
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Busy}"/>
+                    <!-- Drawn last so the last error stays visible over the busy/ready dot. -->
+                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ErrorBrush}"
+                             IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </Panel>
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                             AutomationProperties.LiveSetting="Polite">
@@ -1672,6 +1675,7 @@
                                ToolTip.Tip="{Binding AccelHint}"/>
                     <TextBlock x:Name="StatusBarText" Text="{Binding Status}" Classes="caption"
                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                               Classes.error="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                ToolTip.Tip="{Binding ErrorMessage}"
                                AutomationProperties.AutomationId="StatusBarText"
                                AutomationProperties.Name="{Binding Status}"/>
@@ -1699,9 +1703,9 @@
         <Grid x:Name="DragOverlay" Grid.RowSpan="3" IsVisible="False" IsHitTestVisible="False">
             <Border Background="{DynamicResource DragOverlayBrush}">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="Drop stills" FontSize="24" Foreground="White"
+                    <TextBlock Text="Drop stills" FontSize="{DynamicResource FontSizeDisplay}" Foreground="White"
                                FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="They join the working session" FontSize="14"
+                    <TextBlock Text="They join the working session" FontSize="{DynamicResource FontSizeSubheading}"
                                Foreground="{DynamicResource DragSubtitleBrush}"
                                HorizontalAlignment="Center" Margin="0,4,0,0"/>
                 </StackPanel>

@@ -22,7 +22,7 @@ public sealed class ToastNotification : UserControl
     private static readonly (Color Bg, Color Accent, Color Text, string Symbol) WarningDark =
         (Color.FromRgb(55, 43, 18), Color.FromRgb(245, 158, 11), Color.FromRgb(253, 230, 138), "!");
     private static readonly (Color Bg, Color Accent, Color Text, string Symbol) InfoDark =
-        (Color.FromRgb(23, 37, 70), Color.FromRgb(47, 111, 98), Color.FromRgb(191, 219, 254), "i");
+        (Color.FromRgb(20, 44, 39), Color.FromRgb(91, 163, 148), Color.FromRgb(191, 227, 217), "i");
     private static readonly (Color Bg, Color Accent, Color Text, string Symbol) SuccessLight =
         (Color.FromRgb(236, 253, 245), Color.FromRgb(4, 120, 87), Color.FromRgb(6, 95, 70), "✓");
     private static readonly (Color Bg, Color Accent, Color Text, string Symbol) ErrorLight =
