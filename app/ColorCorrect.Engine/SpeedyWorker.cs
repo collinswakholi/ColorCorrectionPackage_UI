@@ -507,12 +507,24 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }, cancellationToken);
     }
 
+    /// <summary>A command that keeps reporting progress may run this many timeouts in total.</summary>
+    public const int ProgressCeilingFactor = 6;
+
+    /// <summary>
+    /// Read progress lines until the reply. <paramref name="timeout"/> bounds silence: each
+    /// progress line restarts it, so slow but advancing work (large TIFFs on CPU) is not
+    /// killed mid-run. A command that never replies still stops at
+    /// <see cref="ProgressCeilingFactor"/> times the timeout.
+    /// </summary>
     private static async Task<JsonElement> ReadResultAsync(StreamReader reader, TimeSpan timeout, Action<string>? progress, CancellationToken cancellationToken = default)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var started = DateTime.UtcNow;
+        var ceiling = started + TimeSpan.FromTicks(Math.Min(timeout.Ticks * ProgressCeilingFactor, TimeSpan.MaxValue.Ticks / 2));
+        var deadline = started + timeout;
         while (true)
         {
-            var remain = deadline - DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            var remain = (deadline < ceiling ? deadline : ceiling) - now;
             if (remain <= TimeSpan.Zero)
             {
                 throw new TimeoutException("timed out waiting for the worker");
@@ -535,6 +547,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
                     progress?.Invoke(message);
                 }
 
+                deadline = DateTime.UtcNow + timeout; // the worker is alive and advancing
                 continue;
             }
 

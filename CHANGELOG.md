@@ -18,6 +18,8 @@
 - New design tokens for type sizes, corner radii and spacing; views use them instead of fixed values.
 - The ΔE, Color Analysis and Chart rendition panels say whether the session is empty, a fit is running, or the last fit failed and why.
 - The status bar turns red while the last message is an error.
+- Thumbnails and previews decode about 2.5 times faster, at most a few at a time, and unreadable files show "No preview" with the reason instead of a blank tile.
+- Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
 
 ## 0.3.0
 
