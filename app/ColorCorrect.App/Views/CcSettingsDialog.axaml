@@ -24,7 +24,7 @@
     <Border x:Name="SettingsDialogRoot"
             Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-            CornerRadius="8"
+            CornerRadius="{DynamicResource RadiusLg}"
             VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
         <DockPanel LastChildFill="True">
             <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}"
@@ -34,7 +34,7 @@
                     <Button x:Name="CcSettingsCloseBtn" DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
                             Click="Close_Click" FontSize="16" MinWidth="36" MinHeight="36"
                             AutomationProperties.Name="Close correction settings"/>
-                    <TextBlock Text="Correction settings" Classes="heading" FontSize="15" VerticalAlignment="Center"/>
+                    <TextBlock Text="Correction settings" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
             <Border DockPanel.Dock="Bottom" Padding="16,10"
@@ -77,7 +77,7 @@
                               IsChecked="{Binding IncludeCombinations}"
                               IsVisible="{Binding ShowPolyCombinations}"
                               AutomationProperties.Name="Include combination terms">
-                        <TextBlock TextWrapping="Wrap" FontSize="12"
+                        <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}"
                                    Text="Include combination terms"/>
                     </CheckBox>
 
@@ -108,7 +108,7 @@
                                    Classes="caption" TextWrapping="Wrap" Margin="0,0,0,6"
                                    IsVisible="{Binding !HasHiddenLayersError}"/>
                         <TextBlock Text="{Binding HiddenLayersError}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource ErrorBrush}" FontSize="12" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource ErrorBrush}" FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,8"
                                    IsVisible="{Binding HasHiddenLayersError}"
                                    AutomationProperties.LiveSetting="Assertive"/>
                         <TextBlock Text="Optimizer" Classes="settingsLabel"/>
@@ -127,7 +127,7 @@
                                   ToolTip.Tip="Normalizes hidden activations; small charts use full-chart statistics for stable inference"
                                   AutomationProperties.Name="Use batch normalization"
                                   AutomationProperties.HelpText="Small charts use full-chart statistics for stable inference">
-                            <TextBlock Text="Batch normalization" FontSize="12"/>
+                            <TextBlock Text="Batch normalization" FontSize="{DynamicResource FontSizeBodySm}"/>
                         </CheckBox>
                         <TextBlock Text="Dropout rate (0–0.8)" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
@@ -208,9 +208,9 @@
                               SelectedItem="{Binding SelectedOutputFormat}" Margin="0,0,0,10"
                               AutomationProperties.Name="Output format"/>
 
-                    <CheckBox IsChecked="{Binding Phase2Teacher}" FontSize="12" Margin="0,0,0,10"
+                    <CheckBox IsChecked="{Binding Phase2Teacher}" FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,10"
                               AutomationProperties.Name="Export training data">
-                        <TextBlock TextWrapping="Wrap" FontSize="12" Text="Export training data"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}" Text="Export training data"/>
                     </CheckBox>
 
                     <TextBlock Text="{Binding ReferenceSummary}" Classes="caption" TextWrapping="Wrap" Margin="0,8,0,6"/>

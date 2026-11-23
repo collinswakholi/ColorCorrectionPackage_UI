@@ -21,7 +21,7 @@
 
     <Border Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-            CornerRadius="8"
+            CornerRadius="{DynamicResource RadiusLg}"
             VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
         <DockPanel LastChildFill="True">
             <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}"
@@ -31,7 +31,7 @@
                     <Button DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
                             Click="Close_Click" FontSize="16" MinWidth="36" MinHeight="36"
                             AutomationProperties.Name="Close FFC settings"/>
-                    <TextBlock Text="FFC settings" Classes="heading" FontSize="15" VerticalAlignment="Center"/>
+                    <TextBlock Text="FFC settings" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
             <Border DockPanel.Dock="Bottom" Padding="16,12"

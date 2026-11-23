@@ -12,12 +12,12 @@
         ShowInTaskbar="True">
     <Border Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-            CornerRadius="12" Margin="8" Padding="28">
+            CornerRadius="{DynamicResource RadiusXl}" Margin="8" Padding="28">
         <StackPanel VerticalAlignment="Center" Spacing="12">
             <Image Source="avares://ColorCorrect.App/Assets/app.png"
                    Width="64" Height="64" HorizontalAlignment="Center"
                    AutomationProperties.Name="ColorCorrect Studio logo"/>
-            <TextBlock Text="ColorCorrect Studio" Classes="heading" FontSize="22"
+            <TextBlock Text="ColorCorrect Studio" Classes="heading" FontSize="{DynamicResource FontSizeTitle}"
                        HorizontalAlignment="Center"/>
             <TextBlock x:Name="VersionText" Classes="body" Opacity="0.85"
                        HorizontalAlignment="Center"/>
@@ -27,7 +27,7 @@
                           IsIndeterminate="True" Height="6" Margin="0,8,0,0"
                           AutomationProperties.Name="Splash progress"/>
             <TextBlock x:Name="StatusText" Text="Starting…" Classes="body"
-                       Opacity="0.75" HorizontalAlignment="Center" FontSize="12"
+                       Opacity="0.75" HorizontalAlignment="Center" FontSize="{DynamicResource FontSizeBodySm}"
                        TextAlignment="Center" TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite"/>
         </StackPanel>

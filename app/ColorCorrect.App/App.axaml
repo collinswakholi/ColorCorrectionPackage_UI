@@ -8,6 +8,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://ColorCorrect.App/Resources/ThemeColors.axaml"/>
+                <ResourceInclude Source="avares://ColorCorrect.App/Resources/Tokens.axaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

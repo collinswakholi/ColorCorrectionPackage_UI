@@ -2,7 +2,7 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="PrimaryColor">#2F6F62</Color>
-                    <Color x:Key="PrimaryHoverColor">#3A8576</Color>
+                    <Color x:Key="PrimaryHoverColor">#33796B</Color>
                     <Color x:Key="PrimaryLightColor">#1A2C28</Color>
                     <Color x:Key="SystemAccentColor">#2F6F62</Color>
                     <Color x:Key="SystemAccentColorDark1">#24574D</Color>
@@ -20,20 +20,20 @@
                     <Color x:Key="StageColor">#08090B</Color>
                     <Color x:Key="TextPrimaryColor">#ECEDEE</Color>
                     <Color x:Key="TextSecondaryColor">#9A9CA3</Color>
-                    <Color x:Key="TextMutedColor">#6E7178</Color>
+                    <Color x:Key="TextMutedColor">#8B8E95</Color>
                     <Color x:Key="BorderColor">#2A2C30</Color>
                     <Color x:Key="BorderFocusColor">#D4A574</Color>
-                    <Color x:Key="StageGateColor">#5C5348</Color>
+                    <Color x:Key="StageGateColor">#7A6E5F</Color>
                     <Color x:Key="SuccessColor">#3D9B7A</Color>
-                    <Color x:Key="ErrorColor">#C45C5C</Color>
+                    <Color x:Key="ErrorColor">#D97070</Color>
                     <Color x:Key="WarningColor">#C9A05A</Color>
                     <Color x:Key="DangerLightColor">#3A1616</Color>
                     <Color x:Key="RadioCheckedBgColor">#332F6F62</Color>
                     <Color x:Key="QualityExcellentColor">#3D9B7A</Color>
-                    <Color x:Key="QualityGoodColor">#4A8F86</Color>
+                    <Color x:Key="QualityGoodColor">#4F9A90</Color>
                     <Color x:Key="QualityFairColor">#C9A05A</Color>
-                    <Color x:Key="QualityWarningColor">#C9A05A</Color>
-                    <Color x:Key="QualityPoorColor">#C45C5C</Color>
+                    <Color x:Key="QualityWarningColor">#D9822B</Color>
+                    <Color x:Key="QualityPoorColor">#D97070</Color>
                     <SolidColorBrush x:Key="QualityExcellentBrush" Color="{StaticResource QualityExcellentColor}" />
                     <SolidColorBrush x:Key="QualityGoodBrush" Color="{StaticResource QualityGoodColor}" />
                     <SolidColorBrush x:Key="QualityFairBrush" Color="{StaticResource QualityFairColor}" />
@@ -73,7 +73,7 @@
                     <SolidColorBrush x:Key="DragSubtitleBrush" Color="#9A9CA3" />
                     <SolidColorBrush x:Key="PopupBrush" Color="{StaticResource CardColor}" />
                     <SolidColorBrush x:Key="PlotBgBrush" Color="#08090B" />
-                    <SolidColorBrush x:Key="PlotAxisBrush" Color="#6E7178" />
+                    <SolidColorBrush x:Key="PlotAxisBrush" Color="#8B8E95" />
                     <SolidColorBrush x:Key="PlotGridBrush" Color="#332A2C30" />
                     <SolidColorBrush x:Key="PlotLabelBrush" Color="#9A9CA3" />
                     <SolidColorBrush x:Key="PlotBeforeValueBrush" Color="#FCA5A5" />
@@ -83,7 +83,7 @@
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="LogBgBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="LogTextBrush" Color="#D4D5D7" />
-                    <SolidColorBrush x:Key="LogTimeBrush" Color="#6E7178" />
+                    <SolidColorBrush x:Key="LogTimeBrush" Color="#8B8E95" />
                     <LinearGradientBrush x:Key="BackgroundGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                         <GradientStop Color="#0B0C0E" Offset="0.0"/>
                         <GradientStop Color="#121316" Offset="1.0"/>
@@ -109,20 +109,20 @@
                     <Color x:Key="StageColor">#E4E6EA</Color>
                     <Color x:Key="TextPrimaryColor">#16181C</Color>
                     <Color x:Key="TextSecondaryColor">#5C6168</Color>
-                    <Color x:Key="TextMutedColor">#7A8088</Color>
+                    <Color x:Key="TextMutedColor">#62676F</Color>
                     <Color x:Key="BorderColor">#D4D7DC</Color>
-                    <Color x:Key="BorderFocusColor">#B8894E</Color>
-                    <Color x:Key="StageGateColor">#B8A07A</Color>
-                    <Color x:Key="SuccessColor">#047857</Color>
-                    <Color x:Key="ErrorColor">#DC2626</Color>
-                    <Color x:Key="WarningColor">#B45309</Color>
+                    <Color x:Key="BorderFocusColor">#8F6630</Color>
+                    <Color x:Key="StageGateColor">#8F7A55</Color>
+                    <Color x:Key="SuccessColor">#036149</Color>
+                    <Color x:Key="ErrorColor">#B91C1C</Color>
+                    <Color x:Key="WarningColor">#9A4A0A</Color>
                     <Color x:Key="DangerLightColor">#FEE2E2</Color>
                     <Color x:Key="RadioCheckedBgColor">#262F6F62</Color>
-                    <Color x:Key="QualityExcellentColor">#047857</Color>
-                    <Color x:Key="QualityGoodColor">#0F766E</Color>
-                    <Color x:Key="QualityFairColor">#B45309</Color>
-                    <Color x:Key="QualityWarningColor">#C2410C</Color>
-                    <Color x:Key="QualityPoorColor">#DC2626</Color>
+                    <Color x:Key="QualityExcellentColor">#036149</Color>
+                    <Color x:Key="QualityGoodColor">#0B655E</Color>
+                    <Color x:Key="QualityFairColor">#8A5A00</Color>
+                    <Color x:Key="QualityWarningColor">#B13A06</Color>
+                    <Color x:Key="QualityPoorColor">#B91C1C</Color>
                     <SolidColorBrush x:Key="QualityExcellentBrush" Color="{StaticResource QualityExcellentColor}" />
                     <SolidColorBrush x:Key="QualityGoodBrush" Color="{StaticResource QualityGoodColor}" />
                     <SolidColorBrush x:Key="QualityFairBrush" Color="{StaticResource QualityFairColor}" />
@@ -172,7 +172,7 @@
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#2A2C30" />
                     <SolidColorBrush x:Key="LogBgBrush" Color="#F4F5F6" />
                     <SolidColorBrush x:Key="LogTextBrush" Color="#1F2228" />
-                    <SolidColorBrush x:Key="LogTimeBrush" Color="#7A8088" />
+                    <SolidColorBrush x:Key="LogTimeBrush" Color="#62676F" />
                     <LinearGradientBrush x:Key="BackgroundGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                         <GradientStop Color="#F3F4F6" Offset="0.0"/>
                         <GradientStop Color="#F3F4F6" Offset="1.0"/>
