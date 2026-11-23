@@ -25,18 +25,14 @@ public sealed class AutoDetectEligibilityTests
         using (var image = PreviewRgb.FromRgb(2, 2, new byte[12])) image.Save(imagePath);
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        var workerField = typeof(MainWindowViewModel).GetField("_worker", flags)!;
-        var oldWorker = (SpeedyWorker)workerField.GetValue(vm)!;
-        typeof(MainWindowViewModel).GetMethod("UnhookWorkerProgress", flags)!.Invoke(vm, null);
         // A queued detection can fail normally, but can never launch a real engine/GPU.
-        workerField.SetValue(vm, new SpeedyWorker(Path.Combine(root, "nonexistent-engine"), root));
-        typeof(MainWindowViewModel).GetMethod("HookWorkerProgress", flags)!.Invoke(vm, null);
-        await oldWorker.DisposeAsync();
+        await TestWorkers.UseNonLaunchingWorkerAsync(vm, root);
         var gate = (SemaphoreSlim)typeof(MainWindowViewModel).GetField("_run", flags)!.GetValue(vm)!;
         var held = false;
+        Task? afterQueuedWork = null;
         try
         {
-            await gate.WaitAsync(); held = true;
+            Assert.True(await gate.WaitAsync(TimeSpan.FromSeconds(12))); held = true;
             vm.Compute.WorkerReady = true;
             vm.Job.Busy = busy;
             vm.Output.IsSaving = saving;
@@ -51,17 +47,22 @@ public sealed class AutoDetectEligibilityTests
             // execution deterministically without waiting an arbitrary quiet interval.
             vm.Job.Busy = false;
             vm.Output.IsSaving = false;
-            var afterQueuedWork = gate.WaitAsync();
+            afterQueuedWork = gate.WaitAsync();
             gate.Release(); held = false;
-            await afterQueuedWork.WaitAsync(TimeSpan.FromSeconds(5)); held = true;
+            await afterQueuedWork.WaitAsync(TimeSpan.FromSeconds(12)); held = true;
             Assert.Equal(expectedDetections, item.DetectGeneration);
         }
         finally
         {
             if (held) gate.Release();
-            await vm.DisposeAsync();
+            // If the barrier timed out it still owns the gate once it is granted.
+            // Release it then; otherwise DisposeAsync waits for the gate forever
+            // and the test host hangs instead of reporting the failure.
+            else if (afterQueuedWork is { IsCompleted: false })
+                _ = afterQueuedWork.ContinueWith(_ => gate.Release(), TaskScheduler.Default);
+            await vm.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12));
             Dispatcher.UIThread.RunJobs();
-            Directory.Delete(root, true);
+            await TestWorkers.DeleteDirectoryAsync(root);
         }
     }
 }

@@ -139,9 +139,23 @@ fn resolve_deploy(settings: &DetectSettings) -> PathBuf {
     }
 }
 
-fn load_rgb_f32(path: &Path) -> Result<(Vec<f32>, i32, i32), String> {
-    let img = ccp_core::sample::load_image(path).map_err(|e| e.to_string())?;
+/// Decode through the shared `ccp_core` loader so detection honours the same
+/// pixel cap (`CCP_MAX_IMAGE_MEGAPIXELS`) as every other engine command.
+fn load_rgb_f32(path: &Path, max_pixels: u64) -> Result<(Vec<f32>, i32, i32), ccp_core::Error> {
+    let img = ccp_core::sample::load_image_with_limit(path, true, max_pixels)?;
     Ok((img.rgb, img.width as i32, img.height as i32))
+}
+
+/// Protocol-3 code for a failed input decode; mirrors the bridge's
+/// `classify_image_load` (which `ccp_detect` cannot depend on).
+fn image_load_code(err: &ccp_core::Error) -> &'static str {
+    use ccp_core::Error as Core;
+    use image::ImageError;
+    match err {
+        Core::ImageTooLarge { .. } | Core::Image(ImageError::Limits(_)) => "image_too_large",
+        Core::Io(_) | Core::Image(ImageError::IoError(_)) => "io_error",
+        _ => "image_decode_failed",
+    }
 }
 
 fn is_oom(err: &str) -> bool {
@@ -194,22 +208,25 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
 }
 
 pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectResult {
+    detect_chart_ort_with_limit(image_path, settings, ccp_core::sample::max_image_pixels())
+}
+
+fn detect_chart_ort_with_limit(
+    image_path: &Path,
+    settings: &DetectSettings,
+    max_pixels: u64,
+) -> DetectResult {
     let mut result = DetectResult {
         backend: "onnx".into(),
         runtime: "ort".into(),
         recall_source: "none".into(),
         ..DetectResult::default()
     };
-    let (rgb, width, height) = match load_rgb_f32(image_path) {
+    let (rgb, width, height) = match load_rgb_f32(image_path, max_pixels) {
         Ok(v) => v,
         Err(err) => {
-            result.error_code = if std::fs::metadata(image_path).is_err() {
-                "io_error"
-            } else {
-                "image_decode_failed"
-            }
-            .into();
-            result.error = err;
+            result.error_code = image_load_code(&err).into();
+            result.error = err.to_string();
             return result;
         }
     };
@@ -329,6 +346,38 @@ fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
     result.inference = inference_records(false);
     result.inference["recall_error"] = serde_json::json!(reason);
     result
+}
+
+#[cfg(test)]
+mod image_limit_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_detect_input_reports_image_too_large_before_inference() {
+        let dir = std::env::temp_dir().join(format!("ccp-detect-cap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.png");
+        image::RgbImage::from_pixel(8, 8, image::Rgb([128, 128, 128]))
+            .save(&path)
+            .unwrap();
+        let settings = DetectSettings {
+            deploy_dir: dir.join("no-models-here"),
+            ..DetectSettings::default()
+        };
+        let result = detect_chart_ort_with_limit(&path, &settings, 63);
+        assert!(!result.ok);
+        assert_eq!(result.error_code, "image_too_large", "{}", result.error);
+        assert!(
+            result.error.contains("CCP_MAX_IMAGE_MEGAPIXELS"),
+            "{}",
+            result.error
+        );
+
+        // At the cap the image decodes and detection proceeds to the model check.
+        let result = detect_chart_ort_with_limit(&path, &settings, 64);
+        assert_eq!(result.error_code, "inference_failed", "{}", result.error);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

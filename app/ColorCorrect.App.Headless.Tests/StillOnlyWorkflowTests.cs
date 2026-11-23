@@ -104,26 +104,43 @@ public sealed class StillOnlyWorkflowTests
     }
 
     [AvaloniaFact]
-    public void RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
+    public async Task RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }, Compute = { WorkerReady = true } };
-        vm.AddPaths([Sample()]);
-        Assert.True(vm.Workspace.HasImage);
-        Assert.NotNull(vm.Workspace.Active);
-        var skipped = vm.RestoreWorkingItems(new SessionState
+        var root = Path.Combine(Path.GetTempPath(), "colorcorrect-legacy-video-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        // WorkerReady makes adding the still start automatic detection. Without a
+        // stand-in worker that launched the real engine, and the never-disposed
+        // view model leaked it for the rest of the test run.
+        await TestWorkers.UseNonLaunchingWorkerAsync(vm, root);
+        vm.Job.Busy = false;
+        vm.Compute.WorkerReady = true;
+        try
         {
-            Items = [new SessionItemDto { Path = Sample(), IsVideo = true }],
-        });
-        Assert.Equal(1, skipped);
-        Assert.Empty(vm.Session);
-        Assert.Null(vm.Workspace.Active);
-        Assert.False(vm.Workspace.HasImage);
-        Assert.False(vm.ShowStillPreview);
-        Assert.Null(vm.Stage.Preview);
-        Assert.Null(vm.Stage.OriginalPreview);
-        Assert.False(vm.DetectCommand.CanExecute(null));
-        Assert.False(vm.ApplyCommand.CanExecute(null));
-        Assert.Contains("Video is not supported", vm.Job.Status);
+            vm.AddPaths([Sample()]);
+            Assert.True(vm.Workspace.HasImage);
+            Assert.NotNull(vm.Workspace.Active);
+            var skipped = vm.RestoreWorkingItems(new SessionState
+            {
+                Items = [new SessionItemDto { Path = Sample(), IsVideo = true }],
+            });
+            Assert.Equal(1, skipped);
+            Assert.Empty(vm.Session);
+            Assert.Null(vm.Workspace.Active);
+            Assert.False(vm.Workspace.HasImage);
+            Assert.False(vm.ShowStillPreview);
+            Assert.Null(vm.Stage.Preview);
+            Assert.Null(vm.Stage.OriginalPreview);
+            Assert.False(vm.DetectCommand.CanExecute(null));
+            Assert.False(vm.ApplyCommand.CanExecute(null));
+            Assert.Contains("Video is not supported", vm.Job.Status);
+        }
+        finally
+        {
+            await vm.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12));
+            Dispatcher.UIThread.RunJobs();
+            await TestWorkers.DeleteDirectoryAsync(root);
+        }
     }
 
     private static string Sample()
