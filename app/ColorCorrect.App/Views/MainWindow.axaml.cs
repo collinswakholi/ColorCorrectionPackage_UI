@@ -261,6 +261,11 @@ public partial class MainWindow : Window
         {
             await dialog.ShowDialog(this);
         }
+        catch (Exception ex)
+        {
+            // Callers are async void click handlers; an escaping exception would end the app.
+            ToastService.ShowError($"Could not open {dialog.Title ?? "the dialog"}: {ex.Message}");
+        }
         finally
         {
             if (ReferenceEquals(_activeSettingsDialog, dialog))
@@ -667,14 +672,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        var path = await vm.Dialogs.SavePlotAsync(title, suggested);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
         try
         {
+            // The picker can throw (e.g. no storage provider); keep it inside the guard.
+            var path = await vm.Dialogs.SavePlotAsync(title, suggested);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
             if (plots.Length == 1)
             {
                 PlotExport.Save(path, vm.Report, plots[0].Kind, plots[0].Control);
