@@ -667,7 +667,7 @@ public partial class MainWindow : Window
         string suggested,
         params (PatchPlotControl Control, PlotKind Kind, string Suffix)[] plots)
     {
-        if (DataContext is not MainWindowViewModel vm || vm.Dialogs is null || vm.Report is null)
+        if (DataContext is not MainWindowViewModel vm || vm.Dialogs is null || vm.Analysis.Report is null)
         {
             return;
         }
@@ -683,13 +683,13 @@ public partial class MainWindow : Window
 
             if (plots.Length == 1)
             {
-                PlotExport.Save(path, vm.Report, plots[0].Kind, plots[0].Control);
+                PlotExport.Save(path, vm.Analysis.Report, plots[0].Kind, plots[0].Control);
             }
             else
             {
                 foreach (var plot in plots)
                 {
-                    PlotExport.Save(PlotExport.WithSuffix(path, plot.Suffix), vm.Report, plot.Kind, plot.Control);
+                    PlotExport.Save(PlotExport.WithSuffix(path, plot.Suffix), vm.Analysis.Report, plot.Kind, plot.Control);
                 }
             }
 

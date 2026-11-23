@@ -134,13 +134,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     public ObservableCollection<CatalogItemViewModel> FilteredSamples { get; } = [];
     public ObservableCollection<CatalogFolderViewModel> CatalogFolders { get; } = [];
     public ObservableCollection<string> SampleGroups { get; } = [];
-    public ObservableCollection<PatchRowViewModel> Patches { get; } = [];
-    public ObservableCollection<StageDeltaERow> StageDeltaERows { get; } = [];
     public ObservableCollection<LogEntry> LogEntries { get; } = [];
     public ObservableCollection<PipelineStepViewModel> PipelineSteps { get; } = [];
 
     [ObservableProperty] private string _status = "Starting ColorCorrect engine…";
-    [ObservableProperty] private string _statusDeltaE = "";
     [ObservableProperty] private string _workerLine = "Worker: starting";
     [ObservableProperty] private bool _workerStartupComplete;
     [ObservableProperty] private string _workerStartupError = "";
@@ -162,19 +159,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private string _sampleQuery = "";
     [ObservableProperty] private string _selectedGroup = "All";
     [ObservableProperty] private string _imageMeta = "";
-    [ObservableProperty] private string _meanAfter = "--";
-    [ObservableProperty] private string _meanBefore = "--";
-    [ObservableProperty] private string _meanQuality = "";
-    [ObservableProperty] private string _medianAfter = "--";
-    [ObservableProperty] private string _medianBefore = "--";
-    [ObservableProperty] private string _medianQuality = "";
-    [ObservableProperty] private string _maxAfter = "--";
-    [ObservableProperty] private string _maxBefore = "--";
-    [ObservableProperty] private string _maxQuality = "";
-    [ObservableProperty] private string _modelMetric = "--";
-    [ObservableProperty] private string _featureDetail = "--";
-    [ObservableProperty] private string _validationSummary = "";
-    [ObservableProperty] private string _patchSummary = "";
     [ObservableProperty] private string _batchLabel = "";
     [ObservableProperty] private string _batchProgressPct = "0%";
     [ObservableProperty] private string _overlayBadge = "";
@@ -187,12 +171,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private FfcPlane? _overlayPlane;
     [ObservableProperty] private Rect _overlayPlaneRect;
     [ObservableProperty] private bool _showPlane = true;
-    [ObservableProperty] private CorrectionReport? _report;
     private FfcPlane? _loadedModelPlane;
     [ObservableProperty] private double _overlayCrop = 0.75;
-    [ObservableProperty] private double _meanAfterValue = double.NaN;
-    [ObservableProperty] private double _medianAfterValue = double.NaN;
-    [ObservableProperty] private double _maxAfterValue = double.NaN;
     [ObservableProperty] private SessionItemViewModel? _active;
     [ObservableProperty] private NamedValue _selectedMethod = new("linear", "Linear");
     [ObservableProperty] private NamedValue? _selectedDegree;
@@ -219,7 +199,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private decimal _nnTol = 0.000001m;
     [ObservableProperty] private int _faceIndex;
     [ObservableProperty] private int _overlayFaceChoice;
-    [ObservableProperty] private int _analysisTab;
     [ObservableProperty] private bool _busy = true;
     [ObservableProperty] private bool _workerReady;
     [ObservableProperty] private bool _isBatching;
@@ -232,41 +211,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _saveProgress;
     [ObservableProperty] private string _jobProgressPct = "0%";
     [ObservableProperty] private string _saveProgressLabel = "";
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
-    private bool _hasSession;
+    [ObservableProperty] private bool _hasSession;
     [ObservableProperty] private bool _hasImage;
     [ObservableProperty] private bool _hasCorrected;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
-    private bool _hasMetrics;
 
-    /// <summary>True while a fit or model apply runs for the active still (drives the analysis panels).</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
-    private bool _isApplying;
+    /// <summary>ΔE tiles, per-stage and per-patch rows, report and analysis panel states.</summary>
+    public AnalysisViewModel Analysis { get; } = new();
 
-    /// <summary>Reason the last fit or apply failed; empty after a success or a new run.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DeltaEPlaceholder), nameof(ColorPlaceholder), nameof(RenditionPlaceholder))]
-    private string _analysisFailure = "";
+    partial void OnHasSessionChanged(bool value) => Analysis.HasSession = value;
 
-    public string DeltaEPlaceholder => AnalysisPlaceholder("per-stage ΔE");
-
-    public string ColorPlaceholder => AnalysisPlaceholder("the color scatter");
-
-    public string RenditionPlaceholder => AnalysisPlaceholder("the chart rendition");
-
-    /// <summary>One message per analysis state: empty session, ready to fit, fitting, or failed.</summary>
-    private string AnalysisPlaceholder(string what)
-    {
-        if (IsApplying) return $"Fitting… {char.ToUpperInvariant(what[0])}{what[1..]} appears here when the run finishes.";
-        if (!string.IsNullOrWhiteSpace(AnalysisFailure))
-            return $"The last fit failed: {AnalysisFailure} See the Log tab for details.";
-        return HasSession
-            ? $"Detect the chart, then select Fit + apply to see {what}."
-            : $"Add a chart still, then select Fit + apply to see {what}.";
-    }
     [ObservableProperty] private bool _hasSaveItems;
     [ObservableProperty] private bool _hasCatalogFolders;
     [ObservableProperty] private bool _hasWhiteRef;
@@ -1677,62 +1630,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(PlaneBadge));
     }
 
-    private void ApplyReport(CorrectionReport? report)
-    {
-        Report = report;
-        HasMetrics = report?.HasMetrics == true;
-        Patches.Clear();
-        StageDeltaERows.Clear();
-
-        if (!HasMetrics || report is null)
-        {
-            MeanAfter = MedianAfter = MaxAfter = "--";
-            MeanBefore = MedianBefore = MaxBefore = "--";
-            MeanQuality = MedianQuality = MaxQuality = "";
-            MeanAfterValue = MedianAfterValue = MaxAfterValue = double.NaN;
-            ModelMetric = "--";
-            FeatureDetail = HasCorrected && report is null
-                ? "Model apply · no chart ΔE"
-                : string.IsNullOrWhiteSpace(report?.Process) ? "--" : report.Process;
-            PatchSummary = "";
-            ValidationSummary = "";
-            StatusDeltaE = "";
-            return;
-        }
-
-        MeanAfter = report.MeanAfter.ToString("0.00");
-        MedianAfter = report.MedianAfter.ToString("0.00");
-        MaxAfter = report.MaxAfter.ToString("0.00");
-        MeanAfterValue = report.MeanAfter;
-        MedianAfterValue = report.MedianAfter;
-        MaxAfterValue = report.MaxAfter;
-        MeanBefore = $"was {report.MeanBefore:0.00}";
-        MedianBefore = $"was {report.MedianBefore:0.00}";
-        MaxBefore = $"was {report.MaxBefore:0.00}";
-        MeanQuality = report.QualityLabel(report.MeanAfter);
-        MedianQuality = report.QualityLabel(report.MedianAfter);
-        MaxQuality = report.QualityLabel(report.MaxAfter);
-        ModelMetric = string.IsNullOrWhiteSpace(report.Model) ? BuildOptions().CliModel() : report.Model;
-        FeatureDetail = string.IsNullOrWhiteSpace(report.Process)
-            ? (report.FeatureCount > 0 ? $"{report.FeatureCount} features" : "")
-            : report.FeatureCount > 0
-                ? $"{report.Process} · {report.FeatureCount} feat"
-                : report.Process;
-        ValidationSummary = double.IsFinite(report.ValidationMean)
-            ? $"CC-only validation · {report.ValidationFolds}-fold mean {report.ValidationMean:0.00} · median {report.ValidationMedian:0.00} · max {report.ValidationMax:0.00}"
-            : "Training fit shown · validation unavailable";
-        PatchSummary = $"{report.Patches.Count} patches";
-        StatusDeltaE = report.StatusLine();
-        foreach (var row in report.Patches)
-        {
-            Patches.Add(new PatchRowViewModel(row));
-        }
-
-        foreach (var stage in report.EffectiveStages)
-        {
-            StageDeltaERows.Add(new StageDeltaERow(stage, report.QualityLabel(stage.MeanAfter)));
-        }
-    }
+    private void ApplyReport(CorrectionReport? report) =>
+        Analysis.Apply(report, HasCorrected, () => BuildOptions().CliModel());
 
     public void PrepareSaveMenu() => RefreshSessionUi();
 

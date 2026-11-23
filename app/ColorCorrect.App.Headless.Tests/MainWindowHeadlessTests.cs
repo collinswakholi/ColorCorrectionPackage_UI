@@ -52,11 +52,11 @@ public sealed class MainWindowHeadlessTests
         var (window, vm) = ShowMain(2000, 740, light: true);
         try
         {
-            vm.Report = new ColorCorrect.Engine.CorrectionReport
+            vm.Analysis.Report = new ColorCorrect.Engine.CorrectionReport
             {
                 HasMetrics = true, MeanBefore = 15, MeanAfter = 2,
             };
-            vm.HasMetrics = true;
+            vm.Analysis.HasMetrics = true;
             window.TabDeltaE.IsSelected = true;
             Dispatcher.UIThread.RunJobs();
             Assert.True(window.PlotDeltaE.Bounds.Height >= 180);

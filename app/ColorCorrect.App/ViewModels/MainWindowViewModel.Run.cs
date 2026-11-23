@@ -189,8 +189,8 @@ public partial class MainWindowViewModel
         await OnUi(() =>
         {
             Busy = true;
-            IsApplying = true;
-            AnalysisFailure = "";
+            Analysis.IsApplying = true;
+            Analysis.Failure = "";
             BeginPipeline(fit ? "fit" : "apply");
             CurrentStage = fit ? "CC" : "Apply model";
             Status = fit
@@ -230,7 +230,7 @@ public partial class MainWindowViewModel
             await OnUi(() =>
             {
                 Status = fit ? "Apply failed." : "Model apply failed.";
-                AnalysisFailure = Sentence(ex.Message);
+                Analysis.Failure = Sentence(ex.Message);
                 Log("Apply", WithWorkerStderr(ex.Message), LogLevel.Error, WorkerErrorDetails());
             }).ConfigureAwait(false);
         }
@@ -239,7 +239,7 @@ public partial class MainWindowViewModel
             await OnUi(() =>
             {
                 Busy = false;
-                IsApplying = false;
+                Analysis.IsApplying = false;
                 EndPipeline();
                 NotifyRunCommands();
             }).ConfigureAwait(false);
@@ -672,7 +672,7 @@ public partial class MainWindowViewModel
         if (!outcome.Ok)
         {
             var error = string.IsNullOrWhiteSpace(outcome.Error) ? "Correction failed." : outcome.Error.Trim();
-            AnalysisFailure = Sentence(error);
+            Analysis.Failure = Sentence(error);
 
             Status = fitted ? "Apply failed." : "Model apply failed.";
             var details = new List<string>(CorrectionSettingsDetails(item.Handshake, applyOnly: !fitted));
@@ -737,7 +737,7 @@ public partial class MainWindowViewModel
 
             ApplyReport(item.Report);
             RefreshOverlay();
-            AnalysisTab = 1;
+            Analysis.Tab = 1;
             OnPropertyChanged(nameof(IsResultPreviewSuppressed));
             if (item.PreviewSuppressed)
             {

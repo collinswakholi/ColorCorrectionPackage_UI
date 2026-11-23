@@ -1203,7 +1203,7 @@
                 <GridSplitter x:Name="AnalysisResize" Grid.Row="1" Height="8" Background="Transparent" ResizeDirection="Rows"/>
 
                 <Border x:Name="AnalysisPanel" Grid.Row="2" Classes="analysisPanel" MinHeight="220">
-                <TabControl x:Name="AnalysisTabs" SelectedIndex="{Binding AnalysisTab}"
+                <TabControl x:Name="AnalysisTabs" SelectedIndex="{Binding Analysis.Tab}"
                             Theme="{StaticResource DarkTabControl}">
                     <TabItem x:Name="TabLog" Header="Log" Theme="{StaticResource DarkTabItem}"
                              AutomationProperties.Name="Log">
@@ -1253,103 +1253,103 @@
                         <ScrollViewer x:Name="DeltaEPlotScroll" HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
                         <Grid x:Name="PanelDeltaE" RowDefinitions="Auto,*" Margin="14" RowSpacing="8">
-                            <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
-                                       Text="{Binding DeltaEPlaceholder}"
+                            <TextBlock Classes="caption" IsVisible="{Binding !Analysis.HasMetrics}"
+                                       Text="{Binding Analysis.DeltaEPlaceholder}"
                                        TextWrapping="Wrap"/>
-                            <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding HasMetrics}">
+                            <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding Analysis.HasMetrics}">
                                 <Border Classes="metricTile" Margin="0,0,8,8">
                                     <Border.Background>
                                         <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
-                                            <Binding Path="MeanAfterValue"/>
+                                            <Binding Path="Analysis.MeanAfterValue"/>
                                             <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                         </MultiBinding>
                                     </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Fit mean ΔE"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding MeanAfterValue, Converter={StaticResource DEQualityText}}"
+                                        <TextBlock Grid.Column="1" Text="{Binding Analysis.MeanAfterValue, Converter={StaticResource DEQualityText}}"
                                                    FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
-                                                    <Binding Path="MeanAfterValue"/>
+                                                    <Binding Path="Analysis.MeanAfterValue"/>
                                                     <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                                 </MultiBinding>
                                             </TextBlock.Foreground>
                                         </TextBlock>
-                                        <TextBlock x:Name="MeanMetric" Grid.Row="1" Text="{Binding MeanAfter}"
+                                        <TextBlock x:Name="MeanMetric" Grid.Row="1" Text="{Binding Analysis.MeanAfter}"
                                                    Classes="metricValue"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MeanBefore}" Classes="caption"
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Analysis.MeanBefore}" Classes="caption"
                                                    VerticalAlignment="Bottom"/>
                                     </Grid>
                                 </Border>
                                 <Border Classes="metricTile" Margin="0,0,8,8">
                                     <Border.Background>
                                         <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
-                                            <Binding Path="MedianAfterValue"/>
+                                            <Binding Path="Analysis.MedianAfterValue"/>
                                             <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                         </MultiBinding>
                                     </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Median ΔE"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding MedianAfterValue, Converter={StaticResource DEQualityText}}"
+                                        <TextBlock Grid.Column="1" Text="{Binding Analysis.MedianAfterValue, Converter={StaticResource DEQualityText}}"
                                                    FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
-                                                    <Binding Path="MedianAfterValue"/>
+                                                    <Binding Path="Analysis.MedianAfterValue"/>
                                                     <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                                 </MultiBinding>
                                             </TextBlock.Foreground>
                                         </TextBlock>
-                                        <TextBlock x:Name="MedianMetric" Grid.Row="1" Text="{Binding MedianAfter}"
+                                        <TextBlock x:Name="MedianMetric" Grid.Row="1" Text="{Binding Analysis.MedianAfter}"
                                                    Classes="metricValue"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MedianBefore}" Classes="caption"
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Analysis.MedianBefore}" Classes="caption"
                                                    VerticalAlignment="Bottom"/>
                                     </Grid>
                                 </Border>
                                 <Border Classes="metricTile" Margin="0,0,8,8">
                                     <Border.Background>
                                         <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
-                                            <Binding Path="MaxAfterValue"/>
+                                            <Binding Path="Analysis.MaxAfterValue"/>
                                             <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                         </MultiBinding>
                                     </Border.Background>
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                                         <TextBlock Classes="caption" Text="Max ΔE"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding MaxAfterValue, Converter={StaticResource DEQualityText}}"
+                                        <TextBlock Grid.Column="1" Text="{Binding Analysis.MaxAfterValue, Converter={StaticResource DEQualityText}}"
                                                    FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                             <TextBlock.Foreground>
                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
-                                                    <Binding Path="MaxAfterValue"/>
+                                                    <Binding Path="Analysis.MaxAfterValue"/>
                                                     <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
                                                 </MultiBinding>
                                             </TextBlock.Foreground>
                                         </TextBlock>
-                                        <TextBlock x:Name="MaxMetric" Grid.Row="1" Text="{Binding MaxAfter}"
+                                        <TextBlock x:Name="MaxMetric" Grid.Row="1" Text="{Binding Analysis.MaxAfter}"
                                                    Classes="metricValue"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MaxBefore}" Classes="caption"
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Analysis.MaxBefore}" Classes="caption"
                                                    VerticalAlignment="Bottom"/>
                                     </Grid>
                                 </Border>
                                 <Border Classes="metricTile" Margin="0,0,0,8">
                                     <StackPanel>
                                         <TextBlock Classes="caption" Text="Transform"/>
-                                        <TextBlock x:Name="ModelMetric" Text="{Binding ModelMetric}"
+                                        <TextBlock x:Name="ModelMetric" Text="{Binding Analysis.ModelMetric}"
                                                    Classes="caption" FontWeight="SemiBold" TextWrapping="Wrap"
                                                    Margin="0,4,0,0"/>
-                                        <TextBlock Text="{Binding FeatureDetail}" Classes="caption" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{Binding ValidationSummary}" Classes="caption" TextWrapping="Wrap"
+                                        <TextBlock Text="{Binding Analysis.FeatureDetail}" Classes="caption" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Analysis.ValidationSummary}" Classes="caption" TextWrapping="Wrap"
                                                    Margin="0,4,0,0"/>
                                     </StackPanel>
                                 </Border>
                             </UniformGrid>
                             <Grid x:Name="DeltaEPlots" Grid.Row="1" ColumnDefinitions="*,12,1.15*"
-                                  IsVisible="{Binding HasMetrics}">
+                                  IsVisible="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
                                         <TextBlock Text="Per stage" Classes="caption"
                                                    FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Disabled">
-                                            <ItemsControl ItemsSource="{Binding StageDeltaERows}">
+                                            <ItemsControl ItemsSource="{Binding Analysis.StageDeltaERows}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:StageDeltaERow">
                                                         <Border Classes="stageDeltaCard">
@@ -1429,7 +1429,7 @@
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotDeltaE" MinHeight="180"
-                                                                       Kind="StageBars" Report="{Binding Report}"/>
+                                                                       Kind="StageBars" Report="{Binding Analysis.Report}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -1441,11 +1441,11 @@
                     <TabItem x:Name="TabColor" Header="Color Analysis" Theme="{StaticResource DarkTabItem}"
                              AutomationProperties.Name="Color Analysis">
                         <Grid x:Name="PanelColor" Margin="14">
-                            <TextBlock Classes="caption" IsVisible="{Binding !HasMetrics}"
+                            <TextBlock Classes="caption" IsVisible="{Binding !Analysis.HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="{Binding ColorPlaceholder}"
+                                       Text="{Binding Analysis.ColorPlaceholder}"
                                        TextWrapping="Wrap"/>
-                            <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding HasMetrics}">
+                            <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
                                         <DockPanel Margin="0,0,0,8">
@@ -1465,7 +1465,7 @@
                                                        TextTrimming="CharacterEllipsis"/>
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" Report="{Binding Report}"/>
+                                            <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" Report="{Binding Analysis.Report}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -1474,7 +1474,7 @@
                                         <TextBlock Text="Residual" Classes="caption"
                                                    FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" Report="{Binding Report}"/>
+                                            <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" Report="{Binding Analysis.Report}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -1485,14 +1485,14 @@
                     <TabItem x:Name="TabPatches" Header="Chart rendition" Theme="{StaticResource DarkTabItem}"
                              AutomationProperties.Name="Chart rendition">
                         <Grid x:Name="PanelPatches" RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="8">
-                            <TextBlock x:Name="PatchSummary" Text="{Binding PatchSummary}" Classes="caption"
-                                       HorizontalAlignment="Right" IsVisible="{Binding HasMetrics}"/>
-                            <TextBlock Grid.Row="1" Classes="caption" IsVisible="{Binding !HasMetrics}"
+                            <TextBlock x:Name="PatchSummary" Text="{Binding Analysis.PatchSummary}" Classes="caption"
+                                       HorizontalAlignment="Right" IsVisible="{Binding Analysis.HasMetrics}"/>
+                            <TextBlock Grid.Row="1" Classes="caption" IsVisible="{Binding !Analysis.HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Text="{Binding RenditionPlaceholder}"
+                                       Text="{Binding Analysis.RenditionPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="PlotHoverHost" Grid.Row="1" ColumnDefinitions="*,12,*"
-                                  MinHeight="160" ClipToBounds="True" IsVisible="{Binding HasMetrics}">
+                                  MinHeight="160" ClipToBounds="True" IsVisible="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
                                         <DockPanel Margin="0,0,0,8">
@@ -1513,7 +1513,7 @@
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotRenditionOriginal" Kind="RenditionOriginal"
-                                                                       Report="{Binding Report}"
+                                                                       Report="{Binding Analysis.Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
                                         </Border>
                                     </Grid>
@@ -1524,7 +1524,7 @@
                                                    FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotRenditionCorrected" Kind="RenditionCorrected"
-                                                                       Report="{Binding Report}"
+                                                                       Report="{Binding Analysis.Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
                                         </Border>
                                     </Grid>
@@ -1540,7 +1540,7 @@
                             <Expander Grid.Row="2" Header="Patch ΔE table" Classes="section"
                                       Theme="{StaticResource SectionExpander}"
                                       IsExpanded="False"
-                                      IsVisible="{Binding HasMetrics}">
+                                      IsVisible="{Binding Analysis.HasMetrics}">
                                 <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                                         CornerRadius="{DynamicResource RadiusLg}" Margin="0,8,0,0" ClipToBounds="True">
                                     <ScrollViewer HorizontalScrollBarVisibility="Auto"
@@ -1556,7 +1556,7 @@
                                             <TextBlock Grid.Column="6" Text="Corr" Classes="caption" FontWeight="SemiBold"/>
                                         </Grid>
                                         <ScrollViewer Grid.Row="1" MaxHeight="220">
-                                            <ItemsControl x:Name="PatchTable" ItemsSource="{Binding Patches}">
+                                            <ItemsControl x:Name="PatchTable" ItemsSource="{Binding Analysis.Patches}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:PatchRowViewModel">
                                                         <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="10,6">
@@ -1667,8 +1667,8 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0">
                     <TextBlock Text="{Binding CurrentStage}" Classes="caption" Foreground="{DynamicResource PrimaryBrush}"
                                FontWeight="SemiBold"/>
-                    <TextBlock x:Name="StatusDeltaE" Text="{Binding StatusDeltaE}" Classes="caption" Margin="12,0,0,0"
-                               Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding HasMetrics}"/>
+                    <TextBlock x:Name="StatusDeltaE" Text="{Binding Analysis.StatusDeltaE}" Classes="caption" Margin="12,0,0,0"
+                               Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding Analysis.HasMetrics}"/>
                 </StackPanel>
                 <Panel x:Name="StatusDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                        DockPanel.Dock="Left" IsHitTestVisible="False">
