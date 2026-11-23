@@ -67,12 +67,43 @@ pub fn set_auto_lut_request(auto: bool) { AUTO_LUT_REQUEST.set(auto); }
 // conservative size policy, not a claim to benchmark the user's hardware.
 fn auto_uses_cpu(pixels: usize) -> bool { pixels < 1_048_576 }
 
+/// Concurrent background preview PNG encoders. Further spawns wait for one to
+/// finish so a large batch cannot start an unbounded number of threads.
+const MAX_PREVIEW_ENCODERS: usize = 4;
+
+type PreviewEncode = JoinHandle<std::result::Result<(), String>>;
+
 #[derive(Default)]
 struct PreviewPngEncoders {
-    pending: Mutex<HashMap<PathBuf, JoinHandle<()>>>,
+    pending: Mutex<HashMap<PathBuf, PreviewEncode>>,
+    /// Failures observed while reaping, kept until a join reports them.
+    failed: Mutex<HashMap<PathBuf, String>>,
+}
+
+fn finish_preview_encode(path: &Path, handle: PreviewEncode) -> std::result::Result<(), String> {
+    match handle.join() {
+        Ok(result) => result,
+        Err(_) => Err(format!("preview encoder for {} panicked", path.display())),
+    }
 }
 
 impl PreviewPngEncoders {
+    fn record_failure(&self, path: PathBuf, result: std::result::Result<(), String>) {
+        if let Err(error) = result {
+            self.failed
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(path, error);
+        }
+    }
+
+    fn take_failure(&self, path: &Path) -> Option<String> {
+        self.failed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(path)
+    }
+
     fn reap_finished(&self) {
         let handles: Vec<_> = {
             let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
@@ -81,39 +112,120 @@ impl PreviewPngEncoders {
                 .filter(|(_, handle)| handle.is_finished())
                 .map(|(path, _)| path.clone())
                 .collect();
-            finished.into_iter().filter_map(|path| pending.remove(&path)).collect()
+            finished
+                .into_iter()
+                .filter_map(|path| pending.remove(&path).map(|handle| (path, handle)))
+                .collect()
         };
         // Join outside the registry lock. A finished encoder still owns a native
         // Windows thread handle until joined/dropped; unique run paths must not
         // retain those handles until shutdown. Encoders still running stay queued.
-        for handle in handles {
-            let _ = handle.join();
+        for (path, handle) in handles {
+            let result = finish_preview_encode(&path, handle);
+            self.record_failure(path, result);
         }
     }
 
-    fn join(&self, path: &Path) {
-        let mut pending=self.pending.lock().unwrap_or_else(|e|e.into_inner());
-        if let Some(handle)=pending.remove(path) {let _=handle.join();}
+    fn join(&self, path: &Path) -> Result<()> {
         // Keep registry ownership until completion. A concurrent flush/join must
         // never interpret an already-drained but still-running encode as done.
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(handle) = pending.remove(path) {
+            let result = finish_preview_encode(path, handle);
+            self.record_failure(path.to_path_buf(), result);
+        }
+        drop(pending);
+        match self.take_failure(path) {
+            Some(error) => Err(Error::Message(format!(
+                "preview PNG {} could not be written: {error}",
+                path.display()
+            ))),
+            None => Ok(()),
+        }
     }
 
-    fn flush(&self) {
-        let mut pending=self.pending.lock().unwrap_or_else(|e|e.into_inner());
-        for (_,handle) in pending.drain() {let _=handle.join();}
+    fn join_under(&self, dir: &Path) -> Result<()> {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let paths: Vec<PathBuf> = pending
+            .keys()
+            .filter(|path| path.starts_with(dir))
+            .cloned()
+            .collect();
+        for path in paths {
+            if let Some(handle) = pending.remove(&path) {
+                let result = finish_preview_encode(&path, handle);
+                self.record_failure(path, result);
+            }
+        }
+        drop(pending);
+        let mut failed = self.failed.lock().unwrap_or_else(|e| e.into_inner());
+        let mut under: Vec<PathBuf> = failed
+            .keys()
+            .filter(|path| path.starts_with(dir))
+            .cloned()
+            .collect();
+        under.sort();
+        let first = under.first().cloned();
+        let errors: Vec<_> = under
+            .iter()
+            .filter_map(|path| failed.remove(path))
+            .collect();
+        match (first, errors.first()) {
+            (Some(path), Some(error)) => Err(Error::Message(format!(
+                "preview PNG {} could not be written: {error}",
+                path.display()
+            ))),
+            _ => Ok(()),
+        }
+    }
+
+    fn flush(&self) -> Result<()> {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        for (path, handle) in pending.drain() {
+            let result = finish_preview_encode(&path, handle);
+            self.record_failure(path, result);
+        }
+        drop(pending);
+        let mut failed = self.failed.lock().unwrap_or_else(|e| e.into_inner());
+        let first = failed
+            .iter()
+            .min_by(|a, b| a.0.cmp(b.0))
+            .map(|(path, error)| {
+                format!(
+                    "preview PNG {} could not be written: {error}",
+                    path.display()
+                )
+            });
+        failed.clear();
+        first.map_or(Ok(()), |message| Err(Error::Message(message)))
     }
 
     fn spawn(&self, rgb: Rgb8, path: PathBuf) {
         self.reap_finished();
-        self.join(&path);
+        // A replaced encode's outcome is moot; the new one reports for this path.
+        let _ = self.join(&path);
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        while pending.len() >= MAX_PREVIEW_ENCODERS {
+            let Some(oldest) = pending.keys().next().cloned() else {
+                break;
+            };
+            if let Some(handle) = pending.remove(&oldest) {
+                let result = finish_preview_encode(&oldest, handle);
+                self.record_failure(oldest, result);
+            }
+        }
         let key = path.clone();
-        if let Ok(handle) = std::thread::Builder::new()
+        let spawned = std::thread::Builder::new()
             .name("ccp-preview-png".into())
-            .spawn(move || {
-                let _ = encode_preview_png(&rgb, &path);
-            })
-        {
-            self.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(key, handle);
+            .spawn(move || encode_preview_png(&rgb, &path).map_err(|e| e.to_string()));
+        match spawned {
+            Ok(handle) => {
+                pending.insert(key, handle);
+            }
+            Err(error) => {
+                drop(pending);
+                self.record_failure(key, Err(format!("cannot start preview encoder: {error}")));
+            }
         }
     }
 }
@@ -123,9 +235,21 @@ fn pending_preview_pngs() -> &'static PreviewPngEncoders {
     PENDING.get_or_init(PreviewPngEncoders::default)
 }
 
-fn join_pending_preview_png(path: &Path) { pending_preview_pngs().join(path); }
+/// Finish every pending preview PNG under `dir`, reporting the first failure.
+/// Called before a request returns so returned preview paths exist.
+pub fn finish_preview_encodes_under(dir: &Path) -> Result<()> {
+    pending_preview_pngs().join_under(dir)
+}
 
-pub fn flush_preview_encodes() { pending_preview_pngs().flush(); }
+#[cfg(test)]
+fn join_pending_preview_png(path: &Path) -> Result<()> {
+    pending_preview_pngs().join(path)
+}
+
+/// Finish all pending preview PNGs (worker shutdown), reporting the first failure.
+pub fn flush_preview_encodes() -> Result<()> {
+    pending_preview_pngs().flush()
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -1667,7 +1791,13 @@ fn finish_image_writes(
             }
         }
     }
-    write_jobs_parallel(work, &jobs, space)
+    write_jobs_parallel(work, &jobs, space)?;
+    if let Some(dir) = preview_dir {
+        // Returned preview paths must exist: finish this request's background
+        // PNG encodes (including earlier stage previews) and surface failures.
+        finish_preview_encodes_under(dir)?;
+    }
+    Ok(())
 }
 
 fn maybe_preview_with_progress(
@@ -2846,7 +2976,7 @@ mod tests {
             }).unwrap();
         assert_eq!(events, ["Loading image", "GC", "GC complete", "Writing preview", "Writing preview complete"]);
         assert!(!output.exists());
-        flush_preview_encodes();
+        flush_preview_encodes().unwrap();
         set_cpu_lut_request(false);
     }
 
@@ -2944,7 +3074,7 @@ mod tests {
                     let reapplied = dir.join(format!("{kind}-reloaded.png"));
                     apply_saved_to_image_ex(&loaded,&image,&reapplied,None,&options).unwrap();
                     assert_eq!(image::open(&output).unwrap().to_rgb8(), image::open(&reapplied).unwrap().to_rgb8());
-                    flush_preview_encodes();
+                    flush_preview_encodes().unwrap();
                     for stage in ["gc","wb"] {
                         let before = dir.join(format!("{kind}-false-previews")).join(format!("{stage}.png"));
                         let after = previews.join(format!("{stage}.png"));
@@ -2956,7 +3086,7 @@ mod tests {
                         preview_options.do_cc = false;
                         preview_options.do_wb = stage == "wb";
                         apply_saved_to_image_ex(&loaded,&image,&reapplied,Some(&lazy),&preview_options).unwrap();
-                        flush_preview_encodes();
+                        flush_preview_encodes().unwrap();
                         assert_eq!(
                             image::open(previews.join(format!("{stage}.png"))).unwrap().to_rgb8(),
                             image::open(lazy.join(format!("{stage}.png"))).unwrap().to_rgb8(),
@@ -2980,7 +3110,7 @@ mod tests {
         assert_eq!(&bytes[..8], b"CCPRGB8\n");
         assert_eq!(&bytes[8..12], 30u32.to_le_bytes());
         assert_eq!(&bytes[12..16], 20u32.to_le_bytes());
-        flush_preview_encodes();
+        flush_preview_encodes().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2991,9 +3121,13 @@ mod tests {
         let encoders = PreviewPngEncoders::default();
         let (release, wait) = std::sync::mpsc::channel();
         let blocked_path = dir.join("still-running.png");
-        encoders.pending.lock().unwrap().insert(blocked_path.clone(), std::thread::spawn(move || {
-            let _ = wait.recv();
-        }));
+        encoders.pending.lock().unwrap().insert(
+            blocked_path.clone(),
+            std::thread::spawn(move || {
+                let _ = wait.recv();
+                Ok(())
+            }),
+        );
         for index in 0..100u8 {
             let path = dir.join(format!("unique-{index}.png"));
             encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([index, 17, 219])), path.clone());
@@ -3013,7 +3147,7 @@ mod tests {
         assert_eq!(encoders.pending.lock().unwrap().len(), 1);
         assert!(encoders.pending.lock().unwrap().contains_key(&blocked_path));
         release.send(()).unwrap();
-        encoders.flush();
+        encoders.flush().unwrap();
         assert!(encoders.pending.lock().unwrap().is_empty());
         for index in 0..100u8 {
             let image = image::open(dir.join(format!("unique-{index}.png"))).unwrap().to_rgb8();
@@ -3040,7 +3174,9 @@ mod tests {
         let recovered = dir.join("recovered.png");
         encoders.spawn(Rgb8::from_pixel(8, 8, image::Rgb([7, 8, 9])), recovered.clone());
         assert!(!encoders.pending.lock().unwrap().contains_key(&failed));
-        encoders.flush();
+        // The reaped failure is still reported once, by the next flush.
+        assert!(encoders.flush().is_err());
+        encoders.flush().unwrap();
         assert!(encoders.pending.lock().unwrap().is_empty());
         assert_eq!(std::fs::read(&blocker).unwrap(), b"preserve this file");
         assert_eq!(image::open(recovered).unwrap().to_rgb8().get_pixel(0, 0).0, [7, 8, 9]);
@@ -3048,23 +3184,124 @@ mod tests {
     }
 
     #[test]
+    fn preview_encode_failures_surface_and_pngs_exist_after_join_under() {
+        let dir = std::env::temp_dir().join(format!("ccp-preview-surface-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-directory");
+        std::fs::write(&blocker, b"x").unwrap();
+        let encoders = PreviewPngEncoders::default();
+        encoders.spawn(Rgb8::new(8, 8), blocker.join("corrected.png"));
+        let error = encoders.join_under(&blocker).unwrap_err();
+        assert!(error.to_string().contains("corrected.png"), "{error}");
+        // The failure is reported once, then forgotten.
+        encoders.join_under(&blocker).unwrap();
+        let good = dir.join("good");
+        encoders.spawn(
+            Rgb8::from_pixel(8, 8, image::Rgb([9, 8, 7])),
+            good.join("gc.png"),
+        );
+        encoders.join_under(&good).unwrap();
+        assert_eq!(
+            image::open(good.join("gc.png"))
+                .unwrap()
+                .to_rgb8()
+                .get_pixel(0, 0)
+                .0,
+            [9, 8, 7]
+        );
+        // A failure noticed while reaping is still reported to a later join.
+        encoders.spawn(Rgb8::new(8, 8), blocker.join("wb.png"));
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        while !encoders
+            .pending
+            .lock()
+            .unwrap()
+            .values()
+            .all(|h| h.is_finished())
+        {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        encoders.reap_finished();
+        assert!(encoders.join(&blocker.join("wb.png")).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn preview_encoder_concurrency_is_capped() {
+        let encoders = Arc::new(PreviewPngEncoders::default());
+        let mut releases = Vec::new();
+        for index in 0..MAX_PREVIEW_ENCODERS {
+            let (release, wait) = std::sync::mpsc::channel::<()>();
+            releases.push(release);
+            encoders.pending.lock().unwrap().insert(
+                PathBuf::from(format!("blocked-cap-{index}.png")),
+                std::thread::spawn(move || {
+                    let _ = wait.recv();
+                    Ok(())
+                }),
+            );
+        }
+        let dir = std::env::temp_dir().join(format!("ccp-preview-cap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let spawner = Arc::clone(&encoders);
+        let path = dir.join("over-cap.png");
+        let spawned_path = path.clone();
+        let (submitted, submitted_rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            spawner.spawn(Rgb8::new(4, 4), spawned_path);
+            submitted.send(()).unwrap();
+        });
+        assert!(
+            submitted_rx
+                .recv_timeout(std::time::Duration::from_millis(50))
+                .is_err(),
+            "spawn must wait while {MAX_PREVIEW_ENCODERS} encoders are running"
+        );
+        drop(releases);
+        thread.join().unwrap();
+        submitted_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        encoders.flush().unwrap();
+        assert!(path.is_file());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn preview_join_waits_for_concurrent_shutdown_flush() {
-        let encoders=Arc::new(PreviewPngEncoders::default());
-        let path=PathBuf::from("blocked-preview-for-flush-test.png");
-        let (release,wait)=std::sync::mpsc::channel();
-        encoders.pending.lock().unwrap().insert(path.clone(),std::thread::spawn(move||{wait.recv().unwrap();}));
-        let flushing=Arc::clone(&encoders);
-        let flush=std::thread::spawn(move||flushing.flush());
-        let deadline=Instant::now()+std::time::Duration::from_secs(5);
+        let encoders = Arc::new(PreviewPngEncoders::default());
+        let path = PathBuf::from("blocked-preview-for-flush-test.png");
+        let (release, wait) = std::sync::mpsc::channel();
+        encoders.pending.lock().unwrap().insert(
+            path.clone(),
+            std::thread::spawn(move || {
+                wait.recv().unwrap();
+                Ok(())
+            }),
+        );
+        let flushing = Arc::clone(&encoders);
+        let flush = std::thread::spawn(move || flushing.flush());
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
         while encoders.pending.try_lock().is_ok() {
             assert!(Instant::now()<deadline);std::thread::yield_now();
         }
-        let reading=Arc::clone(&encoders);
-        let (done,done_rx)=std::sync::mpsc::channel();
-        let reader=std::thread::spawn(move||{reading.join(&path);done.send(()).unwrap();});
-        assert!(done_rx.recv_timeout(std::time::Duration::from_millis(20)).is_err());
-        release.send(()).unwrap();flush.join().unwrap();reader.join().unwrap();
-        done_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let reading = Arc::clone(&encoders);
+        let (done, done_rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let _ = reading.join(&path);
+            done.send(()).unwrap();
+        });
+        assert!(done_rx
+            .recv_timeout(std::time::Duration::from_millis(20))
+            .is_err());
+        release.send(()).unwrap();
+        flush.join().unwrap().unwrap();
+        reader.join().unwrap();
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
     }
 
     #[test]
@@ -3075,10 +3312,15 @@ mod tests {
         let encoders = Arc::new(PreviewPngEncoders::default());
         let (release, wait) = std::sync::mpsc::channel();
         let first_path = path.clone();
-        encoders.pending.lock().unwrap().insert(path.clone(), std::thread::spawn(move || {
-            wait.recv().unwrap();
-            encode_preview_png(&Rgb8::from_pixel(8, 8, image::Rgb([1, 2, 3])), &first_path).unwrap();
-        }));
+        encoders.pending.lock().unwrap().insert(
+            path.clone(),
+            std::thread::spawn(move || {
+                wait.recv().unwrap();
+                encode_preview_png(&Rgb8::from_pixel(8, 8, image::Rgb([1, 2, 3])), &first_path)
+                    .unwrap();
+                Ok(())
+            }),
+        );
         let second_encoders = Arc::clone(&encoders);
         let second_path = path.clone();
         let (submitted, submitted_rx) = std::sync::mpsc::channel();
@@ -3089,7 +3331,7 @@ mod tests {
         assert!(submitted_rx.recv_timeout(std::time::Duration::from_millis(20)).is_err());
         release.send(()).unwrap();
         replacement.join().unwrap();
-        encoders.flush();
+        encoders.flush().unwrap();
         assert_eq!(image::open(&path).unwrap().to_rgb8().get_pixel(0, 0).0, [4, 5, 6]);
         assert!(encoders.pending.lock().unwrap().is_empty());
         std::fs::remove_dir_all(dir).unwrap();
@@ -3703,7 +3945,7 @@ mod tests {
         assert_eq!(exported.get_pixel(0, 0).0, [55; 3]);
         let sidecar = std::fs::read(dir.join("corrected.rgb")).unwrap();
         assert_eq!(&sidecar[sidecar.len() - 3..], &[128; 3]);
-        join_pending_preview_png(&dir.join("corrected.png"));
+        join_pending_preview_png(&dir.join("corrected.png")).unwrap();
         let preview = image::open(dir.join("corrected.png")).unwrap().to_rgb8();
         assert_eq!(preview.get_pixel(0, 0).0, [128; 3]);
         assert_eq!(work[[0, 0, 0]], 0.21404114);

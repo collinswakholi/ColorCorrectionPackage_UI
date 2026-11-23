@@ -1,6 +1,6 @@
 //! First-class NDJSON serve (stdin/stdout). Host drains stderr.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,6 +20,12 @@ use crate::run_pipeline::{
     SavedPipeline,
 };
 
+/// Detection cache entries (and their private temp copies) kept per worker.
+const DETECT_CACHE_CAPACITY: usize = 64;
+/// Worker-chosen default `detect` handshake files kept before the oldest is
+/// deleted. All remaining worker temp files are removed when the loop exits.
+const TEMP_OUTPUT_CAPACITY: usize = 64;
+
 #[derive(Debug)]
 pub struct ServeState {
     pub policy: String,
@@ -28,6 +34,10 @@ pub struct ServeState {
     pub last: Option<SavedPipeline>,
     pub detect_cache: HashMap<String, PathBuf>,
     pub ffc_cache: Arc<FfcGainCache>,
+    /// Least-recently-used order of `detect_cache` keys (front = oldest).
+    pub detect_cache_order: VecDeque<String>,
+    /// Default detect handshakes this worker wrote to the temp directory.
+    pub temp_outputs: VecDeque<PathBuf>,
 }
 
 impl Default for ServeState {
@@ -39,6 +49,8 @@ impl Default for ServeState {
             last: None,
             detect_cache: HashMap::new(),
             ffc_cache: Arc::new(FfcGainCache::new()),
+            detect_cache_order: VecDeque::new(),
+            temp_outputs: VecDeque::new(),
         }
     }
 }
@@ -251,11 +263,17 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     if json_bool(req, &["retry_inference"], false) {
         #[cfg(feature="ort-plane")]
         ccp_detect::reset_inference_sessions();
-        state.detect_cache.clear();
+        clear_detect_cache(state);
     }
     let key = detect_cache_key(&image, &settings);
     let bypass_cache = json_bool(req, &["bypass_cache"], false);
-    if let Some(cached) = state.detect_cache.get(&key).filter(|_| !bypass_cache) {
+    if let Some(cached) = state
+        .detect_cache
+        .get(&key)
+        .cloned()
+        .filter(|_| !bypass_cache)
+    {
+        let cached = &cached;
         if cached.is_file() {
             if let Ok(text) = std::fs::read_to_string(cached) {
                 if !text.trim().is_empty() {
@@ -266,13 +284,11 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
                             json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
                         let returned = requested.as_ref().unwrap_or(cached);
                         if returned != cached {
-                            if let Some(parent) = returned.parent() {
-                                let _ = std::fs::create_dir_all(parent);
-                            }
-                            if let Err(error) = std::fs::write(returned, &text) {
-                                return json!({"ok":false,"error":error.to_string()});
+                            if let Err(error) = write_with_parent(returned, text.as_bytes()) {
+                                return json!({"ok":false,"error":error});
                             }
                         }
+                        touch_detect_cache(state, &key);
                         return json!({
                             "ok": true,
                             "handshake": returned,
@@ -319,6 +335,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         }
     };
     let handshake_out = json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
+    let worker_owned = handshake_out.is_none();
     let out = handshake_out.unwrap_or_else(|| {
         let mut p = std::env::temp_dir();
         let stem = image
@@ -331,11 +348,11 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         ));
         p
     });
-    if let Some(parent) = out.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    if let Err(e) = write_with_parent(&out, &serde_json::to_vec(&handshake).unwrap_or_default()) {
+        return json!({"ok":false,"error": e});
     }
-    if let Err(e) = std::fs::write(&out, serde_json::to_vec(&handshake).unwrap_or_default()) {
-        return json!({"ok":false,"error": e.to_string()});
+    if worker_owned {
+        remember_temp_output(state, out.clone());
     }
     if !bypass_cache {
         let cache_path = std::env::temp_dir().join(format!(
@@ -348,7 +365,7 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         )
         .is_ok()
         {
-            state.detect_cache.insert(key, cache_path);
+            remember_detect_cache(state, key, cache_path);
         }
     }
     if !result.device.is_empty() {
@@ -367,6 +384,14 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
         "recall_source": result.recall_source,
         "cached": false,
     })
+}
+
+fn write_with_parent(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    std::fs::write(path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
 fn sync_runtime(state: &ServeState, req: &Value) {
@@ -472,32 +497,44 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
             _ => return json!({"ok":false,"error":"output_format must be png, jpg or jpeg"}),
         },
     };
-    let _ = std::fs::create_dir_all(&output_dir);
+    let mut valid_images = Vec::with_capacity(images.len());
+    for (index, value) in images.iter().enumerate() {
+        match value.as_str().filter(|s| !s.is_empty()) {
+            Some(image) => valid_images.push(image.to_string()),
+            None => {
+                return json!({"ok":false,
+                    "error": format!("images[{index}] must be a nonempty path string")})
+            }
+        }
+    }
+    if let Err(e) = std::fs::create_dir_all(&output_dir) {
+        return json!({"ok":false,
+            "error": format!("cannot create output_dir {}: {e}", output_dir.display())});
+    }
     emit_progress(&format!("Applying model to {} images", images.len()));
 
     let preview_root = json_str(req, &["preview_dir"]).map(PathBuf::from);
-    let valid_images: Vec<String> = images
-        .iter()
-        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-        .collect();
     let artifact_bases = unique_artifact_bases(&valid_images);
-    let jobs: Vec<(String, PathBuf, Option<PathBuf>)> = valid_images
-        .into_iter()
-        .zip(artifact_bases)
-        .map(|(img, artifact_base)| {
-            let dest = output_dir.join(format!("{artifact_base}_corrected.{output_ext}"));
-            let preview = preview_root.as_ref().map(|root| {
+    let mut jobs: Vec<(String, PathBuf, Option<PathBuf>)> = Vec::with_capacity(images.len());
+    for (img, artifact_base) in valid_images.into_iter().zip(artifact_bases) {
+        let dest = output_dir.join(format!("{artifact_base}_corrected.{output_ext}"));
+        let preview = match preview_root.as_ref() {
+            None => None,
+            Some(root) => {
                 let dir = if images.len() > 1 {
                     root.join(&artifact_base)
                 } else {
                     root.clone()
                 };
-                let _ = std::fs::create_dir_all(&dir);
-                dir
-            });
-            (img, dest, preview)
-        })
-        .collect();
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    return json!({"ok":false,
+                        "error": format!("cannot create preview_dir {}: {e}", dir.display())});
+                }
+                Some(dir)
+            }
+        };
+        jobs.push((img, dest, preview));
+    }
 
     let mut apply = match ApplyOptions::try_from_req(req, &saved) {
         Ok(apply) => apply,
@@ -711,7 +748,7 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
         #[cfg(test)]
         "__test_panic" => panic!("deliberate test panic"),
         "shutdown" | "quit" => {
-            crate::run_pipeline::flush_preview_encodes();
+            let _ = crate::run_pipeline::flush_preview_encodes();
             (json!({"ok":true,"event":"shutdown"}), true)
         }
         "" => (json!({"ok":false,"error":"missing cmd"}), false),
@@ -738,7 +775,7 @@ pub fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
         Ok(reply) => reply,
         Err(payload) => {
             // Preview encoders may still reference a half-written request.
-            crate::run_pipeline::flush_preview_encodes();
+            let _ = crate::run_pipeline::flush_preview_encodes();
             (
                 json!({
                     "ok": false,
@@ -765,26 +802,105 @@ pub fn run() -> Result<(), String> {
     emit_ready(&state);
 
     let stdin = std::io::stdin();
-    for line in stdin.lock().lines() {
-        let line = line.map_err(|e| e.to_string())?;
-        if line.trim().is_empty() {
-            continue;
+    let result = serve_lines(&mut state, stdin.lock(), &mut |reply| emit_json(reply));
+    let _ = crate::run_pipeline::flush_preview_encodes();
+    cleanup_temp_files(&mut state);
+    result
+}
+
+/// Read NDJSON requests until EOF or shutdown, emitting one reply per request.
+pub fn serve_lines<R: BufRead>(
+    state: &mut ServeState,
+    reader: R,
+    emit: &mut dyn FnMut(&Value),
+) -> Result<(), String> {
+    let mut reader = reader;
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        if reader
+            .read_until(b'\n', &mut buffer)
+            .map_err(|e| e.to_string())?
+            == 0
+        {
+            break;
         }
-        let req: Value = match serde_json::from_str(&line) {
-            Ok(v) => v,
+        let line = match std::str::from_utf8(&buffer) {
+            Ok(line) => line,
             Err(e) => {
-                emit_json(&json!({"ok":false,"error": format!("invalid JSON: {e}")}));
+                emit(&json!({"ok":false,"error": format!("invalid UTF-8 in request: {e}")}));
                 continue;
             }
         };
-        let (reply, stop) = dispatch_guarded(&mut state, &req);
-        emit_json(&reply);
+        if line.trim().is_empty() {
+            continue;
+        }
+        let req: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(e) => {
+                emit(&json!({"ok":false,"error": format!("invalid JSON: {e}")}));
+                continue;
+            }
+        };
+        let (reply, stop) = dispatch_guarded(state, &req);
+        emit(&reply);
         if stop {
             break;
         }
     }
-    crate::run_pipeline::flush_preview_encodes();
     Ok(())
+}
+
+fn touch_detect_cache(state: &mut ServeState, key: &str) {
+    if let Some(index) = state.detect_cache_order.iter().position(|k| k == key) {
+        if let Some(key) = state.detect_cache_order.remove(index) {
+            state.detect_cache_order.push_back(key);
+        }
+    }
+}
+
+fn remember_detect_cache(state: &mut ServeState, key: String, path: PathBuf) {
+    if let Some(previous) = state.detect_cache.insert(key.clone(), path.clone()) {
+        if previous != path {
+            let _ = std::fs::remove_file(previous);
+        }
+        state.detect_cache_order.retain(|k| k != &key);
+    }
+    state.detect_cache_order.push_back(key);
+    while state.detect_cache.len() > DETECT_CACHE_CAPACITY {
+        let Some(oldest) = state.detect_cache_order.pop_front() else {
+            break;
+        };
+        if let Some(evicted) = state.detect_cache.remove(&oldest) {
+            let _ = std::fs::remove_file(evicted);
+        }
+    }
+}
+
+fn clear_detect_cache(state: &mut ServeState) {
+    for (_, path) in state.detect_cache.drain() {
+        let _ = std::fs::remove_file(path);
+    }
+    state.detect_cache_order.clear();
+}
+
+fn remember_temp_output(state: &mut ServeState, path: PathBuf) {
+    state.temp_outputs.retain(|p| p != &path);
+    state.temp_outputs.push_back(path);
+    while state.temp_outputs.len() > TEMP_OUTPUT_CAPACITY {
+        if let Some(oldest) = state.temp_outputs.pop_front() {
+            let _ = std::fs::remove_file(oldest);
+        }
+    }
+}
+
+/// Remove every temp file this worker created (detect cache copies and
+/// default handshake outputs). Caller-chosen `handshake_out` paths are kept.
+fn cleanup_temp_files(state: &mut ServeState) {
+    clear_detect_cache(state);
+    for path in state.temp_outputs.drain(..) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 #[cfg(test)]
@@ -980,7 +1096,7 @@ mod tests {
         let mut state = ServeState::default();
         let (reply, stop) = dispatch_guarded(
             &mut state,
-            &json!({"cmd":"apply","model":model,"images":["x.jpg"],"output_dir":dir}),
+            &json!({"cmd":"apply","policy":"cpu","model":model,"images":["x.jpg"],"output_dir":dir}),
         );
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!stop);
@@ -992,6 +1108,118 @@ mod tests {
                 .contains("invalid correction model"),
             "{reply}"
         );
+    }
+
+    #[test]
+    fn invalid_utf8_line_gets_error_reply_and_loop_continues() {
+        let mut state = ServeState::default();
+        let input = b"\xff\xfe{\"cmd\":\"devices\"}\n{\"cmd\":\"nope\"}\n{\"cmd\":\"shutdown\"}\n";
+        let mut replies = Vec::new();
+        let result = serve_lines(&mut state, std::io::Cursor::new(&input[..]), &mut |reply| {
+            replies.push(reply.clone())
+        });
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(replies.len(), 3, "{replies:?}");
+        assert_eq!(replies[0]["ok"], false);
+        assert!(replies[0]["error"].as_str().unwrap().contains("UTF-8"));
+        assert!(replies[1]["error"]
+            .as_str()
+            .unwrap()
+            .contains("unknown cmd"));
+        assert_eq!(replies[2]["event"], "shutdown");
+    }
+
+    fn valid_model(dir: &Path) -> PathBuf {
+        let saved = SavedPipeline {
+            do_gc: false,
+            do_wb: false,
+            correction: Some(ccp_core::CorrectionModel {
+                kind: ccp_core::ModelKind::Ccm3x3,
+                feature_count: 3,
+                coefficients: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                ..ccp_core::CorrectionModel::default()
+            }),
+            ..SavedPipeline::default()
+        };
+        let path = dir.join("model.json");
+        std::fs::write(&path, serde_json::to_string(&saved).unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn apply_rejects_non_string_images_and_unwritable_output_dir_before_work() {
+        let dir = std::env::temp_dir().join(format!("ccp-serve-apply-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = valid_model(&dir);
+        let mut state = ServeState::default();
+        let (reply, _) = dispatch(
+            &mut state,
+            &json!({"cmd":"apply","policy":"cpu","model":model,"images":["a.jpg", 5],"output_dir":dir}),
+        );
+        assert_eq!(reply["ok"], false);
+        assert!(
+            reply["error"].as_str().unwrap().contains("images[1]"),
+            "{reply}"
+        );
+        assert!(reply.get("results").is_none(), "{reply}");
+
+        let blocker = dir.join("plain-file");
+        std::fs::write(&blocker, b"x").unwrap();
+        let (reply, _) = dispatch(
+            &mut state,
+            &json!({"cmd":"apply","policy":"cpu","model":model,"images":["a.jpg"],
+                "output_dir":blocker.join("out")}),
+        );
+        assert_eq!(reply["ok"], false);
+        assert!(
+            reply["error"].as_str().unwrap().contains("output_dir"),
+            "{reply}"
+        );
+        let (reply, _) = dispatch(
+            &mut state,
+            &json!({"cmd":"apply","policy":"cpu","model":model,"images":["a.jpg"],"output_dir":dir,
+                "preview_dir":blocker.join("previews")}),
+        );
+        assert_eq!(reply["ok"], false);
+        assert!(
+            reply["error"].as_str().unwrap().contains("preview_dir"),
+            "{reply}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn detect_cache_and_temp_outputs_are_bounded_and_cleaned_up() {
+        let dir = std::env::temp_dir().join(format!("ccp-serve-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut state = ServeState::default();
+        let mut cache_files = Vec::new();
+        let mut outputs = Vec::new();
+        for index in 0..(DETECT_CACHE_CAPACITY + 5) {
+            let cached = dir.join(format!("cache-{index}.json"));
+            std::fs::write(&cached, b"{}").unwrap();
+            remember_detect_cache(&mut state, format!("key-{index}"), cached.clone());
+            cache_files.push(cached);
+            let output = dir.join(format!("detect-{index}.json"));
+            std::fs::write(&output, b"{}").unwrap();
+            remember_temp_output(&mut state, output.clone());
+            outputs.push(output);
+        }
+        assert_eq!(state.detect_cache.len(), DETECT_CACHE_CAPACITY);
+        assert!(!state.detect_cache.contains_key("key-0"));
+        assert!(!cache_files[4].exists() && cache_files[5].exists());
+        assert!(!outputs[4].exists() && outputs[5].exists());
+        // Re-inserting a key replaces (and removes) its previous private copy.
+        let replacement = dir.join("replacement.json");
+        std::fs::write(&replacement, b"{}").unwrap();
+        remember_detect_cache(&mut state, "key-10".into(), replacement.clone());
+        assert!(!cache_files[10].exists());
+        assert_eq!(state.detect_cache.len(), DETECT_CACHE_CAPACITY);
+        cleanup_temp_files(&mut state);
+        assert!(state.detect_cache.is_empty());
+        assert!(cache_files.iter().chain(&outputs).all(|p| !p.exists()));
+        assert!(!replacement.exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
