@@ -34,22 +34,7 @@ public partial class MainWindowViewModel
     };
     [ObservableProperty] private NamedValue _selectedProcessingDevice = new("auto", "Auto (recommended)");
 
-    [ObservableProperty] private bool _doFfc;
-    [ObservableProperty] private bool _doGc = true;
-    [ObservableProperty] private bool _doWb = true;
-    [ObservableProperty] private bool _doCc = true;
-    [ObservableProperty] private string _whiteImagePath = "";
     [ObservableProperty] private string _cropRect = "";
-    [ObservableProperty] private NamedValue _selectedFfcFitMethod = new("poly", "Polynomial");
-    [ObservableProperty] private decimal _ffcBins = 50;
-    [ObservableProperty] private decimal _ffcSmoothWindow = 5;
-    [ObservableProperty] private decimal _ffcDegree = 3;
-    [ObservableProperty] private decimal _ffcNnMaxIter = 10000;
-    [ObservableProperty] private decimal _ffcTol = 0.00000001m;
-    [ObservableProperty] private decimal _ffcCutOff = 1.3m;
-    [ObservableProperty] private decimal _ffcMaxVal = 1.8m;
-    [ObservableProperty] private decimal _clipLo = -0.2m;
-    [ObservableProperty] private decimal _clipHi = 1.3m;
     [ObservableProperty] private bool _showFfcNn;
     [ObservableProperty] private bool _showFfcIter;
     [ObservableProperty] private string _stageName = "Original";
@@ -437,35 +422,35 @@ public partial class MainWindowViewModel
         _ = EnsureStagePreviewAsync(value);
     }
 
-    partial void OnDoFfcChanged(bool value)
+    private void OnDoFfcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoGcChanged(bool value)
+    private void OnDoGcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoWbChanged(bool value)
+    private void OnDoWbChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoCcChanged(bool value)
+    private void OnDoCcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnSelectedFfcFitMethodChanged(NamedValue value)
+    private void OnSelectedFfcFitMethodChanged(NamedValue value)
     {
         OnPropertyChanged(nameof(ShowFfcDegree));
         ShowFfcNn = value.Value == "nn";
@@ -474,43 +459,43 @@ public partial class MainWindowViewModel
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcTolChanged(decimal value)
+    private void OnFfcTolChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcCutOffChanged(decimal value)
+    private void OnFfcCutOffChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcMaxValChanged(decimal value)
+    private void OnFfcMaxValChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnClipLoChanged(decimal value)
+    private void OnClipLoChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnClipHiChanged(decimal value)
+    private void OnClipHiChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcNnMaxIterChanged(decimal value)
+    private void OnFfcNnMaxIterChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcBinsChanged(decimal value)
+    private void OnFfcBinsChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcSmoothWindowChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnFfcDegreeChanged(decimal value)
+    private void OnFfcSmoothWindowChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnFfcDegreeChanged(decimal value)
     {
         UpdateCcSummary();
         if (!_restoring) ScheduleSave();
@@ -564,7 +549,7 @@ public partial class MainWindowViewModel
         ClearStageBitmaps();
         NotifyStageRadios();
     }
-    partial void OnWhiteImagePathChanged(string value)
+    private void OnWhiteImagePathChanged(string value)
     {
         HasWhiteRef = !string.IsNullOrWhiteSpace(value) && File.Exists(value);
         OnPropertyChanged(nameof(WhiteImageLabel));

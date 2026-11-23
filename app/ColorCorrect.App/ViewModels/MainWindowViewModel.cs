@@ -71,6 +71,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     internal MainWindowViewModel(bool persistenceEnabled)
     {
         _persistenceEnabled = persistenceEnabled;
+        Settings.PropertyChanged += OnSettingChanged;
         _client = new CorrectionClient(_worker);
         Session.CollectionChanged += (_, _) => RefreshBatchSubscriptions();
         Methods = Map(ColorSpaces.Methods);
@@ -174,12 +175,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private FfcPlane? _loadedModelPlane;
     [ObservableProperty] private double _overlayCrop = 0.75;
     [ObservableProperty] private SessionItemViewModel? _active;
-    [ObservableProperty] private NamedValue _selectedMethod = new("linear", "Linear");
-    [ObservableProperty] private NamedValue? _selectedDegree;
-    [ObservableProperty] private NamedValue _selectedInputSpace = new("srgb", "sRGB");
-    [ObservableProperty] private NamedValue _selectedInputWhite = new("d65", "D65");
-    [ObservableProperty] private NamedValue _selectedTargetSpace = new("srgb", "sRGB");
-    [ObservableProperty] private NamedValue _selectedTargetWhite = new("d65", "D65");
     [ObservableProperty] private NamedValue _selectedOutputFormat = new("png", "PNG");
     [ObservableProperty] private double _crop = 0.75;
     [ObservableProperty] private double _naturalWidth = 1;
@@ -187,16 +182,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private double _overlayScaleX = 1;
     [ObservableProperty] private double _overlayScaleY = 1;
     [ObservableProperty] private double _batchProgress;
-    [ObservableProperty] private decimal _fitSamples = 1;
-    [ObservableProperty] private decimal _plsComponents;
-    [ObservableProperty] private string _hiddenLayersText = "100";
-    [ObservableProperty] private NamedValue _selectedNnOptimizer = new("adam", "Adam");
-    [ObservableProperty] private bool _nnBatchNormalization;
-    [ObservableProperty] private decimal _nnDropout;
-    [ObservableProperty] private decimal _nnLr = 0.001m;
-    [ObservableProperty] private decimal _nnEpochs = 10000;
-    [ObservableProperty] private decimal _nnPatience = 1500;
-    [ObservableProperty] private decimal _nnTol = 0.000001m;
     [ObservableProperty] private int _faceIndex;
     [ObservableProperty] private int _overlayFaceChoice;
     [ObservableProperty] private bool _busy = true;
@@ -240,6 +225,88 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _showCorrected;
     [ObservableProperty] private bool _showFacePicker;
 
+    /// <summary>Correction settings (stages, FFC, color spaces, CC model and its parameters).</summary>
+    public CorrectionSettingsViewModel Settings { get; } = new();
+
+    // Compatibility forwarders for shell code and tests; bindings use Settings.* directly.
+    public bool DoFfc { get => Settings.DoFfc; set => Settings.DoFfc = value; }
+    public bool DoGc { get => Settings.DoGc; set => Settings.DoGc = value; }
+    public bool DoWb { get => Settings.DoWb; set => Settings.DoWb = value; }
+    public bool DoCc { get => Settings.DoCc; set => Settings.DoCc = value; }
+    public string WhiteImagePath { get => Settings.WhiteImagePath; set => Settings.WhiteImagePath = value; }
+    public NamedValue SelectedFfcFitMethod { get => Settings.SelectedFfcFitMethod; set => Settings.SelectedFfcFitMethod = value; }
+    public decimal FfcBins { get => Settings.FfcBins; set => Settings.FfcBins = value; }
+    public decimal FfcSmoothWindow { get => Settings.FfcSmoothWindow; set => Settings.FfcSmoothWindow = value; }
+    public decimal FfcDegree { get => Settings.FfcDegree; set => Settings.FfcDegree = value; }
+    public decimal FfcNnMaxIter { get => Settings.FfcNnMaxIter; set => Settings.FfcNnMaxIter = value; }
+    public decimal FfcTol { get => Settings.FfcTol; set => Settings.FfcTol = value; }
+    public decimal FfcCutOff { get => Settings.FfcCutOff; set => Settings.FfcCutOff = value; }
+    public decimal FfcMaxVal { get => Settings.FfcMaxVal; set => Settings.FfcMaxVal = value; }
+    public decimal ClipLo { get => Settings.ClipLo; set => Settings.ClipLo = value; }
+    public decimal ClipHi { get => Settings.ClipHi; set => Settings.ClipHi = value; }
+    public NamedValue SelectedMethod { get => Settings.SelectedMethod; set => Settings.SelectedMethod = value; }
+    public NamedValue? SelectedDegree { get => Settings.SelectedDegree; set => Settings.SelectedDegree = value; }
+    public NamedValue SelectedInputSpace { get => Settings.SelectedInputSpace; set => Settings.SelectedInputSpace = value; }
+    public NamedValue SelectedInputWhite { get => Settings.SelectedInputWhite; set => Settings.SelectedInputWhite = value; }
+    public NamedValue SelectedTargetSpace { get => Settings.SelectedTargetSpace; set => Settings.SelectedTargetSpace = value; }
+    public NamedValue SelectedTargetWhite { get => Settings.SelectedTargetWhite; set => Settings.SelectedTargetWhite = value; }
+    public decimal FitSamples { get => Settings.FitSamples; set => Settings.FitSamples = value; }
+    public decimal PlsComponents { get => Settings.PlsComponents; set => Settings.PlsComponents = value; }
+    public string HiddenLayersText { get => Settings.HiddenLayersText; set => Settings.HiddenLayersText = value; }
+    public NamedValue SelectedNnOptimizer { get => Settings.SelectedNnOptimizer; set => Settings.SelectedNnOptimizer = value; }
+    public bool NnBatchNormalization { get => Settings.NnBatchNormalization; set => Settings.NnBatchNormalization = value; }
+    public decimal NnDropout { get => Settings.NnDropout; set => Settings.NnDropout = value; }
+    public decimal NnLr { get => Settings.NnLr; set => Settings.NnLr = value; }
+    public decimal NnEpochs { get => Settings.NnEpochs; set => Settings.NnEpochs = value; }
+    public decimal NnPatience { get => Settings.NnPatience; set => Settings.NnPatience = value; }
+    public decimal NnTol { get => Settings.NnTol; set => Settings.NnTol = value; }
+    public bool IncludeCombinations { get => Settings.IncludeCombinations; set => Settings.IncludeCombinations = value; }
+    public bool SkipSaturated { get => Settings.SkipSaturated; set => Settings.SkipSaturated = value; }
+
+    private void OnSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        // Same side effects as the former generated On*Changed hooks, then re-raise on the
+        // shell so anything still observing the shell's forwarders stays current.
+        switch (e.PropertyName)
+        {
+            case nameof(CorrectionSettingsViewModel.DoFfc): OnDoFfcChanged(Settings.DoFfc); break;
+            case nameof(CorrectionSettingsViewModel.DoGc): OnDoGcChanged(Settings.DoGc); break;
+            case nameof(CorrectionSettingsViewModel.DoWb): OnDoWbChanged(Settings.DoWb); break;
+            case nameof(CorrectionSettingsViewModel.DoCc): OnDoCcChanged(Settings.DoCc); break;
+            case nameof(CorrectionSettingsViewModel.WhiteImagePath): OnWhiteImagePathChanged(Settings.WhiteImagePath); break;
+            case nameof(CorrectionSettingsViewModel.SelectedFfcFitMethod): OnSelectedFfcFitMethodChanged(Settings.SelectedFfcFitMethod); break;
+            case nameof(CorrectionSettingsViewModel.FfcBins): OnFfcBinsChanged(Settings.FfcBins); break;
+            case nameof(CorrectionSettingsViewModel.FfcSmoothWindow): OnFfcSmoothWindowChanged(Settings.FfcSmoothWindow); break;
+            case nameof(CorrectionSettingsViewModel.FfcDegree): OnFfcDegreeChanged(Settings.FfcDegree); break;
+            case nameof(CorrectionSettingsViewModel.FfcNnMaxIter): OnFfcNnMaxIterChanged(Settings.FfcNnMaxIter); break;
+            case nameof(CorrectionSettingsViewModel.FfcTol): OnFfcTolChanged(Settings.FfcTol); break;
+            case nameof(CorrectionSettingsViewModel.FfcCutOff): OnFfcCutOffChanged(Settings.FfcCutOff); break;
+            case nameof(CorrectionSettingsViewModel.FfcMaxVal): OnFfcMaxValChanged(Settings.FfcMaxVal); break;
+            case nameof(CorrectionSettingsViewModel.ClipLo): OnClipLoChanged(Settings.ClipLo); break;
+            case nameof(CorrectionSettingsViewModel.ClipHi): OnClipHiChanged(Settings.ClipHi); break;
+            case nameof(CorrectionSettingsViewModel.SelectedMethod): OnSelectedMethodChanged(Settings.SelectedMethod); break;
+            case nameof(CorrectionSettingsViewModel.SelectedDegree): OnSelectedDegreeChanged(Settings.SelectedDegree); break;
+            case nameof(CorrectionSettingsViewModel.SelectedInputSpace): OnSelectedInputSpaceChanged(Settings.SelectedInputSpace); break;
+            case nameof(CorrectionSettingsViewModel.SelectedInputWhite): OnSelectedInputWhiteChanged(Settings.SelectedInputWhite); break;
+            case nameof(CorrectionSettingsViewModel.SelectedTargetSpace): OnSelectedTargetSpaceChanged(Settings.SelectedTargetSpace); break;
+            case nameof(CorrectionSettingsViewModel.SelectedTargetWhite): OnSelectedTargetWhiteChanged(Settings.SelectedTargetWhite); break;
+            case nameof(CorrectionSettingsViewModel.FitSamples): OnFitSamplesChanged(Settings.FitSamples); break;
+            case nameof(CorrectionSettingsViewModel.PlsComponents): OnPlsComponentsChanged(Settings.PlsComponents); break;
+            case nameof(CorrectionSettingsViewModel.HiddenLayersText): OnHiddenLayersTextChanged(Settings.HiddenLayersText); break;
+            case nameof(CorrectionSettingsViewModel.SelectedNnOptimizer): OnSelectedNnOptimizerChanged(Settings.SelectedNnOptimizer); break;
+            case nameof(CorrectionSettingsViewModel.NnBatchNormalization): OnNnBatchNormalizationChanged(Settings.NnBatchNormalization); break;
+            case nameof(CorrectionSettingsViewModel.NnDropout): OnNnDropoutChanged(Settings.NnDropout); break;
+            case nameof(CorrectionSettingsViewModel.NnLr): OnNnLrChanged(Settings.NnLr); break;
+            case nameof(CorrectionSettingsViewModel.NnEpochs): OnNnEpochsChanged(Settings.NnEpochs); break;
+            case nameof(CorrectionSettingsViewModel.NnPatience): OnNnPatienceChanged(Settings.NnPatience); break;
+            case nameof(CorrectionSettingsViewModel.NnTol): OnNnTolChanged(Settings.NnTol); break;
+            case nameof(CorrectionSettingsViewModel.IncludeCombinations): OnIncludeCombinationsChanged(Settings.IncludeCombinations); break;
+            case nameof(CorrectionSettingsViewModel.SkipSaturated): OnSkipSaturatedChanged(Settings.SkipSaturated); break;
+        }
+
+        OnPropertyChanged(e.PropertyName);
+    }
+
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
     public PickerViewModel Picker { get; } = new();
     [ObservableProperty] private bool _useAllFaces;
@@ -248,11 +315,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _showDim = true;
     [ObservableProperty] private bool _showDegree = true;
     [ObservableProperty] private bool _showPolyCombinations = true;
-    [ObservableProperty] private bool _includeCombinations = true;
     [ObservableProperty] private bool _showPls;
     [ObservableProperty] private bool _showNn;
     [ObservableProperty] private bool _showCcIterParams;
-    [ObservableProperty] private bool _skipSaturated;
     [ObservableProperty] private bool _isLightTheme;
     [ObservableProperty] private bool _libraryExpanded;
     [ObservableProperty] private bool _processExpanded = true;
@@ -2924,7 +2989,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(ShowChartSection));
     }
 
-    partial void OnSelectedMethodChanged(NamedValue value)
+    private void OnSelectedMethodChanged(NamedValue value)
     {
         if (!_restoring)
         {
@@ -2933,7 +2998,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    partial void OnSelectedDegreeChanged(NamedValue? value)
+    private void OnSelectedDegreeChanged(NamedValue? value)
     {
         if (!_restoring)
         {
@@ -2942,13 +3007,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
 
-    partial void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
-    partial void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
-    partial void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
+    private void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
+    private void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
     partial void OnSelectedOutputFormatChanged(NamedValue value) { if (!_restoring) ScheduleSave(); }
-    partial void OnSkipSaturatedChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnIncludeCombinationsChanged(bool value)
+    private void OnSkipSaturatedChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnIncludeCombinationsChanged(bool value)
     {
         if (!_restoring)
         {
@@ -2957,9 +3022,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
     }
     partial void OnOutputDirChanged(string value) { if (!_restoring) ScheduleSave(); }
-    partial void OnFitSamplesChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnPlsComponentsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnHiddenLayersTextChanged(string value)
+    private void OnFitSamplesChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnPlsComponentsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnHiddenLayersTextChanged(string value)
     {
         OnPropertyChanged(nameof(NnSettingsValid));
         OnPropertyChanged(nameof(HasHiddenLayersError));
@@ -2971,13 +3036,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             ScheduleSave();
         }
     }
-    partial void OnSelectedNnOptimizerChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnNnBatchNormalizationChanged(bool value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnNnDropoutChanged(decimal value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    partial void OnNnLrChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnNnEpochsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnNnPatienceChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnNnTolChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnSelectedNnOptimizerChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnNnBatchNormalizationChanged(bool value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnNnDropoutChanged(decimal value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnNnLrChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnNnEpochsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnNnPatienceChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnNnTolChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     partial void OnShowLatticeChanged(bool value) { if (!_restoring) ScheduleSave(); }
     partial void OnShowSampleChanged(bool value) { if (!_restoring) ScheduleSave(); }
     partial void OnShowDimChanged(bool value) { if (!_restoring) ScheduleSave(); }

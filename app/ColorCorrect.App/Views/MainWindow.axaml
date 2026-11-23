@@ -697,14 +697,14 @@
                                                 <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoFfc}" FontSize="{DynamicResource FontSizeBodySm}"
+                                            <CheckBox IsChecked="{Binding Settings.DoFfc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable FFC">
                                                 <TextBlock Text="FFC · Flat field" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
                                             </CheckBox>
                                         </DockPanel>
                                     </Border>
-                                    <StackPanel IsVisible="{Binding DoFfc}">
+                                    <StackPanel IsVisible="{Binding Settings.DoFfc}">
                                     <Border x:Name="WhiteDrop" Classes="whiteChip" Margin="0,0,0,8"
                                             DragDrop.AllowDrop="True">
                                         <DockPanel>
@@ -734,7 +734,7 @@
                                                 <Path Data="{StaticResource InfoIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoGc}" FontSize="{DynamicResource FontSizeBodySm}"
+                                            <CheckBox IsChecked="{Binding Settings.DoGc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable GC">
                                                 <TextBlock Text="GC · Tone response" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
@@ -742,7 +742,7 @@
                                         </DockPanel>
                                     </Border>
                                     <Border Classes="stageRow">
-                                        <CheckBox IsChecked="{Binding DoWb}" FontSize="{DynamicResource FontSizeBodySm}"
+                                        <CheckBox IsChecked="{Binding Settings.DoWb}" FontSize="{DynamicResource FontSizeBodySm}"
                                                   MinWidth="0" HorizontalAlignment="Stretch"
                                                   AutomationProperties.Name="Enable WB">
                                             <TextBlock Text="WB · White balance" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
@@ -757,7 +757,7 @@
                                                 <Path Data="{StaticResource SettingsIconGeometry}" Width="14" Height="14"
                                                       Stretch="Uniform" Fill="{DynamicResource TextSecondaryBrush}"/>
                                             </Button>
-                                            <CheckBox IsChecked="{Binding DoCc}" FontSize="{DynamicResource FontSizeBodySm}"
+                                            <CheckBox IsChecked="{Binding Settings.DoCc}" FontSize="{DynamicResource FontSizeBodySm}"
                                                       MinWidth="0" HorizontalAlignment="Stretch"
                                                       AutomationProperties.Name="Enable CC">
                                                 <TextBlock Text="CC · Color fit" FontSize="{DynamicResource FontSizeBodySm}" TextWrapping="Wrap"/>
@@ -768,7 +768,7 @@
                                                Margin="0,2,0,6" TextWrapping="Wrap"
                                                AutomationProperties.AutomationId="ProcessSummary"
                                                AutomationProperties.Name="{Binding ProcessSummary}"/>
-                                    <CheckBox x:Name="NoSatToggle" IsChecked="{Binding SkipSaturated}"
+                                    <CheckBox x:Name="NoSatToggle" IsChecked="{Binding Settings.SkipSaturated}"
                                               FontSize="{DynamicResource FontSizeBodySm}" Margin="0,0,0,4"
                                               MinWidth="0" HorizontalAlignment="Stretch"
                                               AutomationProperties.Name="Skip saturated patches">

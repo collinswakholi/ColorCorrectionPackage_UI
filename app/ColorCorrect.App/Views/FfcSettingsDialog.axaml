@@ -44,7 +44,7 @@
                     <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                 <TextBlock Text="Fit method" Classes="settingsLabel"/>
                 <ComboBox x:Name="FfcMethodSelect" Classes="config" ItemsSource="{Binding FfcFitMethods}"
-                          SelectedItem="{Binding SelectedFfcFitMethod}" Margin="0,0,0,10"
+                          SelectedItem="{Binding Settings.SelectedFfcFitMethod}" Margin="0,0,0,10"
                           HorizontalAlignment="Stretch" MinWidth="0"
                           AutomationProperties.Name="FFC fit method">
                     <ComboBox.ItemTemplate>

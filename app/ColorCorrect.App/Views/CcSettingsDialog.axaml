@@ -50,7 +50,7 @@
                     <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                     <TextBlock Text="Method" Classes="settingsLabel"/>
                     <ComboBox x:Name="ModelSelect" Classes="config" ItemsSource="{Binding Methods}"
-                              SelectedItem="{Binding SelectedMethod}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Settings.SelectedMethod}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="Correction method">
                         <ComboBox.ItemTemplate>
@@ -63,7 +63,7 @@
                                IsVisible="{Binding ShowDegree}"/>
                     <ComboBox x:Name="DegreeSelect" Classes="config"
                               ItemsSource="{Binding DegreeOptions}"
-                              SelectedItem="{Binding SelectedDegree}"
+                              SelectedItem="{Binding Settings.SelectedDegree}"
                               IsVisible="{Binding ShowDegree}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="{Binding DegreeLabel}">
@@ -74,7 +74,7 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <CheckBox x:Name="PolyCombinationsToggle" Margin="0,0,0,10"
-                              IsChecked="{Binding IncludeCombinations}"
+                              IsChecked="{Binding Settings.IncludeCombinations}"
                               IsVisible="{Binding ShowPolyCombinations}"
                               AutomationProperties.Name="Include combination terms">
                         <TextBlock TextWrapping="Wrap" FontSize="{DynamicResource FontSizeBodySm}"
@@ -100,7 +100,7 @@
                                    Foreground="{DynamicResource PrimaryBrush}" Margin="0,0,0,8"/>
                         <TextBlock Text="Hidden layers" Classes="settingsLabel"/>
                         <TextBox x:Name="HiddenLayersInput" Classes="config" Margin="0,0,0,4"
-                                 Text="{Binding HiddenLayersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.HiddenLayersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip.Tip="One integer or a comma-separated array of 1–4 widths (4–512 each)"
                                  AutomationProperties.Name="Hidden layer architecture"
                                  AutomationProperties.HelpText="Examples: 100, 100 comma 30, or bracket 128 comma 64 comma 32 bracket"/>
@@ -114,7 +114,7 @@
                         <TextBlock Text="Optimizer" Classes="settingsLabel"/>
                         <ComboBox x:Name="NnOptimizerSelect" Classes="config"
                                   ItemsSource="{Binding NnOptimizers}"
-                                  SelectedItem="{Binding SelectedNnOptimizer}" Margin="0,0,0,10"
+                                  SelectedItem="{Binding Settings.SelectedNnOptimizer}" Margin="0,0,0,10"
                                   HorizontalAlignment="Stretch" MinWidth="0"
                                   AutomationProperties.Name="Neural network optimizer">
                             <ComboBox.ItemTemplate>
@@ -123,7 +123,7 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <CheckBox IsChecked="{Binding NnBatchNormalization}" Margin="0,0,0,10"
+                        <CheckBox IsChecked="{Binding Settings.NnBatchNormalization}" Margin="0,0,0,10"
                                   ToolTip.Tip="Normalizes hidden activations; small charts use full-chart statistics for stable inference"
                                   AutomationProperties.Name="Use batch normalization"
                                   AutomationProperties.HelpText="Small charts use full-chart statistics for stable inference">
@@ -160,7 +160,7 @@
                                Foreground="{DynamicResource PrimaryBrush}" Margin="0,0,0,8"/>
                     <TextBlock Text="Input space" Classes="settingsLabel"/>
                     <ComboBox x:Name="InputSpaceSelect" Classes="config" ItemsSource="{Binding RgbSpaces}"
-                              SelectedItem="{Binding SelectedInputSpace}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Settings.SelectedInputSpace}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="Input space">
                         <ComboBox.ItemTemplate>
@@ -171,7 +171,7 @@
                     </ComboBox>
                     <TextBlock Text="Input white" Classes="settingsLabel"/>
                     <ComboBox x:Name="InputWhiteSelect" Classes="config" ItemsSource="{Binding WhitePoints}"
-                              SelectedItem="{Binding SelectedInputWhite}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Settings.SelectedInputWhite}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="Input white">
                         <ComboBox.ItemTemplate>
@@ -182,7 +182,7 @@
                     </ComboBox>
                     <TextBlock Text="Target space" Classes="settingsLabel"/>
                     <ComboBox x:Name="TargetSpaceSelect" Classes="config" ItemsSource="{Binding RgbSpaces}"
-                              SelectedItem="{Binding SelectedTargetSpace}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Settings.SelectedTargetSpace}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="Target space">
                         <ComboBox.ItemTemplate>
@@ -193,7 +193,7 @@
                     </ComboBox>
                     <TextBlock Text="Target white" Classes="settingsLabel"/>
                     <ComboBox x:Name="TargetWhiteSelect" Classes="config" ItemsSource="{Binding WhitePoints}"
-                              SelectedItem="{Binding SelectedTargetWhite}" Margin="0,0,0,10"
+                              SelectedItem="{Binding Settings.SelectedTargetWhite}" Margin="0,0,0,10"
                               HorizontalAlignment="Stretch" MinWidth="0"
                               AutomationProperties.Name="Target white">
                         <ComboBox.ItemTemplate>
