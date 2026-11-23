@@ -35,6 +35,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private readonly List<CatalogItemViewModel> _catalog = [];
     private CancellationTokenSource? _jobCts;
     private CancellationTokenSource? _saveCts;
+    private readonly object _settingsWriteLock = new();
+    private long _settingsSnapshotGeneration;
+    private long _settingsWrittenGeneration;
+    private bool _settingsSaveWarned;
     private CancellationTokenSource? _cropCts;
     private SessionItemViewModel? _rangeAnchor;
     private PickedColor? _lastPick;
@@ -2260,30 +2264,65 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        _saveCts?.Cancel();
+        var previous = _saveCts;
         _saveCts = new CancellationTokenSource();
+        previous?.Cancel();
+        previous?.Dispose();
         var token = _saveCts.Token;
         _ = Task.Run(async () =>
         {
             try
             {
                 await Task.Delay(400, token).ConfigureAwait(false);
-                await OnUi(Persist).ConfigureAwait(false);
+                // Snapshot view-model state on the UI thread, then write the file off it.
+                (SessionState State, long Generation)? snapshot = null;
+                await OnUi(() => snapshot = SnapshotSettings()).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                if (snapshot is { } taken) WriteSettings(taken.State, taken.Generation);
             }
             catch (OperationCanceledException)
             {
             }
-        }, token);
+            catch (ObjectDisposedException)
+            {
+            }
+        });
     }
 
+    /// <summary>Synchronous save (used on flush and close); shares the write lock with background saves.</summary>
     private void Persist()
+    {
+        if (SnapshotSettings() is { } taken) WriteSettings(taken.State, taken.Generation);
+    }
+
+    private (SessionState State, long Generation)? SnapshotSettings()
     {
         if (!_persistenceEnabled || _restoring)
         {
-            return;
+            return null;
         }
 
-        SessionStore.SaveSettings(BuildSessionState(includeItems: false));
+        return (BuildSessionState(includeItems: false), Interlocked.Increment(ref _settingsSnapshotGeneration));
+    }
+
+    /// <summary>Write settings unless a newer snapshot was already written; warn once if saving fails.</summary>
+    private void WriteSettings(SessionState state, long generation)
+    {
+        bool saved;
+        lock (_settingsWriteLock)
+        {
+            if (generation < _settingsWrittenGeneration) return;
+            saved = SessionStore.SaveSettings(state);
+            if (saved) _settingsWrittenGeneration = generation;
+        }
+
+        if (!saved && !_settingsSaveWarned)
+        {
+            _settingsSaveWarned = true;
+            Dispatcher.UIThread.Post(() => Log("Settings",
+                "Settings could not be saved. Changes apply to this session only; check that the settings folder is writable.",
+                LogLevel.Warning));
+        }
     }
 
     private SessionState BuildSessionState(bool includeItems) => new()
