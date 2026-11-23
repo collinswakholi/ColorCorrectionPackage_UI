@@ -81,11 +81,11 @@ public sealed class CompletedWorkflowTests
     public void NumericDraftsAreValidatedOnlyForTheRequestedOperation()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.Settings.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.NnEpochsText = "bad";
+        vm.Settings.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.Settings.NnEpochsText = "bad";
         Assert.Contains("Epochs", vm.OperationError(true)); Assert.Null(vm.OperationError(false));
-        vm.NnEpochsText = "50.5"; Assert.Contains("whole number", vm.OperationError(true));
-        vm.NnEpochsText = "50"; Assert.Null(vm.OperationError(true));
-        vm.FfcBinsText = "bad"; Assert.Null(vm.OperationError(true));
+        vm.Settings.NnEpochsText = "50.5"; Assert.Contains("whole number", vm.OperationError(true));
+        vm.Settings.NnEpochsText = "50"; Assert.Null(vm.OperationError(true));
+        vm.Settings.FfcBinsText = "bad"; Assert.Null(vm.OperationError(true));
         vm.Settings.DoFfc = true; Assert.Contains("white reference", vm.OperationError(true));
         vm.Settings.DoFfc = false; vm.Settings.DoCc = false; vm.Settings.HiddenLayersText = "bad"; Assert.Null(vm.OperationError(true));
     }

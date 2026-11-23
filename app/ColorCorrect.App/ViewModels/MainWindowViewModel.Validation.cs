@@ -15,7 +15,6 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    private readonly Dictionary<string, string> _numericText = new();
     private AssetIdentity? _loadedModelIdentity;
     private AssetIdentity? _loadedWhiteIdentity;
 
@@ -33,72 +32,15 @@ public partial class MainWindowViewModel
 
     private LoadedFileState CheckLoadedFilesNow() =>
         CheckLoadedFiles(_loadedModelIdentity, LoadedModelPath, Settings.DoFfc ? _loadedWhiteIdentity : null, Settings.WhiteImagePath);
-    private string NumericText(string name, decimal value) => _numericText.GetValueOrDefault(name) ?? value.ToString(CultureInfo.CurrentCulture);
-    private void SetNumericText(string name, string text, Action<decimal> set)
-    {
-        _numericText[name] = text;
-        if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value)) set(value);
-        RefreshValidation();
-    }
-    public string FitSamplesText { get => NumericText(nameof(CorrectionSettingsViewModel.FitSamples), Settings.FitSamples); set => SetNumericText(nameof(CorrectionSettingsViewModel.FitSamples), value, v => Settings.FitSamples = v); }
-    public string PlsComponentsText { get => NumericText(nameof(CorrectionSettingsViewModel.PlsComponents), Settings.PlsComponents); set => SetNumericText(nameof(CorrectionSettingsViewModel.PlsComponents), value, v => Settings.PlsComponents = v); }
-    public string NnDropoutText { get => NumericText(nameof(CorrectionSettingsViewModel.NnDropout), Settings.NnDropout); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnDropout), value, v => Settings.NnDropout = v); }
-    public string NnLrText { get => NumericText(nameof(CorrectionSettingsViewModel.NnLr), Settings.NnLr); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnLr), value, v => Settings.NnLr = v); }
-    public string NnEpochsText { get => NumericText(nameof(CorrectionSettingsViewModel.NnEpochs), Settings.NnEpochs); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnEpochs), value, v => Settings.NnEpochs = v); }
-    public string NnPatienceText { get => NumericText(nameof(CorrectionSettingsViewModel.NnPatience), Settings.NnPatience); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnPatience), value, v => Settings.NnPatience = v); }
-    public string NnTolText { get => NumericText(nameof(CorrectionSettingsViewModel.NnTol), Settings.NnTol); set => SetNumericText(nameof(CorrectionSettingsViewModel.NnTol), value, v => Settings.NnTol = v); }
-    public string FfcBinsText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcBins), Settings.FfcBins); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcBins), value, v => Settings.FfcBins = v); }
-    public string FfcSmoothWindowText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), Settings.FfcSmoothWindow); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), value, v => Settings.FfcSmoothWindow = v); }
-    public string FfcDegreeText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcDegree), Settings.FfcDegree); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcDegree), value, v => Settings.FfcDegree = v); }
-    public string FfcNnMaxIterText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), Settings.FfcNnMaxIter); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), value, v => Settings.FfcNnMaxIter = v); }
-    public string FfcTolText { get => NumericText(nameof(CorrectionSettingsViewModel.FfcTol), Settings.FfcTol); set => SetNumericText(nameof(CorrectionSettingsViewModel.FfcTol), value, v => Settings.FfcTol = v); }
-
-    private string? NumberError(string name, decimal value, string label, decimal min, decimal max, bool integer = false)
-    {
-        if (_numericText.TryGetValue(name, out var text) && !decimal.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value))
-            return $"{label}: enter a number.";
-        if (value < min || value > max || (integer && value != decimal.Truncate(value)))
-            return $"{label}: enter {(integer ? "a whole number" : "a number")} from {min} to {max}.";
-        return null;
-    }
-
     /// <summary>Validate the next operation, hashing the loaded model and white reference now.</summary>
     internal string? OperationError(bool fit) => OperationError(fit, fit ? default : CheckLoadedFilesNow());
 
     /// <summary>Validation for UI polling (getters, CanExecute): uses the last background file check.</summary>
     private string? CachedOperationError(bool fit) => OperationError(fit, _cachedFileState);
 
-    private string? OperationError(bool fit, LoadedFileState files)
-    {
-        if (!fit && files.ModelChanged)
-            return "The loaded model changed or moved. Load it again before applying it.";
-        if (Settings.DoFfc)
-        {
-            if (!File.Exists(Settings.WhiteImagePath)) return "Choose a readable white reference before using FFC.";
-            if (!fit && files.WhiteChanged)
-                return "The model's white reference changed. Choose the intended white image again before applying it.";
-            var error = NumberError(nameof(CorrectionSettingsViewModel.FfcBins), Settings.FfcBins, "FFC bins", 4, 200, true)
-                ?? NumberError(nameof(CorrectionSettingsViewModel.FfcSmoothWindow), Settings.FfcSmoothWindow, "FFC smooth window", 1, 51, true);
-            if (error is not null) return error;
-            if (Settings.FfcSmoothWindow % 2 == 0) return "FFC smooth window must be an odd whole number.";
-            if (Settings.SelectedFfcFitMethod.Value != "linear" && NumberError(nameof(CorrectionSettingsViewModel.FfcDegree), Settings.FfcDegree, "FFC degree", 1, 7, true) is { } degree) return degree;
-            if (Settings.SelectedFfcFitMethod.Value is "nn" or "pls" && NumberError(nameof(CorrectionSettingsViewModel.FfcTol), Settings.FfcTol, "FFC tolerance", 0.000000000001m, 0.01m) is { } tolerance) return tolerance;
-            if (Settings.SelectedFfcFitMethod.Value == "nn" && NumberError(nameof(CorrectionSettingsViewModel.FfcNnMaxIter), Settings.FfcNnMaxIter, "FFC iterations", 50, 20000, true) is { } iterations) return iterations;
-        }
-        if (!fit) return null;
-        if ((Settings.DoFfc || Settings.DoGc || Settings.DoWb) && (Settings.SelectedInputSpace.Value != "srgb" || Settings.SelectedInputWhite.Value != "d65"))
-            return "FFC, tone response and white balance require sRGB / D65 input. Convert the image first or turn these stages off.";
-        if (NumberError(nameof(CorrectionSettingsViewModel.FitSamples), Settings.FitSamples, "Samples per side", 1, 200, true) is { } samples) return samples;
-        if (!Settings.DoCc) return null;
-        if (ShowPls && NumberError(nameof(CorrectionSettingsViewModel.PlsComponents), Settings.PlsComponents, "PLS components", 0, 64, true) is { } components) return components;
-        if (ShowCcIterParams && NumberError(nameof(CorrectionSettingsViewModel.NnTol), Settings.NnTol, "Convergence tolerance", 0.000000000001m, 0.01m) is { } tol) return tol;
-        if (!ShowNn) return null;
-        if (!NnSettingsValid) return HiddenLayersError;
-        return NumberError(nameof(CorrectionSettingsViewModel.NnDropout), Settings.NnDropout, "Dropout rate", 0, 0.8m)
-            ?? NumberError(nameof(CorrectionSettingsViewModel.NnLr), Settings.NnLr, "Learning rate", 0.000000000000001m, 1)
-            ?? NumberError(nameof(CorrectionSettingsViewModel.NnEpochs), Settings.NnEpochs, "Epochs", 50, 20000, true)
-            ?? NumberError(nameof(CorrectionSettingsViewModel.NnPatience), Settings.NnPatience, "Patience", 1, 5000, true);
-    }
+    private string? OperationError(bool fit, LoadedFileState files) =>
+        Settings.ValidationError(fit, files.ModelChanged, files.WhiteChanged,
+            () => File.Exists(Settings.WhiteImagePath), ShowPls, ShowCcIterParams, ShowNn);
     public string ValidationMessage => CachedOperationError(!WillUseLoadedModel) ?? "";
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationMessage);
     private void RefreshValidation()
@@ -166,8 +108,7 @@ public partial class MainWindowViewModel
     }
     private void ClearNumericDrafts()
     {
-        var names = _numericText.Keys.ToArray(); _numericText.Clear();
-        foreach (var name in names) OnPropertyChanged(name + "Text");
+        Settings.ClearDrafts();
         RefreshValidation();
     }
 

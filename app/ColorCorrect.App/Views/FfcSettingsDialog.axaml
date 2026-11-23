@@ -54,24 +54,24 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <TextBlock Text="Sampling grid (4–200)" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcBinsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcBinsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC bins"/>
                 <TextBlock Text="Smoothing window (odd, 1–51)" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcSmoothWindowText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcSmoothWindowText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC smooth window"/>
                 <TextBlock Text="Polynomial degree (1–7)" Classes="settingsLabel" IsVisible="{Binding ShowFfcDegree}"/>
-                <TextBox Classes="config" Text="{Binding FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          AutomationProperties.Name="FFC degree" IsVisible="{Binding ShowFfcDegree}"/>
                 <StackPanel IsVisible="{Binding ShowFfcIter}" Margin="0,0,0,10">
                     <TextBlock Text="Tolerance" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Classes="config" Text="{Binding Settings.FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC tolerance"/>
                 </StackPanel>
                 <StackPanel IsVisible="{Binding ShowFfcNn}" Margin="0,0,0,10">
                     <TextBlock Text="NN max iterations" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Classes="config" Text="{Binding Settings.FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC NN max iterations"/>
                 </StackPanel>
             </StackPanel>

@@ -72,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         Settings.PropertyChanged += OnSettingChanged;
+        Settings.DraftEdited += (_, _) => RefreshValidation();
         _client = new CorrectionClient(_worker);
         Session.CollectionChanged += (_, _) => RefreshBatchSubscriptions();
         Methods = Map(ColorSpaces.Methods);
@@ -2352,7 +2353,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void ApplyOptions(CorrectionOptions options)
     {
-        _numericText.Clear();
+        Settings.ClearDrafts(notify: false);
         ForceCpu = options.CpuLut;
         SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
         FastMode = options.FastMode;

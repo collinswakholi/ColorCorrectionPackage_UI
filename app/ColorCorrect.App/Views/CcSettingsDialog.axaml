@@ -83,14 +83,14 @@
 
                     <TextBlock Text="Samples per side" Classes="settingsLabel"/>
                     <TextBox x:Name="FitSamples" Classes="config" Margin="0,0,0,10"
-                             Text="{Binding FitSamplesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding Settings.FitSamplesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="Samples per patch side"
                              ToolTip.Tip="Grid points per side: 3 gives 9 samples averaged into one color per patch."/>
 
                     <StackPanel IsVisible="{Binding ShowPls}" Margin="0,0,0,10">
                         <TextBlock Text="N components (0 = auto)" Classes="settingsLabel"/>
                         <TextBox Classes="config"
-                                 Text="{Binding PlsComponentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.PlsComponentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="PLS components"/>
                     </StackPanel>
 
@@ -131,27 +131,27 @@
                         </CheckBox>
                         <TextBlock Text="Dropout rate (0–0.8)" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnDropoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.NnDropoutText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Dropout rate"
                                  AutomationProperties.HelpText="Zero disables dropout"/>
                         <TextBlock Text="Learning rate" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnLrText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.NnLrText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Learning rate"/>
                         <TextBlock Text="Epochs" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnEpochsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.NnEpochsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Epochs"/>
                         <TextBlock Text="Patience" Classes="settingsLabel"/>
                         <TextBox Classes="config" Margin="0,0,0,10"
-                                 Text="{Binding NnPatienceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.NnPatienceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Patience"/>
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding ShowCcIterParams}" Margin="0,0,0,10">
                         <TextBlock Text="Tolerance" Classes="settingsLabel"/>
                         <TextBox Classes="config"
-                                 Text="{Binding NnTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Text="{Binding Settings.NnTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Convergence tolerance"/>
                     </StackPanel>
 
