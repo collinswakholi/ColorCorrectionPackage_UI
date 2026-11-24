@@ -352,20 +352,8 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var result = await _worker.SendAsync(new Dictionary<string, object?>
-        {
-            ["cmd"] = "export_cube",
-            ["model"] = Output.LoadedModelPath,
-            ["path"] = dest,
-            ["size"] = 33,
-        }).ConfigureAwait(false);
-        var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
-        await OnUi(() =>
-        {
-            Job.Status = ok
-                ? "Exported .cube (LUT does not include flat-field)."
-                : result.TryGetProperty("error", out var err) ? err.GetString() ?? "export failed" : "export failed";
-        }).ConfigureAwait(false);
+        var (ok, error) = await _client.ExportCubeAsync(Output.LoadedModelPath, dest).ConfigureAwait(false);
+        await OnUi(() => Job.Status = ok ? "Exported .cube (LUT does not include flat-field)." : error).ConfigureAwait(false);
     }
 
     private void OnStageNameChanged(string value)

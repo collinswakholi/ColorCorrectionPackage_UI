@@ -47,10 +47,12 @@ public sealed class CorrectionClient
         var reportPath = Path.Combine(runDir, "report.json");
         var modelPath = Path.Combine(runDir, "model.json");
 
-        var payload = BaseRun(inputPath, outputPath, reportPath, modelPath, previewDir, options);
-        payload["cmd"] = "run";
-        payload["write_output"] = options.WriteOutput;
-        payload["preview_mode"] = string.IsNullOrWhiteSpace(options.PreviewMode) ? "corrected" : options.PreviewMode;
+        var payload = StagePayload("run", options, previewDir, options.WriteOutput, PreviewMode(options));
+        AddFitParameters(payload, options);
+        payload["image"] = inputPath;
+        payload["output"] = outputPath;
+        payload["report"] = reportPath;
+        payload["model_out"] = modelPath;
         payload["handshake"] = chartPath;
         payload["crop"] = crop;
         payload["face"] = faceChoice;
@@ -59,14 +61,6 @@ public sealed class CorrectionClient
         {
             payload["reference_profiles"] = options.ReferenceProfiles.Select(p => p.Snapshot()).ToArray();
             payload["reference_assignments"] = options.ReferenceAssignments;
-        }
-        if (!string.IsNullOrWhiteSpace(options.WhiteImagePath))
-        {
-            payload["white"] = options.WhiteImagePath;
-        }
-        if (!string.IsNullOrWhiteSpace(options.CropRect))
-        {
-            payload["crop_rect"] = options.CropRect;
         }
 
         return await RunTypedAsync(payload, outputPath, reportPath, modelPath, previewDir, hasMetrics: true, options, inputPath, source, cancellationToken)
@@ -136,33 +130,11 @@ public sealed class CorrectionClient
 
         try
         {
-            var payload = new Dictionary<string, object?>
-            {
-                ["cmd"] = "apply",
-                ["lut_device"] = options.LutDevice,
-                ["fast_mode"] = options.FastMode,
-                ["policy"] = _worker.Policy,
-                ["model"] = modelPath,
-                ["images"] = inputPaths.ToArray(),
-                ["output_dir"] = destDir,
-                ["preview_dir"] = previewRoot,
-                ["output_format"] = options.OutputFormat,
-                ["write_output"] = options.WriteOutput,
-                ["preview_mode"] = string.IsNullOrWhiteSpace(options.PreviewMode) ? "corrected" : options.PreviewMode,
-                ["do_ffc"] = options.DoFfc,
-                ["do_gc"] = options.DoGc,
-                ["do_wb"] = options.DoWb,
-                ["do_cc"] = options.DoCc,
-                ["ffc"] = FfcPayload(options),
-            };
-            if (!string.IsNullOrWhiteSpace(options.WhiteImagePath))
-            {
-                payload["white"] = options.WhiteImagePath;
-            }
-            if (!string.IsNullOrWhiteSpace(options.CropRect))
-            {
-                payload["crop_rect"] = options.CropRect;
-            }
+            var payload = StagePayload("apply", options, previewRoot, options.WriteOutput, PreviewMode(options));
+            payload["model"] = modelPath;
+            payload["images"] = inputPaths.ToArray();
+            payload["output_dir"] = destDir;
+            payload["output_format"] = options.OutputFormat;
 
             var timeout = TimeSpan.FromMinutes(Math.Clamp(8 + inputPaths.Count * 2, 8, 40));
             var result = await _worker.SendAsync(payload, timeout, cancellationToken).ConfigureAwait(false);
@@ -250,32 +222,10 @@ public sealed class CorrectionClient
         Directory.CreateDirectory(previewDir);
         try
         {
-            var payload = new Dictionary<string, object?>
-            {
-                ["cmd"] = "preview_stage",
-                ["lut_device"] = options.LutDevice,
-                ["fast_mode"] = options.FastMode,
-                ["policy"] = _worker.Policy,
-                ["model"] = modelPath,
-                ["image"] = inputPath,
-                ["preview_dir"] = previewDir,
-                ["stage"] = stage,
-                ["write_output"] = false,
-                ["preview_mode"] = stage,
-                ["do_ffc"] = options.DoFfc,
-                ["do_gc"] = options.DoGc,
-                ["do_wb"] = options.DoWb,
-                ["do_cc"] = options.DoCc,
-                ["ffc"] = FfcPayload(options),
-            };
-            if (!string.IsNullOrWhiteSpace(options.WhiteImagePath))
-            {
-                payload["white"] = options.WhiteImagePath;
-            }
-            if (!string.IsNullOrWhiteSpace(options.CropRect))
-            {
-                payload["crop_rect"] = options.CropRect;
-            }
+            var payload = StagePayload("preview_stage", options, previewDir, writeOutput: false, previewMode: stage);
+            payload["model"] = modelPath;
+            payload["image"] = inputPath;
+            payload["stage"] = stage;
 
             var result = await _worker.SendAsync(payload, TimeSpan.FromMinutes(8), cancellationToken).ConfigureAwait(false);
             return result.TryGetProperty("ok", out var okEl) && okEl.ValueKind != JsonValueKind.False && okEl.GetBoolean();
@@ -286,55 +236,79 @@ public sealed class CorrectionClient
         }
     }
 
-    private Dictionary<string, object?> BaseRun(
-        string inputPath,
-        string outputPath,
-        string reportPath,
-        string modelPath,
-        string previewDir,
-        CorrectionOptions options)
+    /// <summary>Keys every image command sends: backend choice, stage switches, FFC and preview settings.</summary>
+    private Dictionary<string, object?> StagePayload(string command, CorrectionOptions options, string previewDir, bool writeOutput, string previewMode)
     {
-        return new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>
         {
+            ["cmd"] = command,
             ["policy"] = _worker.Policy,
             ["lut_device"] = options.LutDevice,
-                ["fast_mode"] = options.FastMode,
-            ["image"] = inputPath,
-            ["output"] = outputPath,
-            ["report"] = reportPath,
-            ["model_out"] = modelPath,
+            ["fast_mode"] = options.FastMode,
             ["preview_dir"] = previewDir,
-            ["write_output"] = options.WriteOutput,
-            ["preview_mode"] = string.IsNullOrWhiteSpace(options.PreviewMode) ? "corrected" : options.PreviewMode,
-            ["model"] = options.CliModel(),
-            ["input_space"] = options.InputSpace,
-            ["input_white"] = options.InputWhite,
-            ["target_space"] = options.TargetSpace,
-            ["target_white"] = options.TargetWhite,
-            ["fit_samples"] = options.FitSamples,
-            ["include_combinations"] = options.IncludeCombinations,
+            ["write_output"] = writeOutput,
+            ["preview_mode"] = previewMode,
             ["do_ffc"] = options.DoFfc,
-            ["do_sat"] = !options.SkipSaturated,
             ["do_gc"] = options.DoGc,
             ["do_wb"] = options.DoWb,
             ["do_cc"] = options.DoCc,
-            ["skip_saturated"] = options.SkipSaturated,
-            ["phase2_teacher"] = options.Phase2Teacher,
             ["ffc"] = FfcPayload(options),
-            ["clip_lo"] = options.ClipLo,
-            ["clip_hi"] = options.ClipHi,
-            ["pls_components"] = options.PlsComponents,
-            ["hidden_size"] = options.HiddenSize,
-            ["hidden_layers"] = options.HiddenLayers,
-            ["nn_optimizer"] = options.NnOptimizer,
-            ["nn_batch_norm"] = options.NnBatchNormalization,
-            ["nn_dropout"] = options.NnDropout,
-            ["nn_lr"] = options.NnLr,
-            ["nn_epochs"] = options.NnEpochs,
-            ["nn_patience"] = options.NnPatience,
-            ["tol"] = options.NnTol,
-            ["degree"] = options.Degree,
         };
+        if (!string.IsNullOrWhiteSpace(options.WhiteImagePath))
+        {
+            payload["white"] = options.WhiteImagePath;
+        }
+        if (!string.IsNullOrWhiteSpace(options.CropRect))
+        {
+            payload["crop_rect"] = options.CropRect;
+        }
+        return payload;
+    }
+
+    private static string PreviewMode(CorrectionOptions options) =>
+        string.IsNullOrWhiteSpace(options.PreviewMode) ? "corrected" : options.PreviewMode;
+
+    /// <summary>The fitting parameters only a <c>run</c> command sends.</summary>
+    private static void AddFitParameters(Dictionary<string, object?> payload, CorrectionOptions options)
+    {
+        payload["model"] = options.CliModel();
+        payload["input_space"] = options.InputSpace;
+        payload["input_white"] = options.InputWhite;
+        payload["target_space"] = options.TargetSpace;
+        payload["target_white"] = options.TargetWhite;
+        payload["fit_samples"] = options.FitSamples;
+        payload["include_combinations"] = options.IncludeCombinations;
+        payload["do_sat"] = !options.SkipSaturated;
+        payload["skip_saturated"] = options.SkipSaturated;
+        payload["phase2_teacher"] = options.Phase2Teacher;
+        payload["clip_lo"] = options.ClipLo;
+        payload["clip_hi"] = options.ClipHi;
+        payload["pls_components"] = options.PlsComponents;
+        payload["hidden_size"] = options.HiddenSize;
+        payload["hidden_layers"] = options.HiddenLayers;
+        payload["nn_optimizer"] = options.NnOptimizer;
+        payload["nn_batch_norm"] = options.NnBatchNormalization;
+        payload["nn_dropout"] = options.NnDropout;
+        payload["nn_lr"] = options.NnLr;
+        payload["nn_epochs"] = options.NnEpochs;
+        payload["nn_patience"] = options.NnPatience;
+        payload["tol"] = options.NnTol;
+        payload["degree"] = options.Degree;
+    }
+
+    /// <summary>Export the model's global transform as a .cube LUT; spatial FFC is not included.</summary>
+    public async Task<(bool Ok, string Error)> ExportCubeAsync(string modelPath, string destination, int size = 33)
+    {
+        var result = await _worker.SendAsync(new Dictionary<string, object?>
+        {
+            ["cmd"] = "export_cube",
+            ["model"] = modelPath,
+            ["path"] = destination,
+            ["size"] = size,
+        }).ConfigureAwait(false);
+        var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
+        var error = ok ? "" : result.TryGetProperty("error", out var err) ? err.GetString() ?? "export failed" : "export failed";
+        return (ok, error);
     }
 
     private async Task<CorrectionOutcome> RunTypedAsync(
