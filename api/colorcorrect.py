@@ -140,7 +140,7 @@ class Engine:
         # An explicit package root must not borrow a worker from the developer's
         # shell. An explicit executable remains the protocol escape hatch.
         exe = executable or (None if root is not None else
-                             os.environ.get("CCP_ENGINE_EXE") or os.environ.get("COLORCORRECT_EXE"))
+                             os.environ.get("CCP_ENGINE_EXE"))
         located = Path(root or os.environ.get("CCP_NEW_UI_ROOT", "")).resolve() if root or os.environ.get("CCP_NEW_UI_ROOT") else None
         self.root = located or (_root(Path(exe).resolve().parent) if exe else None) or _root(Path(__file__).resolve().parent) or _root(Path.cwd())
         if self.root is None or not (self.root / "refs/neutrals.json").is_file():
@@ -150,11 +150,7 @@ class Engine:
         else:
             name = "ccp-engine.exe" if os.name == "nt" else "ccp-engine"
             candidates = ([self.root / "ccp-engine-launch"] if sys.platform.startswith("linux") else [])
-            candidates += [self.root / name, self.root / "engine/target/release" / name,
-                          self.root / "dist/win-cpu" / name]
-            for target in ("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64", "macos-arm64"):
-                candidates.extend((self.root / "dist" / target / "payload" / name,
-                                   self.root / "dist" / target / name))
+            candidates += [self.root / name, self.root / "engine/target/release" / name]
             self.executable = next((p for p in candidates if p.is_file()), candidates[0])
         if not self.executable.is_file():
             raise FileNotFoundError(f"Worker not found: {self.executable}. Use an extracted app package or build the engine.")

@@ -36,9 +36,9 @@ extracted desktop package or built checkout intact. `Client()` discovers resourc
 from the source checkout or current directory. An installed SDK can use
 `Client(root="/path/to/app")` from any working directory. Explicit `executable=`
 selects a worker; environment alternatives are `CCP_NEW_UI_ROOT` and
-`CCP_ENGINE_EXE` (or the legacy `COLORCORRECT_EXE`). No server is needed.
+`CCP_ENGINE_EXE`. No server is needed.
 An explicit macOS `.app` bundle root resolves its `Contents/Resources/runtime`
-resources; legacy bundles using `Contents/MacOS` are also recognized. Raw `Engine`
+resources. Raw `Engine`
 clients use the explicit runtime directory. See the [Mac installation guide](../macos-install.md)
 for application downloads or the [source build instructions](../building.md#apple-silicon-macos-source-build).
 

@@ -128,7 +128,7 @@ For contributor checks and execution records, see
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="auto", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` / `COLORCORRECT_EXE` and `CCP_NEW_UI_ROOT`. Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="auto", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` and `CCP_NEW_UI_ROOT`. Without them it looks for the worker in the app folder, then in `engine/target/release` of a source checkout (on Linux, `ccp-engine-launch` first). Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
