@@ -2289,7 +2289,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         // Old previews were neither EXIF-oriented nor ICC-normalized. Changing
         // decode semantics must invalidate them even when the source is unchanged.
-        var key = $"oriented-srgb-v1|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+        // v1 entries were written with red and blue swapped (Rgba8888 read as BGRA).
+        var key = $"oriented-srgb-v2|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..16];
         return Path.Combine(SessionStore.AppDataDir(), "orig-preview", hash + ".rgb");
     }
