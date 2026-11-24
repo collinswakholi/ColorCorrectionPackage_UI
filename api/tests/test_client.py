@@ -289,13 +289,6 @@ class ClientTests(unittest.TestCase):
             with self.subTest(nn=nn), self.assertRaises(ValueError):
                 self.engine.request("run", nn=nn)
 
-    def test_old_worker_cannot_silently_ignore_custom_references(self):
-        with self.assertRaises(EngineError) as caught:
-            self.engine.request("run", reference_profiles=[{"id": "new-profile"}])
-        self.assertEqual(caught.exception.reply["code"], "unsupported_capability")
-        self.assertFalse(self.engine.request("run", check=False, reference_assignments=[{}])["ok"])
-        self.assertTrue(self.engine.devices()["ok"])
-
     def test_all_convenience_operations(self):
         operations = [(lambda: self.engine.warmup(), "warmup"),
                       (lambda: self.engine.fit("x", output="a.png", report="b", model_out="c"), "run"),

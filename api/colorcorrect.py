@@ -320,12 +320,6 @@ class Engine:
                 return _unsupported_capability(
                     "This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine.",
                     check=check)
-            if parameters.get("reference_profiles") or parameters.get("reference_assignments"):
-                missing = {"custom_references_v1", "chart_identity_v1"} - set(self.ready.get("capabilities") or [])
-                if missing:
-                    return _unsupported_capability(
-                        "Worker cannot apply custom references; missing " + ", ".join(sorted(missing)),
-                        check=check)
             if random_sampling and self.ready.get("patch_sampling") != "random-lcg32-v1":
                 return _unsupported_capability(
                     "Exact patch sampling requires an updated worker; the grid was not substituted.",

@@ -812,10 +812,6 @@ class Client:
         if references is not None and (not isinstance(references, Mapping) or not references or
                                       any(not isinstance(value, ReferenceProfile) for value in references.values())):
             raise InvalidInputError("references must be a nonempty chart-id → ReferenceProfile mapping")
-        if reference is not None or references is not None:
-            missing = {"custom_references_v1", "chart_identity_v1"} - self.capabilities
-            if missing:
-                raise UnsupportedCapabilityError("Worker cannot apply custom references; missing " + ", ".join(sorted(missing)))
         if detection is not None and (not isinstance(detection, DetectionResult) or detection.image != image_path):
             raise InvalidInputError("Detection must belong to this chart image")
         if detection is not None:
@@ -824,8 +820,6 @@ class Client:
                 raise InvalidInputError("Chart image changed since detection; detect again before assigning references")
         if chart_ids is not None and (isinstance(chart_ids, str) or any(not isinstance(key, str) for key in chart_ids)):
             raise InvalidInputError("chart_ids must be a sequence of chart identity strings")
-        if opts.fast_mode and "combined_lut65_v1" not in self.capabilities:
-            raise UnsupportedCapabilityError("This worker cannot use fast mode; update the native engine")
         detected = detection or self.detect(image_path, options=detection_options)
         if reference is not None and chart_ids is None and len(detected.charts) != 1:
             raise InvalidInputError("Multiple charts detected: select one explicitly with chart_ids=[chart.id], or use references={chart.id: profile}")
@@ -969,8 +963,6 @@ class CalibrationModel:
             effective_options = replace(effective_options, do_ffc=bool(parameters.get("do_ffc")))
         requested = effective_options.to_dict()
         parameters.update(requested)
-        if parameters.get("fast_mode") and "combined_lut65_v1" not in self._client.capabilities:
-            raise UnsupportedCapabilityError("This worker cannot use fast mode; update the native engine")
         if any(parameters.get(key) is True for key in ("do_gc", "do_wb", "do_cc")):
             saved = _json(self.path)
             available = {"do_gc": saved.get("gc_model") is not None or saved.get("gc_coeffs") is not None,

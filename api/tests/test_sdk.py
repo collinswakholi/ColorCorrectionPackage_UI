@@ -309,14 +309,14 @@ class SDKTests(unittest.TestCase):
             reply = client.engine.request("devices", check=False)
             self.assertEqual(reply["code"], "unsupported_capability")
 
-    def test_legacy_cpu_policy_keeps_its_original_shape(self):
+    def test_cpu_policy_keeps_its_original_shape(self):
         with Client(sys.executable, root=ROOT, backend="cpu", timeout=5) as client:
             client.engine._start()
             client.engine.ready["capabilities"] = []
             reply = client.engine.request("devices")
             self.assertEqual(reply["echo"]["policy"], "cpu")
 
-    def test_fast_mode_defaults_on_and_requires_worker_support(self):
+    def test_fast_mode_defaults_on_and_can_be_disabled(self):
         self.assertTrue(ApplyOptions().to_dict()["fast_mode"])
         self.assertTrue(CalibrationOptions().to_dict()["fast_mode"])
         self.assertNotIn("fast_mode", ApplyOptions(fast_mode=False).to_dict())
@@ -329,13 +329,6 @@ class SDKTests(unittest.TestCase):
         result = model.apply(self.folder / "scene.jpg", output_dir=self.folder,
                              options=ApplyOptions(fast_mode=True))
         self.assertIs(result.raw_reply["echo"]["fast_mode"], True)
-        self.client.engine.ready["capabilities"] = []
-        with self.assertRaisesRegex(UnsupportedCapabilityError, "fast mode"):
-            model.apply(self.folder / "scene.jpg", output_dir=self.folder,
-                        options=ApplyOptions(fast_mode=True))
-        with self.assertRaisesRegex(UnsupportedCapabilityError, "fast mode"):
-            self.fit(options=CalibrationOptions(fast_mode=True))
-        # Explicit standard mode still supports workers predating fast mode.
         result = model.apply(self.folder / "scene.jpg", output_dir=self.folder,
                              options=ApplyOptions(fast_mode=False))
         self.assertNotIn("fast_mode", result.raw_reply["echo"])
@@ -405,14 +398,6 @@ class SDKTests(unittest.TestCase):
         detected.image.write_text("changed image size", encoding="utf-8")
         with self.assertRaises(InvalidInputError):
             self.client.calibrate(detected.image, detection=detected, output_dir=self.folder)
-
-    def test_old_worker_rejects_custom_but_keeps_builtins(self):
-        self.client.close()
-        with patch.dict(os.environ, {"CCP_TEST_OLD_WORKER": "1"}):
-            self.client = Client(sys.executable, root=ROOT)
-            with self.assertRaises(UnsupportedCapabilityError):
-                self.fit(reference=self.profile, options=CalibrationOptions(fast_mode=False))
-            self.fit(options=CalibrationOptions(fast_mode=False))
 
     def test_ffc_survives_model_reload_and_explicit_disable(self):
         model = self.fit(white=self.folder / "white.jpg", options=CalibrationOptions(ffc=FFCOptions(method="pls")))
