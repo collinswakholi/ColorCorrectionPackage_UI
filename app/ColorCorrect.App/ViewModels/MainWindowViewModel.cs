@@ -2091,20 +2091,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             _worker.Policy = Compute.SelectedAccelPolicy.Value;
             await _worker.StartAsync(cancellation).ConfigureAwait(false);
-            var warmed = _worker.Warmed;
-            var warmupError = _worker.LastError;
+            var readiness = WorkerReadiness.Of(_worker);
             await OnUi(() =>
             {
-                if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
-                Compute.WorkerReady = true;
-                Compute.WorkerStartupComplete = true;
-                Compute.WorkerStartupError = "";
-                Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
-                    ? (_worker.Warmed ? $"Warmed · {_worker.Device}" : $"Ready · {_worker.Device}")
-                    : _worker.Title;
+                if (!MarkWorkerReady(readiness)) return;
                 Job.Status = "Ready.";
                 Job.CurrentStage = "";
-                Log("Engine", _worker.Warmed ? $"Ready · {LabelStage(_worker.Device)}" : "Ready. Detection is checked when needed.", LogLevel.Info);
+                Log("Engine", $"Ready · {LabelStage(readiness.Device)}", LogLevel.Info);
                 // Status bar already shows ready. A toast here covers the viewer.
             }).ConfigureAwait(false);
             await RefreshAccelAsync().ConfigureAwait(false);
@@ -2113,11 +2106,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             await OnUi(() =>
             {
-                Compute.WorkerReady = false;
-                Compute.WorkerStartupComplete = true;
-                Compute.WorkerStartupError = ex.Message;
-                Compute.WorkerLine = "Worker failed";
-                Job.Status = ex.Message;
+                MarkWorkerFailed(ex.Message);
                 Log("Worker", ex.Message, LogLevel.Error);
             }).ConfigureAwait(false);
         }

@@ -261,30 +261,16 @@ public partial class MainWindowViewModel
         try
         {
             await _worker.RestartAsync(cancellation).ConfigureAwait(false);
-            var warmed = _worker.Warmed;
-            var warmupError = _worker.LastError;
+            var readiness = WorkerReadiness.Of(_worker);
             await RefreshAccelAsync().ConfigureAwait(false);
             await OnUi(() =>
             {
-                if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
-                Compute.WorkerReady = true;
-                Compute.WorkerStartupComplete = true;
-                Compute.WorkerStartupError = "";
-                Compute.WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
-                    ? $"Warmed · {_worker.Device}"
-                    : _worker.Title;
-                Job.Status = Compute.WorkerLine;
+                if (MarkWorkerReady(readiness)) Job.Status = Compute.WorkerLine;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
         {
-            await OnUi(() =>
-            {
-                Compute.WorkerStartupComplete = true;
-                Compute.WorkerStartupError = ex.Message;
-                Job.Status = ex.Message;
-                Compute.WorkerLine = "Worker failed";
-            }).ConfigureAwait(false);
+            await OnUi(() => MarkWorkerFailed(ex.Message)).ConfigureAwait(false);
         }
         finally
         {
@@ -296,19 +282,43 @@ public partial class MainWindowViewModel
         }
     }
 
-    private bool ReportWorkerWarmupFailure(bool warmed, string error)
+    /// <summary>What a started worker reported, read once on the worker's thread.</summary>
+    private readonly record struct WorkerReadiness(bool Warmed, string Device, string Title, string Error)
     {
-        if (warmed) return false;
+        public static WorkerReadiness Of(SpeedyWorker worker) => new(worker.Warmed, worker.Device, worker.Title, worker.LastError);
+    }
+
+    /// <summary>Show a started worker as ready, or its warmup failure. Returns whether it is ready.</summary>
+    private bool MarkWorkerReady(WorkerReadiness readiness)
+    {
+        if (!readiness.Warmed)
+        {
+            Compute.WorkerReady = false;
+            Compute.WorkerStartupComplete = true;
+            var reason = string.IsNullOrWhiteSpace(readiness.Error)
+                ? "The selected detection engine did not initialize."
+                : ConciseProcessingError(readiness.Error);
+            Compute.WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
+            Compute.WorkerLine = "Detection unavailable";
+            Job.Status = Compute.WorkerStartupError;
+            Log("Engine", Compute.WorkerStartupError, LogLevel.Error);
+            return false;
+        }
+
+        Compute.WorkerReady = true;
+        Compute.WorkerStartupComplete = true;
+        Compute.WorkerStartupError = "";
+        Compute.WorkerLine = string.IsNullOrWhiteSpace(readiness.Title) ? $"Warmed · {readiness.Device}" : readiness.Title;
+        return true;
+    }
+
+    private void MarkWorkerFailed(string error)
+    {
         Compute.WorkerReady = false;
         Compute.WorkerStartupComplete = true;
-        var reason = string.IsNullOrWhiteSpace(error)
-            ? "The selected detection engine did not initialize."
-            : ConciseProcessingError(error);
-        Compute.WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
-        Compute.WorkerLine = "Detection unavailable";
-        Job.Status = Compute.WorkerStartupError;
-        Log("Engine", Compute.WorkerStartupError, LogLevel.Error);
-        return true;
+        Compute.WorkerStartupError = error;
+        Compute.WorkerLine = "Worker failed";
+        Job.Status = error;
     }
 
     [RelayCommand]
