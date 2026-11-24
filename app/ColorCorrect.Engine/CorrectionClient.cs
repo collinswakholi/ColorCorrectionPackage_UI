@@ -69,7 +69,7 @@ public sealed class CorrectionClient
             payload["crop_rect"] = options.CropRect;
         }
 
-        return await RunTypedAsync(payload, runDir, outputPath, reportPath, modelPath, previewDir, hasMetrics: true, options, inputPath, source, cancellationToken)
+        return await RunTypedAsync(payload, outputPath, reportPath, modelPath, previewDir, hasMetrics: true, options, inputPath, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -125,11 +125,10 @@ public sealed class CorrectionClient
             var preview = Path.Combine(run, "previews");
             Directory.CreateDirectory(destination);
             Directory.CreateDirectory(preview);
-            return new PreparedApply(run, ownedModel, destination, preview, identities);
+            return new PreparedApply(ownedModel, destination, preview, identities);
         }, cancellationToken).ConfigureAwait(false);
         if (prepared is null)
             return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = $"The saved model is missing: {modelPath}. Locate the model or fit a new correction." }).ToArray();
-        var runDir = prepared.Run;
         modelPath = prepared.Model;
         var destDir = prepared.Destination;
         var previewRoot = prepared.Preview;
@@ -186,7 +185,6 @@ public sealed class CorrectionClient
                         Ok = false,
                         Error = result.TryGetProperty("error", out var missing) ? missing.GetString() ?? "apply failed" : "apply failed",
                         ModelPath = modelPath,
-                        RunDir = runDir,
                     });
                     continue;
                 }
@@ -216,7 +214,6 @@ public sealed class CorrectionClient
                     Error = ok ? "" : (string.IsNullOrWhiteSpace(error) ? "apply failed" : error),
                     OutputPath = ok ? outputPath : "",
                     ModelPath = modelPath,
-                    RunDir = runDir,
                     PreviewDir = Directory.Exists(previewDir) ? previewDir : "",
                     FfcSkipped = JsonStr(row, "ffc_skipped"),
                     ApplyBackend = FirstNonEmpty(JsonStr(row, "apply_backend"), JsonStr(result, "apply_backend")),
@@ -230,11 +227,11 @@ public sealed class CorrectionClient
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = ex.Message, RunDir = runDir, Stderr = ex.Message }).ToArray();
+            return inputPaths.Select(_ => new CorrectionOutcome { Ok = false, Error = ex.Message, Stderr = ex.Message }).ToArray();
         }
     }
 
-    private sealed record PreparedApply(string Run, string Model, string Destination, string Preview, AssetIdentity?[] Sources);
+    private sealed record PreparedApply(string Model, string Destination, string Preview, AssetIdentity?[] Sources);
 
     public async Task<bool> PreviewStageAsync(
         string inputPath,
@@ -342,7 +339,6 @@ public sealed class CorrectionClient
 
     private async Task<CorrectionOutcome> RunTypedAsync(
         Dictionary<string, object?> payload,
-        string runDir,
         string outputPath,
         string reportPath,
         string modelPath,
@@ -361,7 +357,7 @@ public sealed class CorrectionClient
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            return new CorrectionOutcome { Ok = false, Error = ex.Message, RunDir = runDir, Stderr = ex.Message };
+            return new CorrectionOutcome { Ok = false, Error = ex.Message, Stderr = ex.Message };
         }
 
         if (result.TryGetProperty("output", out var outEl) && outEl.ValueKind == JsonValueKind.String)
@@ -408,7 +404,6 @@ public sealed class CorrectionClient
             OutputPath = ok ? outputPath : "",
             ReportPath = File.Exists(reportPath) ? reportPath : "",
             ModelPath = File.Exists(modelPath) ? modelPath : "",
-            RunDir = runDir,
             PreviewDir = Directory.Exists(previewDir) ? previewDir : "",
             Stderr = _worker.FormatRecentStderr(),
             FfcSkipped = JsonStr(result, "ffc_skipped"),

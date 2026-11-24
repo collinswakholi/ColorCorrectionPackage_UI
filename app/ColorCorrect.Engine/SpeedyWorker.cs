@@ -31,7 +31,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
     public string Policy { get; set; } = "auto";
     public string RepoRoot => _repoRoot;
     public string ExePath => _exePath;
-    public IReadOnlySet<string> Capabilities { get; private set; } = new HashSet<string>();
+    private IReadOnlySet<string> Capabilities { get; set; } = new HashSet<string>();
     public event Action<string>? Progress;
 
     public async Task RequireCapabilityAsync(string capability, CancellationToken cancellationToken = default)
@@ -198,16 +198,10 @@ public sealed class SpeedyWorker : IAsyncDisposable
         await SendAsync(new Dictionary<string, object?> { ["cmd"] = "devices", ["policy"] = Policy }, TimeSpan.FromSeconds(30), cancellationToken)
             .ConfigureAwait(false);
 
-    public IReadOnlyList<string> RecentStderr(int max = 20)
-    {
-        var snapshot = _stderrLines.ToArray();
-        return snapshot.Length <= max ? snapshot : snapshot[^max..];
-    }
-
     public string FormatRecentStderr(int max = 8)
     {
-        var lines = RecentStderr(max);
-        return lines.Count == 0 ? "" : string.Join(Environment.NewLine, lines);
+        var snapshot = _stderrLines.ToArray();
+        return string.Join(Environment.NewLine, snapshot.Length <= max ? snapshot : snapshot[^max..]);
     }
 
     public ValueTask DisposeAsync()

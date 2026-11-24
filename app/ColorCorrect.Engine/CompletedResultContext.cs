@@ -23,7 +23,6 @@ public sealed record AssetIdentity(string Path, string Sha256)
 public static class PathIdentity
 {
     public static StringComparer Comparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-    public static StringComparison Comparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     public static bool Equal(string? a, string? b) => Comparer.Equals(a, b);
 }
 

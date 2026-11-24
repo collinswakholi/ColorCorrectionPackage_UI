@@ -9,7 +9,6 @@ public sealed class CorrectionOutcome
     public string OutputPath { get; init; } = "";
     public string ReportPath { get; init; } = "";
     public string ModelPath { get; init; } = "";
-    public string RunDir { get; init; } = "";
     public string PreviewDir { get; init; } = "";
     public string Stderr { get; init; } = "";
     public string FfcSkipped { get; init; } = "";

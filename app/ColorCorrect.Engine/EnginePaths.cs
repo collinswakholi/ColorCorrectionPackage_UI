@@ -25,7 +25,7 @@ public static class EnginePaths
         return false;
     }
 
-    public static bool LooksLikeRepo(string path) =>
+    internal static bool LooksLikeRepo(string path) =>
         Directory.Exists(Path.Combine(path, "models", "opt2")) &&
         File.Exists(Path.Combine(path, "refs", "neutrals.json"));
 

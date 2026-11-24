@@ -40,7 +40,7 @@ public static class RunPaths
             .Any(part => part == "..");
     }
 
-    public static void CopyIfNeeded(string src, string destDir, string destName)
+    internal static void CopyIfNeeded(string src, string destDir, string destName)
     {
         if (!File.Exists(src) || string.IsNullOrWhiteSpace(destDir))
         {

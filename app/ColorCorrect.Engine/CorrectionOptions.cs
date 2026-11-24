@@ -123,7 +123,7 @@ public sealed class CorrectionOptions
         return normalized.Count == 1 ? normalized[0].ToString() : $"[{string.Join(", ", normalized)}]";
     }
 
-    public static string CanonicalOptimizer(string? optimizer) => optimizer?.Trim().ToLowerInvariant() switch
+    private static string CanonicalOptimizer(string? optimizer) => optimizer?.Trim().ToLowerInvariant() switch
     {
         "sgd" or "momentum" => "sgd",
         "rmsprop" or "rms" => "rmsprop",

@@ -11,7 +11,6 @@ public sealed class CorrectionReport
     public bool DoGc { get; init; }
     public bool DoWb { get; init; }
     public bool DoCc { get; init; }
-    public string FfcMethod { get; init; } = "";
     public int FeatureCount { get; init; }
     public int SaturatedPatches { get; init; }
     public double MeanBefore { get; init; }
@@ -21,7 +20,6 @@ public sealed class CorrectionReport
     public double MaxBefore { get; init; }
     public double MaxAfter { get; init; }
     public int ValidationFolds { get; init; }
-    public int ValidationSamples { get; init; }
     public double ValidationMean { get; init; }
     public double ValidationMedian { get; init; }
     public double ValidationMax { get; init; }
@@ -166,7 +164,6 @@ public sealed class CorrectionReport
             DoGc = GetFlag(root, "do_gc"),
             DoWb = GetFlag(root, "do_wb"),
             DoCc = GetFlag(root, "do_cc"),
-            FfcMethod = GetStr(root, "ffc_method"),
             FeatureCount = root.TryGetProperty("feature_count", out var fc) && fc.TryGetInt32(out var nFc) ? nFc : 0,
             SaturatedPatches = root.TryGetProperty("saturated_patches", out var sp) && sp.TryGetInt32(out var nSp) ? nSp : 0,
             MeanBefore = GetNum(delta, "mean_before"),
@@ -176,7 +173,6 @@ public sealed class CorrectionReport
             MaxBefore = GetNum(delta, "max_before"),
             MaxAfter = GetNum(delta, "max_after"),
             ValidationFolds = validation.ValueKind == JsonValueKind.Object && validation.TryGetProperty("folds", out var folds) && folds.TryGetInt32(out var nFolds) ? nFolds : 0,
-            ValidationSamples = validation.ValueKind == JsonValueKind.Object && validation.TryGetProperty("samples", out var samples) && samples.TryGetInt32(out var nSamples) ? nSamples : 0,
             ValidationMean = GetNum(validation, "mean"),
             ValidationMedian = GetNum(validation, "median"),
             ValidationMax = GetNum(validation, "max"),

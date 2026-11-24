@@ -40,24 +40,6 @@ public sealed class HandshakeDocument
 
     public string GetString(string name, string fallback = "") => Str(name, fallback);
 
-    public int GetInt(string name, int fallback = 0)
-    {
-        if (Root.TryGetProperty(name, out var el))
-        {
-            if (el.TryGetInt32(out var n))
-            {
-                return n;
-            }
-
-            if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out n))
-            {
-                return n;
-            }
-        }
-
-        return fallback;
-    }
-
     public IReadOnlyList<JsonElement> Faces()
     {
         if (_faces is not null)

@@ -18,7 +18,7 @@ public sealed record Quad(Pt A, Pt B, Pt C, Pt D)
         }
     }
 
-    public Quad ScaleAboutCenter(double factor)
+    internal Quad ScaleAboutCenter(double factor)
     {
         if (!double.IsFinite(factor) || Math.Abs(factor - 1) < 1e-9)
         {
