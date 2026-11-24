@@ -7,8 +7,6 @@ testdata/samples/
 dist/
 artifacts/
 _ui_stress/
-installer/ffmpeg.exe
-installer/ffprobe.exe
 *.user
 .vs/
 .idea/

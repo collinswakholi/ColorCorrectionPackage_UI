@@ -98,12 +98,12 @@ class ClientTests(unittest.TestCase):
         self.mock.stop()
 
     def test_ready_protocol_version_is_read_and_checked(self):
-        for marker, expected in ((None, 2), (2, 2), (3, 3)):
-            env = {} if marker is None else {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}
-            with self.subTest(marker=marker), patch.dict(os.environ, env):
+        for marker in (2, 3):
+            with self.subTest(marker=marker), patch.dict(os.environ,
+                    {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}):
                 try:
                     self.assertTrue(self.engine.devices()["ok"])
-                    self.assertEqual(self.engine.protocol_version, expected)
+                    self.assertEqual(self.engine.protocol_version, marker)
                 finally:
                     self.engine.close()
         for marker in (1, 4, "3", True):
@@ -112,6 +112,11 @@ class ClientTests(unittest.TestCase):
                 with self.assertRaisesRegex(EngineError, "protocol"):
                     self.engine.devices()
                 self.assertIsNone(self.engine._process)
+        # 0.1.x workers sent no protocol_version; name the minimum Studio release.
+        with patch.dict(os.environ, {"FAKE_WORKER_PROTOCOL": "null"}):
+            with self.assertRaisesRegex(EngineError, r"ColorCorrect Studio 0\.2\.0 or later"):
+                self.engine.devices()
+            self.assertIsNone(self.engine._process)
 
     def test_shutdown_acknowledgement_is_case_insensitive(self):
         self.engine.devices()
@@ -283,13 +288,6 @@ class ClientTests(unittest.TestCase):
                    {"dropout": "0.1"}, {"batch_norm": "false"}):
             with self.subTest(nn=nn), self.assertRaises(ValueError):
                 self.engine.request("run", nn=nn)
-
-    def test_old_worker_cannot_silently_ignore_custom_references(self):
-        with self.assertRaises(EngineError) as caught:
-            self.engine.request("run", reference_profiles=[{"id": "new-profile"}])
-        self.assertEqual(caught.exception.reply["code"], "unsupported_capability")
-        self.assertFalse(self.engine.request("run", check=False, reference_assignments=[{}])["ok"])
-        self.assertTrue(self.engine.devices()["ok"])
 
     def test_all_convenience_operations(self):
         operations = [(lambda: self.engine.warmup(), "warmup"),

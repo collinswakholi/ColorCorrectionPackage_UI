@@ -83,9 +83,6 @@ def inventory(root: Path) -> list[dict]:
     result = []
     for path in sorted(candidates):
         relative = path.relative_to(root).as_posix()
-        # Historical video binaries can remain locally until cleanup is approved.
-        if relative in {"installer/ffmpeg.exe", "installer/ffprobe.exe"}:
-            continue
         if is_link(path):
             raise ValueError(f"source file is a link: {relative}")
         if root not in path.resolve(strict=True).parents or any(is_link(parent) for parent in path.parents if parent != root and root in parent.parents):

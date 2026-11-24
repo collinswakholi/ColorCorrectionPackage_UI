@@ -21,12 +21,14 @@ import tempfile
 from typing import Any, Callable
 import weakref
 
-__version__ = "2.3.0"
+__version__ = "3.0.0"
 COMMANDS = ("devices", "setup_probe", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
-#: Worker NDJSON protocol versions this client understands. A ready event
-#: without protocol_version is treated as version 2.
+#: Worker NDJSON protocol versions this client understands. Studio 0.2.0-0.3.0
+#: workers speak protocol 2. A ready event without protocol_version comes from
+#: a 0.1.x worker, which is rejected.
 SUPPORTED_PROTOCOL_VERSIONS = (2, 3)
+_MINIMUM_STUDIO = "0.2.0"
 _DEFAULT_POLICY = "auto"
 _STILL_FORMATS = ("png", "jpg", "jpeg")
 
@@ -138,7 +140,7 @@ class Engine:
         # An explicit package root must not borrow a worker from the developer's
         # shell. An explicit executable remains the protocol escape hatch.
         exe = executable or (None if root is not None else
-                             os.environ.get("CCP_ENGINE_EXE") or os.environ.get("COLORCORRECT_EXE"))
+                             os.environ.get("CCP_ENGINE_EXE"))
         located = Path(root or os.environ.get("CCP_NEW_UI_ROOT", "")).resolve() if root or os.environ.get("CCP_NEW_UI_ROOT") else None
         self.root = located or (_root(Path(exe).resolve().parent) if exe else None) or _root(Path(__file__).resolve().parent) or _root(Path.cwd())
         if self.root is None or not (self.root / "refs/neutrals.json").is_file():
@@ -148,11 +150,7 @@ class Engine:
         else:
             name = "ccp-engine.exe" if os.name == "nt" else "ccp-engine"
             candidates = ([self.root / "ccp-engine-launch"] if sys.platform.startswith("linux") else [])
-            candidates += [self.root / name, self.root / "engine/target/release" / name,
-                          self.root / "dist/win-cpu" / name]
-            for target in ("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-arm64", "macos-arm64"):
-                candidates.extend((self.root / "dist" / target / "payload" / name,
-                                   self.root / "dist" / target / name))
+            candidates += [self.root / name, self.root / "engine/target/release" / name]
             self.executable = next((p for p in candidates if p.is_file()), candidates[0])
         if not self.executable.is_file():
             raise FileNotFoundError(f"Worker not found: {self.executable}. Use an extracted app package or build the engine.")
@@ -165,10 +163,9 @@ class Engine:
         self.ready: dict = {}
 
     @property
-    def protocol_version(self) -> int:
-        """Protocol version from the worker's ready event (2 when absent)."""
-        version = self.ready.get("protocol_version", 2)
-        return version if type(version) is int else 2
+    def protocol_version(self) -> int | None:
+        """Protocol version from the worker's ready event; None before it starts."""
+        return self.ready.get("protocol_version")
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -244,7 +241,11 @@ class Engine:
             self.ready = self._read_reply(self.timeout)
             if self.ready.get("event") != "ready":
                 raise EngineError("Worker did not send a ready event", self.ready)
-            version = self.ready.get("protocol_version", 2)
+            if "protocol_version" not in self.ready:
+                raise EngineError(
+                    "Worker did not report a protocol version, so it predates ColorCorrect Studio "
+                    f"{_MINIMUM_STUDIO}. Install ColorCorrect Studio {_MINIMUM_STUDIO} or later.", self.ready)
+            version = self.ready["protocol_version"]
             if type(version) is not int or version not in SUPPORTED_PROTOCOL_VERSIONS:
                 raise EngineError(
                     f"Unsupported worker protocol version {version!r}; this client supports "
@@ -315,12 +316,6 @@ class Engine:
                 return _unsupported_capability(
                     "This worker cannot run explicit CPU inference. Install the matching ColorCorrect engine.",
                     check=check)
-            if parameters.get("reference_profiles") or parameters.get("reference_assignments"):
-                missing = {"custom_references_v1", "chart_identity_v1"} - set(self.ready.get("capabilities") or [])
-                if missing:
-                    return _unsupported_capability(
-                        "Worker cannot apply custom references; missing " + ", ".join(sorted(missing)),
-                        check=check)
             if random_sampling and self.ready.get("patch_sampling") != "random-lcg32-v1":
                 return _unsupported_capability(
                     "Exact patch sampling requires an updated worker; the grid was not substituted.",

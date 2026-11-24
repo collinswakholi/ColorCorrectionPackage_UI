@@ -1,12 +1,11 @@
 """Executable SDK test fixture using the real NDJSON transport and file artifacts."""
 import json
-import os
 from pathlib import Path
 import sys
 import time
 
-caps = [] if os.environ.get("CCP_TEST_OLD_WORKER") else ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1", "cpu_inference_v1"]
-print(json.dumps({"ok": True, "event": "ready", "capabilities": caps}), flush=True)
+caps = ["custom_references_v1", "chart_identity_v1", "combined_lut65_v1", "cpu_inference_v1"]
+print(json.dumps({"ok": True, "event": "ready", "protocol_version": 3, "capabilities": caps}), flush=True)
 for line in sys.stdin:
     request = json.loads(line)
     command = request["cmd"]

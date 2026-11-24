@@ -227,31 +227,16 @@ class ReferenceTests(unittest.TestCase):
 
 class SDKTests(unittest.TestCase):
     def test_explicit_macos_bundle_root_discovers_its_native_resources(self):
-        for layout in ("Contents/Resources/runtime", "Contents/MacOS"):
-            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
-                bundle = Path(directory) / "ColorCorrect Studio.app"
-                resources = bundle / layout
-                (resources / "refs").mkdir(parents=True)
-                (resources / "refs/neutrals.json").write_text("{}", encoding="utf8")
-                with_client = Client(sys.executable, root=bundle)
-                try:
-                    self.assertEqual(with_client.engine.root, resources.resolve())
-                finally:
-                    with_client.close()
-
-    def test_macos_bundle_prefers_resources_runtime_and_preserves_explicit_legacy_root(self):
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "ColorCorrect Studio.app"
             resources = bundle / "Contents/Resources/runtime"
-            legacy = bundle / "Contents/MacOS"
-            for candidate in (resources, legacy):
-                (candidate / "refs").mkdir(parents=True)
-                (candidate / "refs/neutrals.json").write_text("{}", encoding="utf8")
-            for supplied, expected in ((bundle, resources), (legacy, legacy)):
+            (resources / "refs").mkdir(parents=True)
+            (resources / "refs/neutrals.json").write_text("{}", encoding="utf8")
+            for supplied in (bundle, resources):
                 with self.subTest(root=supplied):
                     with_client = Client(sys.executable, root=supplied)
                     try:
-                        self.assertEqual(with_client.engine.root, expected.resolve())
+                        self.assertEqual(with_client.engine.root, resources.resolve())
                     finally:
                         with_client.close()
 
@@ -309,14 +294,14 @@ class SDKTests(unittest.TestCase):
             reply = client.engine.request("devices", check=False)
             self.assertEqual(reply["code"], "unsupported_capability")
 
-    def test_legacy_cpu_policy_keeps_its_original_shape(self):
+    def test_cpu_policy_keeps_its_original_shape(self):
         with Client(sys.executable, root=ROOT, backend="cpu", timeout=5) as client:
             client.engine._start()
             client.engine.ready["capabilities"] = []
             reply = client.engine.request("devices")
             self.assertEqual(reply["echo"]["policy"], "cpu")
 
-    def test_fast_mode_defaults_on_and_requires_worker_support(self):
+    def test_fast_mode_defaults_on_and_can_be_disabled(self):
         self.assertTrue(ApplyOptions().to_dict()["fast_mode"])
         self.assertTrue(CalibrationOptions().to_dict()["fast_mode"])
         self.assertNotIn("fast_mode", ApplyOptions(fast_mode=False).to_dict())
@@ -329,13 +314,6 @@ class SDKTests(unittest.TestCase):
         result = model.apply(self.folder / "scene.jpg", output_dir=self.folder,
                              options=ApplyOptions(fast_mode=True))
         self.assertIs(result.raw_reply["echo"]["fast_mode"], True)
-        self.client.engine.ready["capabilities"] = []
-        with self.assertRaisesRegex(UnsupportedCapabilityError, "fast mode"):
-            model.apply(self.folder / "scene.jpg", output_dir=self.folder,
-                        options=ApplyOptions(fast_mode=True))
-        with self.assertRaisesRegex(UnsupportedCapabilityError, "fast mode"):
-            self.fit(options=CalibrationOptions(fast_mode=True))
-        # Explicit standard mode still supports workers predating fast mode.
         result = model.apply(self.folder / "scene.jpg", output_dir=self.folder,
                              options=ApplyOptions(fast_mode=False))
         self.assertNotIn("fast_mode", result.raw_reply["echo"])
@@ -406,14 +384,6 @@ class SDKTests(unittest.TestCase):
         with self.assertRaises(InvalidInputError):
             self.client.calibrate(detected.image, detection=detected, output_dir=self.folder)
 
-    def test_old_worker_rejects_custom_but_keeps_builtins(self):
-        self.client.close()
-        with patch.dict(os.environ, {"CCP_TEST_OLD_WORKER": "1"}):
-            self.client = Client(sys.executable, root=ROOT)
-            with self.assertRaises(UnsupportedCapabilityError):
-                self.fit(reference=self.profile, options=CalibrationOptions(fast_mode=False))
-            self.fit(options=CalibrationOptions(fast_mode=False))
-
     def test_ffc_survives_model_reload_and_explicit_disable(self):
         model = self.fit(white=self.folder / "white.jpg", options=CalibrationOptions(ffc=FFCOptions(method="pls")))
         loaded = self.client.load_calibration(model.path)
@@ -473,7 +443,7 @@ class SDKTests(unittest.TestCase):
         result = model.apply(images[0], output_dir=self.folder, options=ApplyOptions(write_output=False))
         self.assertFalse(result.outputs)
 
-    def test_legacy_models_and_ffc_asset_requirements(self):
+    def test_models_without_sdk_metadata_and_ffc_asset_requirements(self):
         path = self.folder / "legacy.json"
         path.write_text(json.dumps({"kind": "rpcc2", "correction": {}, "do_ffc": True}), encoding="utf-8")
         model = self.client.load_calibration(path)
@@ -483,18 +453,30 @@ class SDKTests(unittest.TestCase):
             model.apply(self.folder / "scene.jpg", output_dir=self.folder)
         model.apply(self.folder / "scene.jpg", output_dir=self.folder, options=ApplyOptions(white=self.folder / "white.jpg"))
 
-    def test_cc_disabled_and_standalone_legacy_models_load(self):
+    def test_cc_disabled_model_loads_and_bare_correction_models_are_rejected(self):
         path = self.folder / "model.json"
-        for saved in ({"kind": "rpcc2", "correction": None, "do_cc": False},
-                      {"kind": "linear", "feature_count": 3, "coefficients": [1, 0, 0]}):
-            with self.subTest(saved=saved):
-                path.write_text(json.dumps(saved), encoding="utf-8")
-                model = self.client.load_calibration(path)
-                self.assertIsNone(model.metrics)
-                self.assertEqual(model.path, path.resolve())
-                with self.assertRaisesRegex(InvalidInputError, "WB.*absent"):
-                    model.apply(self.folder / "scene.jpg", output_dir=self.folder,
-                                options=ApplyOptions(do_wb=True))
+        path.write_text(json.dumps({"kind": "rpcc2", "correction": None, "do_cc": False}), encoding="utf-8")
+        model = self.client.load_calibration(path)
+        self.assertIsNone(model.metrics)
+        self.assertEqual(model.path, path.resolve())
+        with self.assertRaisesRegex(InvalidInputError, "WB.*absent"):
+            model.apply(self.folder / "scene.jpg", output_dir=self.folder,
+                        options=ApplyOptions(do_wb=True))
+        # No Studio release saved a bare correction model (pre-0.1.0 lineage only).
+        path.write_text(json.dumps({"kind": "linear", "feature_count": 3, "coefficients": [1, 0, 0]}), encoding="utf-8")
+        with self.assertRaisesRegex(InvalidInputError, "saved pipeline"):
+            self.client.load_calibration(path)
+
+    def test_detection_requires_snapshot_and_chart_identities(self):
+        face = {"cli_chart": "classic", "rows": 4, "cols": 6}
+        for handshake in ({"charts": [{**face, "chart_id": "s:0"}]},
+                          {"snapshot_id": "s", "charts": [face]},
+                          {"snapshot_id": "s", "faces": [{**face, "chart_id": "s:0"}]},
+                          {"snapshot_id": "s", **face, "chart_id": "s:0"}):
+            with self.subTest(handshake=handshake), patch.object(
+                    self.client, "_request", return_value={"ok": True, "n_charts": 1, "handshake": handshake}):
+                with self.assertRaises(ProcessingError):
+                    self.client.detect(self.folder / "chart.jpg")
 
     def test_lut_warns_about_spatial_ffc(self):
         model = self.fit(white=self.folder / "white.jpg")
