@@ -624,6 +624,17 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
+    <!-- Fluent's selected template paints a mid accent tint; keep selection the same quiet
+         PrimaryLight as everywhere else and mark it with weight, not a heavy block. -->
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
 
     <!-- Separator: BorderBrush color, thin line -->
     <Style Selector="Separator">

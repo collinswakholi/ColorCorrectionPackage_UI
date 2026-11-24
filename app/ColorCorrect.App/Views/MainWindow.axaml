@@ -653,7 +653,8 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
                                     <TextBlock x:Name="ChartTypeLabel" Text="{Binding Compute.DetectSummary}" Classes="caption"
-                                               Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                               Margin="0,0,0,6" TextWrapping="Wrap"
+                                               IsVisible="{Binding Compute.DetectSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock x:Name="DetectStatus" Text="{Binding Job.CurrentStage}" Classes="caption"
                                                Margin="0,0,0,6" IsVisible="{Binding Job.Busy}"/>
                                     <TextBlock Text="Chart face" Classes="caption" Margin="0,0,0,4"
