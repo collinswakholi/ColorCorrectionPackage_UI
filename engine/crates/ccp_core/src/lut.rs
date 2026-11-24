@@ -17,7 +17,7 @@ pub struct LutPipeline {
 }
 
 impl LutPipeline {
-    pub fn apply_color(&self, mut rgb: Vec3) -> Result<Vec3> {
+    pub(crate) fn apply_color(&self, mut rgb: Vec3) -> Result<Vec3> {
         if let Some(gc) = &self.gc {
             rgb = apply_gc_pixel(rgb, gc)?;
         }

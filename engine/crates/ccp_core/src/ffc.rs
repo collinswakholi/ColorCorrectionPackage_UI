@@ -116,7 +116,7 @@ impl FfcFitParams {
 }
 
 /// Keep a usable (cut-off, ceiling) pair. Invalid numbers fall back to CCP_rs 1.3 → 1.8.
-pub fn sanitize_ffc_extremity(cut_off: f32, max_val: f32) -> (f32, f32) {
+pub(crate) fn sanitize_ffc_extremity(cut_off: f32, max_val: f32) -> (f32, f32) {
     let cut = if cut_off.is_finite() && cut_off > 0.0 {
         cut_off.clamp(0.5, 4.0)
     } else {
@@ -161,7 +161,7 @@ fn inclusive_window_mean(src: &Array2<f32>, yc: i32, xc: i32, h_win: i32) -> Opt
 }
 
 /// Soft-cap values above `cut_off` toward `max_val` with tanh (CCP 1.3 → 1.8).
-pub fn transform_extremity(data: &mut [f32], cut_off: f32, max_val: f32) {
+pub(crate) fn transform_extremity(data: &mut [f32], cut_off: f32, max_val: f32) {
     for v in data.iter_mut() {
         if *v > cut_off {
             *v = cut_off + (max_val - cut_off) * (max_val * (*v - cut_off)).tanh();
@@ -217,7 +217,12 @@ fn cubic_sample(src: &Array2<f32>, y: f32, x: f32) -> f32 {
     acc
 }
 
-pub fn resize_gain(src: &Array2<f32>, height: usize, width: usize, mode: Upsample) -> Array2<f32> {
+pub(crate) fn resize_gain(
+    src: &Array2<f32>,
+    height: usize,
+    width: usize,
+    mode: Upsample,
+) -> Array2<f32> {
     if src.nrows() == height && src.ncols() == width {
         return src.clone();
     }
@@ -246,12 +251,6 @@ pub fn resize_gain(src: &Array2<f32>, height: usize, width: usize, mode: Upsampl
 }
 
 /// sRGB [0,1] HxWx3 → Lab D65, L* *= gain, clip L 0–100, back to sRGB [0,1].
-pub fn apply_ffc_float(img_rgb: &Array3<f32>, multiplier: &Array2<f32>) -> Array3<f32> {
-    let mut out = img_rgb.clone();
-    apply_ffc_inplace(&mut out, multiplier);
-    out
-}
-
 pub fn apply_ffc_inplace(img_rgb: &mut Array3<f32>, multiplier: &Array2<f32>) {
     apply_ffc_transform_inplace(img_rgb, multiplier, None);
 }
@@ -338,9 +337,10 @@ fn apply_ffc_transform_inplace(
         });
 }
 
+#[cfg(test)]
 /// One sRGB↔Lab trip: L* × gain, then the GC curve on L*. Matches FFC-then-GC order
 /// without the intermediate encode.
-pub fn apply_ffc_gc_fused(
+pub(crate) fn apply_ffc_gc_fused(
     img_rgb: &Array3<f32>,
     multiplier: &Array2<f32>,
     gc: &GammaModel,
@@ -552,7 +552,7 @@ pub fn parse_crop_rect(text: &str) -> Result<[i32; 4]> {
 }
 
 /// Fit a full-frame gain map. Missing/empty white → identity ones.
-pub fn fit_gain_map(
+pub(crate) fn fit_gain_map(
     white: Option<&Array3<f32>>,
     crop_rect: Option<[i32; 4]>,
     params: &FfcFitParams,
@@ -711,10 +711,6 @@ pub fn compute_multiplier(
 ) -> Result<Array2<f32>> {
     params.validate()?;
     fit_gain_map(white, crop_rect, params)
-}
-
-pub fn identity_gain(height: usize, width: usize) -> Array2<f32> {
-    Array2::from_elem((height.max(1), width.max(1)), 1.0)
 }
 
 #[cfg(test)]

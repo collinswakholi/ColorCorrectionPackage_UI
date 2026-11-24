@@ -30,7 +30,7 @@ impl Quad {
         ]
     }
 
-    pub fn bilerp(self, u: f64, v: f64) -> Vec2 {
+    pub(crate) fn bilerp(self, u: f64, v: f64) -> Vec2 {
         let w00 = (1.0 - u) * (1.0 - v);
         let w10 = u * (1.0 - v);
         let w11 = u * v;
@@ -108,7 +108,7 @@ pub struct ChartSpec {
 }
 
 impl ChartSpec {
-    pub fn patch_count(&self) -> usize {
+    pub(crate) fn patch_count(&self) -> usize {
         self.columns * self.rows
     }
 
@@ -1201,7 +1201,7 @@ pub fn chart_spec_from_name(value: &str) -> Result<ChartSpec> {
     chart_spec(parse_chart_kind(value)?)
 }
 
-pub fn default_neutral_names(kind: ChartKind) -> Vec<String> {
+pub(crate) fn default_neutral_names(kind: ChartKind) -> Vec<String> {
     match kind {
         ChartKind::Classic | ChartKind::Passport => DEFAULT_CLASSIC_NEUTRALS
             .iter()
@@ -1274,7 +1274,7 @@ pub fn load_neutrals_table(path: Option<&Path>) -> Result<HashMap<String, Vec<St
     Ok(embedded_neutrals_table())
 }
 
-pub fn neutral_names_for(
+pub(crate) fn neutral_names_for(
     kind: ChartKind,
     table: Option<&HashMap<String, Vec<String>>>,
 ) -> Vec<String> {

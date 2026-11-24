@@ -20,10 +20,10 @@ use serde::{Deserialize, Serialize};
 pub const RIDGE_LAMBDA: f64 = 1e-5;
 
 /// CCP_rs sat-check working floor (`clamp(-0.2, 1.3)` before the 0–1 stretch).
-pub const RGB_CLIP_LO: f64 = -0.2;
+pub(crate) const RGB_CLIP_LO: f64 = -0.2;
 
 /// CCP_rs sat-check working ceiling (`clamp(-0.2, 1.3)` before the 0–1 stretch).
-pub const RGB_CLIP_HI: f64 = 1.3;
+pub(crate) const RGB_CLIP_HI: f64 = 1.3;
 
 const MIN_POLY_DEGREE: i32 = 1;
 const MAX_POLY_DEGREE: i32 = 7;
@@ -432,7 +432,7 @@ impl CorrectionModel {
     }
 }
 
-pub fn write_polynomial_features(
+pub(crate) fn write_polynomial_features(
     rgb: Vec3,
     degree: i32,
     include_bias: bool,
@@ -472,7 +472,7 @@ pub fn write_polynomial_features(
     count
 }
 
-pub fn write_features_for(
+pub(crate) fn write_features_for(
     linear_rgb: Vec3,
     kind: ModelKind,
     poly_degree: i32,
@@ -529,7 +529,7 @@ pub fn write_features_for(
     }
 }
 
-pub fn features_for(
+pub(crate) fn features_for(
     linear_rgb: Vec3,
     kind: ModelKind,
     poly_degree: i32,
@@ -725,7 +725,7 @@ fn apply_mlp(model: &CorrectionModel, features: &[f64]) -> Vec3 {
     [f64::NAN; 3]
 }
 
-pub fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
+pub(crate) fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
     let mut features = [0.0; MAX_FEATURES];
     let mut n = write_features_for(
         linear_rgb,
@@ -771,7 +771,7 @@ pub fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
     })
 }
 
-pub fn collect_xy(
+pub(crate) fn collect_xy(
     patches: &[ChartPatch],
     kind: ModelKind,
     poly_degree: i32,

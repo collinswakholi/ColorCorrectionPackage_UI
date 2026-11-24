@@ -35,7 +35,7 @@ impl RgbImage {
         Ok(Self { width, height, rgb })
     }
 
-    pub fn from_srgb_u8(img: &Gray8) -> Self {
+    pub(crate) fn from_srgb_u8(img: &Gray8) -> Self {
         let raw = img.as_raw();
         let mut rgb = Vec::with_capacity(raw.len());
         for &b in raw {
@@ -129,8 +129,8 @@ fn reject_empty(width: u32, height: u32) -> Result<()> {
 }
 
 /// Default decode cap (200 MP). Override per process with the
-/// `CCP_MAX_IMAGE_MEGAPIXELS` environment variable or [`set_max_image_pixels`].
-pub const DEFAULT_MAX_IMAGE_PIXELS: u64 = 200_000_000;
+/// `CCP_MAX_IMAGE_MEGAPIXELS` environment variable.
+pub(crate) const DEFAULT_MAX_IMAGE_PIXELS: u64 = 200_000_000;
 
 static MAX_IMAGE_PIXELS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -150,11 +150,6 @@ pub fn max_image_pixels() -> u64 {
         .unwrap_or(DEFAULT_MAX_IMAGE_PIXELS);
     MAX_IMAGE_PIXELS.store(configured, Ordering::Relaxed);
     configured
-}
-
-/// Set the decode cap for this process; `0` restores the default/env value.
-pub fn set_max_image_pixels(pixels: u64) {
-    MAX_IMAGE_PIXELS.store(pixels, std::sync::atomic::Ordering::Relaxed);
 }
 
 fn format_label(format: Option<image::ImageFormat>) -> String {
@@ -286,11 +281,12 @@ pub fn load_image_with_limit(
     Ok(result)
 }
 
-pub fn sample_bilinear(image: &RgbImage, x: f64, y: f64) -> Vec3 {
+#[cfg(test)]
+pub(crate) fn sample_bilinear(image: &RgbImage, x: f64, y: f64) -> Vec3 {
     sample_bilinear_view(&image.view(), x, y)
 }
 
-pub fn sample_bilinear_view(image: &RgbView<'_>, mut x: f64, mut y: f64) -> Vec3 {
+pub(crate) fn sample_bilinear_view(image: &RgbView<'_>, mut x: f64, mut y: f64) -> Vec3 {
     let max_x = (image.width.saturating_sub(1)) as f64;
     let max_y = (image.height.saturating_sub(1)) as f64;
     x = x.clamp(0.0, max_x);
@@ -438,8 +434,9 @@ fn validate_sampling_shape(spec: &ChartSpec, patch_obbs: &[Quad]) -> Result<usiz
     Ok(expected)
 }
 
-/// Sample each Opt2 `patch_obb` with bilinear 9×9 inside the inner 0.70 box.
-pub fn sample_patch_obbs(
+/// [`sample_patch_obbs_view`] of an owned image.
+#[cfg(test)]
+pub(crate) fn sample_patch_obbs(
     image: &RgbImage,
     spec: &ChartSpec,
     patch_obbs: &[Quad],
@@ -448,7 +445,8 @@ pub fn sample_patch_obbs(
     sample_patch_obbs_view(&image.view(), spec, patch_obbs, options)
 }
 
-/// Same as [`sample_patch_obbs`] on a borrowed f32 RGB buffer (no full-frame clone).
+/// Sample each Opt2 `patch_obb` of `image`: the mean of a bilinear grid or of
+/// seeded random points inside the patch, as `options` selects.
 pub fn sample_patch_obbs_view(
     image: &RgbView<'_>,
     spec: &ChartSpec,

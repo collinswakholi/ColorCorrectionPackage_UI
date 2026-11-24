@@ -1,5 +1,5 @@
-use ccp_core::color::{delta_e_2000, Lab};
-use ccp_core::honest::mean_delta_e00;
+use ccp_core::color::{delta_e_2000, srgb_d65_space, Lab};
+use ccp_core::honest::delta_e00_in_space;
 use ccp_core::refs::{
     chart_spec, chart_spec_from_name, load_neutrals_table, lookup_neutrals, neutrals_json_path,
     ChartKind,
@@ -51,8 +51,17 @@ fn neutrals_json_lookup() {
 fn shuffle_classic_vs_spyder_changes_mean_de() {
     let classic = chart_spec(ChartKind::Classic).unwrap();
     let spyder = chart_spec(ChartKind::Spyder).unwrap();
-    let same = mean_delta_e00(&classic.reference_srgb, &classic.reference_lab_d50).unwrap();
-    let shuffled = mean_delta_e00(&classic.reference_srgb, &spyder.reference_lab_d50).unwrap();
+    let mean_delta_e00 = |measured: &[[f64; 3]], references: &[Lab]| {
+        let space = srgb_d65_space().1;
+        measured
+            .iter()
+            .zip(references)
+            .map(|(rgb, lab)| delta_e00_in_space(*rgb, *lab, space).unwrap())
+            .sum::<f64>()
+            / measured.len() as f64
+    };
+    let same = mean_delta_e00(&classic.reference_srgb, &classic.reference_lab_d50);
+    let shuffled = mean_delta_e00(&classic.reference_srgb, &spyder.reference_lab_d50);
     assert!(
         shuffled > same + 2.0,
         "same-table ΔE00 {same:.4} vs shuffled {shuffled:.4}"
