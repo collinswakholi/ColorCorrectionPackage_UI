@@ -167,7 +167,8 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         var gen = ++_loadGen;
         var path = Path;
         AssetIdentity? identity = null;
-        Bitmap? bmp;
+        Bitmap? bmp = null;
+        string? failure = null;
         var gate = ColorCorrect.App.Services.StillImageDecoder.ThumbnailGate;
         await gate.WaitAsync().ConfigureAwait(false);
         try
@@ -181,15 +182,21 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex)
         {
-            var reason = ex is FileNotFoundException or DirectoryNotFoundException
+            failure = ex is FileNotFoundException or DirectoryNotFoundException
                 ? "File not found."
                 : ex is InvalidDataException ? "Unsupported or damaged image." : ex.Message;
-            await Dispatcher.UIThread.InvokeAsync(() => { if (gen == _loadGen) ThumbError = reason; });
-            return;
         }
         finally
         {
+            // Release before any UI-thread wait: a slot held across a dispatcher hop
+            // stalls every other thumbnail while the UI thread is busy.
             gate.Release();
+        }
+
+        if (failure is not null)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { if (gen == _loadGen) ThumbError = failure; });
+            return;
         }
 
         if (bmp is null || gen != _loadGen)

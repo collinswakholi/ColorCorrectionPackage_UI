@@ -51,6 +51,24 @@ public sealed class ThumbnailLoadingTests
         finally { File.Delete(path); }
     }
 
+    [AvaloniaFact]
+    public void FailedDecodeReturnsItsGateSlotWhileTheUiThreadIsBusy()
+    {
+        // A failed decode used to wait for the UI thread before releasing its slot, so
+        // two missing files during a busy UI moment stalled every later thumbnail.
+        var gate = StillImageDecoder.ThumbnailGate;
+        var idle = gate.CurrentCount;
+        var path = Path.Combine(Path.GetTempPath(), $"ccp-thumb-missing-{Guid.NewGuid():N}.png");
+        using var item = new SessionItemViewModel(path);
+        // The constructor takes a slot synchronously. Keep the UI thread blocked (no
+        // RunJobs), so the failure notice cannot be shown, and wait for the slot.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (gate.CurrentCount < idle && DateTime.UtcNow < deadline) Thread.Sleep(10);
+        Assert.True(gate.CurrentCount >= idle, "a failed decode kept its thumbnail slot while the UI thread was busy");
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("File not found.", item.ThumbError);
+    }
+
     [Fact]
     public void ThumbnailGateBoundsConcurrentDecodes()
     {
