@@ -549,7 +549,7 @@ def _backends(reply: dict, policy: str) -> BackendInfo:
     if reply.get("device"):
         actual["detect"] = str(reply["device"])
     return BackendInfo(policy, actual, {key: copy.deepcopy(reply[key]) for key in
-                       ("device", "runtime", "assignment", "accelerators", "fallback", "inference", "provider", "backend", "cached", "execution", "completed_stages", "frames_processed") if key in reply})
+                       ("device", "runtime", "assignment", "accelerators", "fallback", "inference", "provider", "backend", "cached", "execution", "completed_stages") if key in reply})
 
 
 def _warnings(reply: dict) -> tuple[str, ...]:
@@ -753,9 +753,11 @@ class Client:
             handshake = _json(_artifact(source, "detection handshake", reply))
         else:
             raise ProcessingError("Detection returned no handshake", reply)
-        snapshot_id = str(handshake.get("snapshot_id") or uuid4())
-        handshake["snapshot_id"] = snapshot_id
-        faces = handshake.get("charts") or handshake.get("faces") or [handshake.copy()]
+        # Studio 0.2.0+ workers identify every detection snapshot and chart.
+        snapshot_id = handshake.get("snapshot_id")
+        if not isinstance(snapshot_id, str) or not snapshot_id:
+            raise ProcessingError("Detection returned no snapshot identity", reply)
+        faces = handshake.get("charts")
         if not isinstance(faces, list) or not faces:
             raise ProcessingError("Detection returned no charts", reply)
         charts = []
@@ -763,19 +765,17 @@ class Client:
         for face in faces:
             if not isinstance(face, dict):
                 raise ProcessingError("Detection returned invalid chart geometry", reply)
-            chart_id = str(face.get("chart_id") or f"{snapshot_id}:{len(charts)}")
+            chart_id = face.get("chart_id")
+            if not isinstance(chart_id, str) or not chart_id:
+                raise ProcessingError("Detection returned a chart without an identity", reply)
             if chart_id in seen:
                 raise ProcessingError("Detection returned duplicate chart identities", reply)
             seen.add(chart_id)
-            face["chart_id"] = chart_id
             kind = _chart_name(face)
             height, width = CHARTS.get(kind, (0, 0))
             charts.append(DetectedChart(chart_id, kind, int(face.get("rows", height)),
                           int(face.get("cols", width)), face.get("score"),
                           {key: copy.deepcopy(face[key]) for key in ("quad", "corners", "patch_cells", "patch_obbs") if key in face}))
-        handshake["charts"] = faces
-        if "faces" in handshake:
-            handshake["faces"] = copy.deepcopy(faces)
         handshake["chart_id"] = faces[0]["chart_id"]
         merged = {**handshake, **reply}
         signature = path.stat()
@@ -850,8 +850,6 @@ class Client:
         handshake.update(copy.deepcopy(faces[0]))
         handshake.update(snapshot_id=detected.snapshot_id, charts=faces, selected=0,
                          n_charts=len(faces), use_all=len(faces) > 1)
-        if "faces" in handshake:
-            handshake["faces"] = copy.deepcopy(faces)
         parameters.update(handshake=handshake, face=0, use_all=len(faces) > 1, do_ffc=do_ffc)
         if assignments:
             parameters.update(reference_profiles=list(profiles.values()), reference_assignments=[
@@ -893,15 +891,14 @@ class Client:
         path = _input(model_path, "saved model")
         saved = _json(path)
         pipeline = any(key in saved for key in ("correction", "gc_coeffs", "gc_model", "wb_diag"))
-        legacy_correction = "feature_count" in saved and ("coefficients" in saved or "w1" in saved)
-        if not isinstance(saved.get("kind"), str) or not (pipeline or legacy_correction):
-            raise InvalidInputError("Not a ColorCorrect saved pipeline or legacy correction model")
+        if not isinstance(saved.get("kind"), str) or not pipeline:
+            raise InvalidInputError("Not a ColorCorrect saved pipeline")
         metadata = saved.get("python_api")
         if metadata is not None and (not isinstance(metadata, dict) or metadata.get("version") != 1):
             raise UnsupportedCapabilityError("Unsupported Python calibration metadata version")
         metadata = copy.deepcopy(metadata or {"version": 1, "do_ffc": bool(saved.get("do_ffc", False)), "metrics": None})
         if metadata.get("do_ffc") and not metadata.get("white"):
-            metadata.setdefault("warnings", []).append("This legacy model requires an FFC white image; supply ApplyOptions(white=...)")
+            metadata.setdefault("warnings", []).append("This model was saved without Python SDK metadata and requires an FFC white image; supply ApplyOptions(white=...)")
         return CalibrationModel(self, path, path.parent, metadata, {}, _backends({}, self.backend))
 
     def close(self) -> None:
@@ -933,7 +930,7 @@ class CalibrationModel:
 
     @property
     def metrics(self) -> dict | None:
-        """Report metrics including CC-only validation; None for legacy models."""
+        """Report metrics including CC-only validation; None for models saved without SDK metadata."""
         return copy.deepcopy(self._metadata.get("metrics"))
 
     @property
@@ -965,8 +962,7 @@ class CalibrationModel:
             saved = _json(self.path)
             available = {"do_gc": saved.get("gc_model") is not None or saved.get("gc_coeffs") is not None,
                          "do_wb": saved.get("wb_diag") is not None,
-                         "do_cc": saved.get("correction") is not None or
-                                  ("feature_count" in saved and ("coefficients" in saved or "w1" in saved))}
+                         "do_cc": saved.get("correction") is not None}
             for stage, present in available.items():
                 if parameters.get(stage) is True and not present:
                     raise InvalidInputError(f"Requested {stage[3:].upper()} stage is absent from this saved model; fit it first or disable that stage")

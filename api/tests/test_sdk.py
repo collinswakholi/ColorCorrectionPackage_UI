@@ -443,7 +443,7 @@ class SDKTests(unittest.TestCase):
         result = model.apply(images[0], output_dir=self.folder, options=ApplyOptions(write_output=False))
         self.assertFalse(result.outputs)
 
-    def test_legacy_models_and_ffc_asset_requirements(self):
+    def test_models_without_sdk_metadata_and_ffc_asset_requirements(self):
         path = self.folder / "legacy.json"
         path.write_text(json.dumps({"kind": "rpcc2", "correction": {}, "do_ffc": True}), encoding="utf-8")
         model = self.client.load_calibration(path)
@@ -453,18 +453,30 @@ class SDKTests(unittest.TestCase):
             model.apply(self.folder / "scene.jpg", output_dir=self.folder)
         model.apply(self.folder / "scene.jpg", output_dir=self.folder, options=ApplyOptions(white=self.folder / "white.jpg"))
 
-    def test_cc_disabled_and_standalone_legacy_models_load(self):
+    def test_cc_disabled_model_loads_and_bare_correction_models_are_rejected(self):
         path = self.folder / "model.json"
-        for saved in ({"kind": "rpcc2", "correction": None, "do_cc": False},
-                      {"kind": "linear", "feature_count": 3, "coefficients": [1, 0, 0]}):
-            with self.subTest(saved=saved):
-                path.write_text(json.dumps(saved), encoding="utf-8")
-                model = self.client.load_calibration(path)
-                self.assertIsNone(model.metrics)
-                self.assertEqual(model.path, path.resolve())
-                with self.assertRaisesRegex(InvalidInputError, "WB.*absent"):
-                    model.apply(self.folder / "scene.jpg", output_dir=self.folder,
-                                options=ApplyOptions(do_wb=True))
+        path.write_text(json.dumps({"kind": "rpcc2", "correction": None, "do_cc": False}), encoding="utf-8")
+        model = self.client.load_calibration(path)
+        self.assertIsNone(model.metrics)
+        self.assertEqual(model.path, path.resolve())
+        with self.assertRaisesRegex(InvalidInputError, "WB.*absent"):
+            model.apply(self.folder / "scene.jpg", output_dir=self.folder,
+                        options=ApplyOptions(do_wb=True))
+        # No Studio release saved a bare correction model (pre-0.1.0 lineage only).
+        path.write_text(json.dumps({"kind": "linear", "feature_count": 3, "coefficients": [1, 0, 0]}), encoding="utf-8")
+        with self.assertRaisesRegex(InvalidInputError, "saved pipeline"):
+            self.client.load_calibration(path)
+
+    def test_detection_requires_snapshot_and_chart_identities(self):
+        face = {"cli_chart": "classic", "rows": 4, "cols": 6}
+        for handshake in ({"charts": [{**face, "chart_id": "s:0"}]},
+                          {"snapshot_id": "s", "charts": [face]},
+                          {"snapshot_id": "s", "faces": [{**face, "chart_id": "s:0"}]},
+                          {"snapshot_id": "s", **face, "chart_id": "s:0"}):
+            with self.subTest(handshake=handshake), patch.object(
+                    self.client, "_request", return_value={"ok": True, "n_charts": 1, "handshake": handshake}):
+                with self.assertRaises(ProcessingError):
+                    self.client.detect(self.folder / "chart.jpg")
 
     def test_lut_warns_about_spatial_ffc(self):
         model = self.fit(white=self.folder / "white.jpg")
