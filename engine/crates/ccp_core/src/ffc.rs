@@ -525,32 +525,6 @@ impl FfcSurface {
     }
 }
 
-/// Parse `"x1,y1,x2,y2"` → `(x, y, w, h)` with `w = x2 - x1`.
-pub fn parse_crop_rect(text: &str) -> Result<[i32; 4]> {
-    let parts: Vec<&str> = text.split(',').map(str::trim).collect();
-    if parts.len() != 4 {
-        return Err(Error::InvalidArgument(
-            "crop_rect must be x1,y1,x2,y2".into(),
-        ));
-    }
-    let nums: Result<Vec<i32>> = parts
-        .iter()
-        .map(|p| {
-            p.parse::<i32>()
-                .map_err(|_| Error::InvalidArgument(format!("bad crop_rect value {p}")))
-        })
-        .collect();
-    let n = nums?;
-    let w = n[2] - n[0];
-    let h = n[3] - n[1];
-    if w <= 0 || h <= 0 {
-        return Err(Error::InvalidArgument(
-            "crop_rect has non-positive size".into(),
-        ));
-    }
-    Ok([n[0], n[1], w, h])
-}
-
 /// Fit a full-frame gain map. Missing/empty white → identity ones.
 pub(crate) fn fit_gain_map(
     white: Option<&Array3<f32>>,
