@@ -1,7 +1,7 @@
 """Typed, dependency-free workflows for the native ColorCorrect worker.
 
-Import public names from :mod:`colorcorrect`. The low-level Engine transport
-remains available for advanced protocol operations and existing applications.
+Import public names from :mod:`colorcorrect`. These workflows build on the
+low-level Engine transport in colorcorrect_engine.
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ import tempfile
 import time
 from typing import Any, Callable
 from uuid import uuid4
+
+from colorcorrect_engine import Engine, EngineError
 
 PathLike = str | os.PathLike[str]
 
@@ -670,7 +672,6 @@ class Client:
     def __init__(self, executable: PathLike | None = None, *, root: PathLike | None = None,
                  backend: str = "auto", timeout: float = 600,
                  progress: Callable[[str], None] | None = None):
-        from colorcorrect import Engine
         _choice(backend, ("cpu", "cpu-inference", "auto", "directml", "webgpu", "vulkan"), "backend")
         _finite(timeout, "timeout", 1e-12)
         if root is not None:
@@ -698,8 +699,7 @@ class Client:
     def _start(self) -> None:
         self._check_open()
         try:
-            with self._engine._lock:
-                self._engine._start()
+            self._engine.start()
         except TimeoutError as exc:
             raise ProcessingTimeoutError(str(exc)) from exc
         except OSError as exc:
@@ -720,7 +720,6 @@ class Client:
 
     def _request(self, command: str, *, check: bool = True, **parameters) -> dict:
         self._check_open()
-        from colorcorrect import EngineError
         try:
             return self._engine.request(command, check=check, **parameters)
         except TimeoutError as exc:

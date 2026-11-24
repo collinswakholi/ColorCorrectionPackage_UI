@@ -22,4 +22,4 @@ classifiers = [
 colorcorrect = "colorcorrect:main"
 
 [tool.setuptools]
-py-modules = ["colorcorrect", "colorcorrect_sdk", "colorcorrect_pipeline"]
+py-modules = ["colorcorrect", "colorcorrect_engine", "colorcorrect_sdk", "colorcorrect_pipeline"]

@@ -27,7 +27,7 @@ class DiscoveryTests(unittest.TestCase):
             missing = root / runtime_name
             ambient = root / "developer-runtime"
             ambient.touch()
-            with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect.subprocess.Popen") as launch:
+            with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect_engine.subprocess.Popen") as launch:
                 with self.assertRaisesRegex(FileNotFoundError, "Required ONNX Runtime library is missing") as error:
                     Engine(root=root).devices()
                 # Worker discovery canonicalizes Windows short-name/temp aliases.
@@ -47,7 +47,7 @@ class DiscoveryTests(unittest.TestCase):
             (root / runtime_name).touch()
             def launch(args, **options):
                 return POPEN([sys.executable, str(FAKE)], **options)
-            with patch("colorcorrect.subprocess.Popen", side_effect=launch):
+            with patch("colorcorrect_engine.subprocess.Popen", side_effect=launch):
                 with Client(root=root) as client:
                     self.assertTrue(client.engine.devices()["ok"])
             self.assertFalse(any(root.glob("*providers_webgpu*")))
@@ -80,7 +80,7 @@ class DiscoveryTests(unittest.TestCase):
             (root / "refs/neutrals.json").write_text("{}")
             for name in ("ccp-engine", "ccp-engine-launch"):
                 (root / name).touch()
-            with patch("colorcorrect.sys.platform", "linux"):
+            with patch("colorcorrect_engine.sys.platform", "linux"):
                 self.assertEqual(Engine(root=root).executable, (root / "ccp-engine-launch").resolve())
                 self.assertEqual(Engine(root / "ccp-engine", root=root).executable, (root / "ccp-engine").resolve())
 
@@ -89,7 +89,7 @@ class ClientTests(unittest.TestCase):
     def setUp(self):
         def launch(args, **options):
             return POPEN([sys.executable, str(FAKE)], **options)
-        self.mock = patch("colorcorrect.subprocess.Popen", side_effect=launch)
+        self.mock = patch("colorcorrect_engine.subprocess.Popen", side_effect=launch)
         self.launch = self.mock.start()
         self.engine = Engine(sys.executable, root=ROOT, timeout=5)
 

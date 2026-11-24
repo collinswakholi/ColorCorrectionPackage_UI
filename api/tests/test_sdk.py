@@ -247,7 +247,7 @@ class SDKTests(unittest.TestCase):
             (self.folder / name).write_text("fixture", encoding="utf-8")
         def launch(args, **kwargs):
             return POPEN([sys.executable, str(FIXTURE)], **kwargs)
-        self.mock = patch("colorcorrect.subprocess.Popen", side_effect=launch)
+        self.mock = patch("colorcorrect_engine.subprocess.Popen", side_effect=launch)
         self.mock.start()
         self.client = Client(sys.executable, root=ROOT, timeout=5)
         self.profile = ReferenceProfile.from_values([(50, 0, 0)] * 24)
@@ -296,7 +296,7 @@ class SDKTests(unittest.TestCase):
 
     def test_cpu_policy_keeps_its_original_shape(self):
         with Client(sys.executable, root=ROOT, backend="cpu", timeout=5) as client:
-            client.engine._start()
+            client.engine.start()
             client.engine.ready["capabilities"] = []
             reply = client.engine.request("devices")
             self.assertEqual(reply["echo"]["policy"], "cpu")
