@@ -23,6 +23,8 @@
 - Thumbnails and previews decode about 2.5 times faster, at most a few at a time, and unreadable files show "No preview" with the reason instead of a blank tile.
 - Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
 - Checking that a loaded model and its white reference are unchanged no longer hashes files on the UI thread while you edit settings; the check runs in the background and again, authoritatively, when Apply or a batch starts.
+- Fix the Original preview showing red and blue swapped (for example a blue note as yellow) when an image was reopened from the preview cache. The cache wrote decoded pixels in the wrong channel order; old cache entries are ignored.
+- Design pass: elevation shadows on cards and popups, focus rings on every control, a neutral frame around the photo, a drop-target empty state, a spinner and outlined Cancel while a run is busy, and quality-coloured ΔE in the status bar. Short transitions (120–240 ms) on hover, press, selection, results and toasts are turned off when Windows animations are off or `CCP_REDUCED_MOTION=1`. The Color and Chart rendition tabs now scroll at the minimum window size instead of overlapping.
 
 ### Removed (app/engine)
 
