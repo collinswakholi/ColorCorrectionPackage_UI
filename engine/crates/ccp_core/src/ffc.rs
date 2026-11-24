@@ -790,7 +790,7 @@ mod tests {
             }
         }
         let gain = Array2::from_elem((6, 6), 1.2);
-        let gc = GammaModel::legacy(vec![1.05, 0.0]);
+        let gc = GammaModel::curve(vec![0.0, 50.0, 100.0], vec![0.0, 55.0, 100.0]);
         let fused = apply_ffc_gc_fused(&img, &gain, &gc);
         assert!(fused
             .iter()

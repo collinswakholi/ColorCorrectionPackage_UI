@@ -185,11 +185,11 @@ pub fn extrapolate_saturated(
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GammaModel {
-    /// Legacy descending polynomial coefficients `[a_n, …, a_0]` for L*.
-    /// Kept so version-1 model files apply identically.
+    /// Always empty. Pre-0.1 polynomial GC is no longer applied (models that
+    /// relied on it are rejected at load); the field keeps saved JSON unchanged.
     #[serde(default)]
     pub coeffs: Vec<f64>,
-    /// Monotonic Hermite knots for version-2 models.
+    /// Monotonic Hermite knots.
     #[serde(default)]
     pub knots: Vec<f64>,
     #[serde(default)]
@@ -199,12 +199,14 @@ pub struct GammaModel {
 }
 
 impl GammaModel {
-    pub fn legacy(coeffs: Vec<f64>) -> Self {
+    /// Monotonic Hermite curve through `(knots, values)`.
+    pub fn curve(knots: Vec<f64>, values: Vec<f64>) -> Self {
+        let slopes = monotone_slopes(&knots, &values);
         Self {
-            coeffs,
-            knots: Vec::new(),
-            values: Vec::new(),
-            slopes: Vec::new(),
+            coeffs: Vec::new(),
+            knots,
+            values,
+            slopes,
         }
     }
 
@@ -214,12 +216,12 @@ impl GammaModel {
             && self.knots.len() == self.slopes.len()
     }
 
-    /// Evaluate the fitted lightness mapping. New models use a shape-preserving
-    /// cubic Hermite curve; legacy models retain their polynomial behavior.
+    /// Evaluate the fitted shape-preserving cubic Hermite lightness curve.
+    /// A model without a valid curve (rejected at load) maps L* unchanged.
     pub fn map_lstar(&self, input: f64) -> f64 {
         let x = input.clamp(0.0, 100.0);
         if !self.is_monotonic_curve() {
-            return poly_eval(x, &self.coeffs);
+            return x;
         }
         let last = self.knots.len() - 1;
         if x <= self.knots[0] {
@@ -247,7 +249,8 @@ impl GammaModel {
     }
 }
 
-pub fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
+#[cfg(test)]
+fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
     let mut result = 0.0;
     for &c in coeffs {
         result = result * x + c;
@@ -460,13 +463,7 @@ fn fit_monotonic_gamma_profile(ref_l: &[f64], measured_l: &[f64]) -> Result<Gamm
     isotonic_non_decreasing(&mut values, &weights);
     values[0] = 0.0;
     values[last] = 100.0;
-    let slopes = monotone_slopes(&knots, &values);
-    Ok(GammaModel {
-        coeffs: Vec::new(),
-        knots,
-        values,
-        slopes,
-    })
+    Ok(GammaModel::curve(knots, values))
 }
 
 /// Fit GC from **named** neutrals only (that chart’s table).
@@ -820,9 +817,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_gamma_still_uses_polynomial() {
-        let model = GammaModel::legacy(vec![1.05, -2.0]);
-        assert!((model.map_lstar(50.0) - 50.5).abs() < 1e-12);
+    fn curve_without_knots_is_identity() {
+        let model = GammaModel {
+            coeffs: vec![1.05, -2.0],
+            knots: Vec::new(),
+            values: Vec::new(),
+            slopes: Vec::new(),
+        };
+        assert!(!model.is_monotonic_curve());
+        assert_eq!(model.map_lstar(50.0), 50.0);
     }
 
     fn test_patch(spec: &ChartSpec, name: &str, rgb: Vec3) -> ChartPatch {

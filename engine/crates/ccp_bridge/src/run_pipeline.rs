@@ -452,9 +452,10 @@ pub struct SavedPipeline {
     pub do_gc: bool,
     pub do_wb: bool,
     pub do_cc: bool,
-    /// Version-1 polynomial field. Read indefinitely for model compatibility.
+    /// Pre-0.1 polynomial GC. Always written as null; a model that still relies
+    /// on it is rejected by [`load_saved`] with a refit message.
     pub gc_coeffs: Option<Vec<f64>>,
-    /// Version-2 endpoint-safe monotonic lightness curve.
+    /// Endpoint-safe monotonic lightness curve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gc_model: Option<GammaModel>,
     pub wb_diag: Option<[f64; 3]>,
@@ -519,8 +520,6 @@ impl SavedPipeline {
         if self.do_gc {
             if let Some(model) = &self.gc_model {
                 lut.gc = Some(model.clone());
-            } else if let Some(coeffs) = &self.gc_coeffs {
-                lut.gc = Some(GammaModel::legacy(coeffs.clone()));
             }
         }
         if self.do_wb {
@@ -2453,34 +2452,44 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
     let invalid =
         |error: &dyn std::fmt::Display| Error::coded(ErrorCode::InvalidModel, error.to_string());
     let v: Value = serde_json::from_str(&text).map_err(|e| invalid(&e))?;
-    if v.get("correction").is_some()
-        || v.get("gc_coeffs").is_some()
-        || v.get("gc_model").is_some()
-        || v.get("wb_diag").is_some()
+    let unsupported = || {
+        invalid(&format!(
+            "{} was written by a release older than ColorCorrect Studio 0.1 and is no longer supported. Fit a new calibration.",
+            path.display()
+        ))
+    };
+    if v.get("correction").is_none()
+        && v.get("gc_coeffs").is_none()
+        && v.get("gc_model").is_none()
+        && v.get("wb_diag").is_none()
     {
-        let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
-        if let Some(correction) = &saved.correction {
-            correction.validate()?;
-        }
-        if let Some(context) = &saved.reference_context {
-            if context.version != 1 {
-                return Err(invalid(&"unsupported reference context version"));
-            }
-            for profile in &context.reference_profiles {
-                profile.resolve().map_err(|e| invalid(&e))?;
-            }
-        }
-        return Ok(saved);
+        // Bare correction models predate the saved-pipeline format.
+        return Err(if v.get("feature_count").is_some() {
+            unsupported()
+        } else {
+            invalid(&"not a ColorCorrect Studio saved model")
+        });
     }
-    let correction: CorrectionModel = serde_json::from_value(v).map_err(|e| invalid(&e))?;
-    correction.validate()?;
-    Ok(SavedPipeline {
-        version: 1,
-        kind: correction.kind.name().into(),
-        do_cc: true,
-        correction: Some(correction),
-        ..SavedPipeline::default()
-    })
+    let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
+    match &saved.gc_model {
+        Some(gc) if !gc.is_monotonic_curve() => return Err(unsupported()),
+        None if saved.gc_coeffs.as_ref().is_some_and(|c| !c.is_empty()) => {
+            return Err(unsupported())
+        }
+        _ => {}
+    }
+    if let Some(correction) = &saved.correction {
+        correction.validate()?;
+    }
+    if let Some(context) = &saved.reference_context {
+        if context.version != 1 {
+            return Err(invalid(&"unsupported reference context version"));
+        }
+        for profile in &context.reference_profiles {
+            profile.resolve().map_err(|e| invalid(&e))?;
+        }
+    }
+    Ok(saved)
 }
 
 #[derive(Clone, Debug)]
@@ -2908,7 +2917,10 @@ mod tests {
             do_gc: true,
             do_wb: true,
             do_cc: true,
-            gc_model: Some(GammaModel::legacy(vec![0.002, 0.8, 0.0])),
+            gc_model: Some(GammaModel::curve(
+                vec![0.0, 50.0, 100.0],
+                vec![0.0, 45.0, 100.0],
+            )),
             wb_diag: Some([1.12, 0.91, 1.03]),
             correction: Some(CorrectionModel {
                 kind: ModelKind::Ccm3x3,
@@ -4388,10 +4400,13 @@ mod tests {
             };
             if kind == ModelKind::NeuralNet {
                 model.hidden_size = 8;
+                model.nn_residual = true;
                 model.w1 = vec![0.01; 64];
                 model.b1 = vec![0.0; 8];
                 model.w2 = vec![0.02; 24];
                 model.b2 = vec![0.0; 3];
+                model.layer_weights = vec![model.w1.clone(), model.w2.clone()];
+                model.layer_biases = vec![model.b1.clone(), model.b2.clone()];
             }
             if kind == ModelKind::Pls {
                 model.pls_components = 4;
@@ -4431,37 +4446,57 @@ mod tests {
                 Some(FfcFitMethod::Poly)
             );
         }
+    }
 
-        let nn = CorrectionModel {
-            kind: ModelKind::NeuralNet,
-            poly_degree: 1,
-            feature_count: 4,
-            hidden_size: 4,
-            w1: vec![0.2; 16],
-            b1: vec![0.0; 4],
-            w2: vec![0.1; 12],
-            b2: vec![0.0; 3],
+    #[test]
+    fn load_saved_rejects_pre_studio_models_with_refit_message() {
+        let dir = std::env::temp_dir().join(format!("ccp-pre-studio-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bare = CorrectionModel {
+            kind: ModelKind::Ccm3x3,
+            feature_count: 3,
+            coefficients: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
             ..CorrectionModel::default()
         };
-        let dir = std::env::temp_dir().join(format!("ccp-nn-bare-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("nn.json");
-        std::fs::write(&path, serde_json::to_string(&nn).unwrap()).unwrap();
-        let loaded = load_saved(&path).unwrap();
-        assert_eq!(loaded.kind, "nn");
-        assert_eq!(loaded.correction.unwrap().w1.len(), 16);
-
-        let legacy = SavedPipeline {
+        let polynomial_gc = SavedPipeline {
             version: 1,
             do_gc: true,
             gc_coeffs: Some(vec![1.05, -2.0]),
             gc_model: None,
             ..SavedPipeline::default()
         };
-        let legacy_json = serde_json::to_string(&legacy).unwrap();
-        let legacy_back: SavedPipeline = serde_json::from_str(&legacy_json).unwrap();
-        let (legacy_lut, _) = legacy_back.lut_pipeline().unwrap();
-        assert!((legacy_lut.gc.unwrap().map_lstar(50.0) - 50.5).abs() < 1e-12);
+        let mut uncurved_gc = progress_fixture();
+        uncurved_gc.gc_model = Some(GammaModel {
+            coeffs: vec![1.05, -2.0],
+            knots: Vec::new(),
+            values: Vec::new(),
+            slopes: Vec::new(),
+        });
+        let cases = [
+            serde_json::to_string(&bare).unwrap(),
+            serde_json::to_string(&polynomial_gc).unwrap(),
+            serde_json::to_string(&uncurved_gc).unwrap(),
+        ];
+        for (index, text) in cases.iter().enumerate() {
+            let path = dir.join(format!("legacy-{index}.json"));
+            std::fs::write(&path, text).unwrap();
+            let error = load_saved(&path).expect_err("pre-Studio model must be rejected");
+            assert_eq!(error.code(), ErrorCode::InvalidModel, "{error}");
+            let message = error.to_string();
+            assert!(
+                message.contains("older than ColorCorrect Studio 0.1")
+                    && message.contains("Fit a new calibration"),
+                "{message}"
+            );
+        }
+        let current = SavedPipeline {
+            gc_coeffs: Some(Vec::new()),
+            ..progress_fixture()
+        };
+        let path = dir.join("current.json");
+        std::fs::write(&path, serde_json::to_string(&current).unwrap()).unwrap();
+        load_saved(&path).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -4474,16 +4509,9 @@ mod tests {
         }
         let mut miscounted = progress_fixture();
         miscounted.correction.as_mut().unwrap().feature_count = 1_000;
-        let bare = CorrectionModel {
-            kind: ModelKind::RootPolynomial2,
-            feature_count: 6,
-            coefficients: vec![1.0],
-            ..CorrectionModel::default()
-        };
         let cases = [
             serde_json::to_string(&truncated).unwrap(),
             serde_json::to_string(&miscounted).unwrap(),
-            serde_json::to_string(&bare).unwrap(),
         ];
         for (index, text) in cases.iter().enumerate() {
             let path = dir.join(format!("crafted-{index}.json"));

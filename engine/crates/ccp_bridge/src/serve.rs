@@ -1239,11 +1239,15 @@ mod tests {
         let model = dir.join("model.json");
         std::fs::write(
             &model,
-            r#"{"kind":"rpcc2","feature_count":6,"poly_degree":2,"include_combinations":true,
-            "pls_components":0,"hidden_size":0,"input_space_id":"srgb","target_space_id":"srgb",
-            "target_white_id":"d65","saturated_patches":0,"saturated_names":[],"x_mean":[],
-            "x_std":[],"y_mean":[0,0,0],"y_std":[1,1,1],"intercept":[0,0,0],
-            "coefficients":[1.0],"w1":[],"b1":[],"w2":[],"b2":[]}"#,
+            r#"{"version":2,"kind":"rpcc2","do_ffc":false,"do_gc":false,"do_wb":false,
+            "do_cc":true,"gc_coeffs":null,"wb_diag":null,"input_space_id":"srgb",
+            "input_white_id":"d65","target_space_id":"srgb","target_white_id":"d65",
+            "gain_map_path":null,"correction":{"kind":"rpcc2","feature_count":6,
+            "poly_degree":2,"include_combinations":true,"pls_components":0,"hidden_size":0,
+            "input_space_id":"srgb","target_space_id":"srgb","target_white_id":"d65",
+            "saturated_patches":0,"saturated_names":[],"x_mean":[],"x_std":[],
+            "y_mean":[0,0,0],"y_std":[1,1,1],"intercept":[0,0,0],"coefficients":[1.0],
+            "w1":[],"b1":[],"w2":[],"b2":[]}}"#,
         )
         .unwrap();
         let mut state = ServeState::default();

@@ -165,9 +165,9 @@ pub struct CorrectionModel {
     pub nn_batch_norm: bool,
     #[serde(default)]
     pub nn_dropout: f64,
-    /// New NN models predict a correction residual and therefore start from
-    /// an identity-safe baseline. Old serialized absolute-output models keep
-    /// their original behaviour through the serde default.
+    /// NN models predict a correction residual and therefore start from an
+    /// identity-safe baseline. Every Studio release writes `true`; absolute-
+    /// output networks from older tools are rejected by `validate`.
     #[serde(default)]
     pub nn_residual: bool,
     #[serde(default)]
@@ -328,59 +328,42 @@ impl CorrectionModel {
         if p > max {
             return Err(invalid_model(format!("NN input width {p} exceeds {max}")));
         }
-        if !self.layer_weights.is_empty() || !self.layer_biases.is_empty() {
-            if self.layer_weights.len() != self.layer_biases.len() {
-                return Err(invalid_model(
-                    "layer_weights and layer_biases have different layer counts",
-                ));
-            }
-            let mut input = p;
-            for (layer, (weights, biases)) in self
-                .layer_weights
-                .iter()
-                .zip(&self.layer_biases)
-                .enumerate()
-            {
-                let output = biases.len();
-                if output == 0 || output > max {
-                    return Err(invalid_model(format!(
-                        "NN layer {layer} width {output} is outside 1..={max}"
-                    )));
-                }
-                check_len(
-                    &format!("layer_weights[{layer}]"),
-                    weights.len(),
-                    input * output,
-                )?;
-                check_finite("layer_weights", weights)?;
-                check_finite("layer_biases", biases)?;
-                input = output;
-            }
-            if input != 3 {
+        if self.layer_weights.is_empty() || !self.nn_residual {
+            return Err(invalid_model(
+                "this single-hidden-layer network was written by a release older than ColorCorrect Studio 0.1 and is no longer supported; fit a new calibration",
+            ));
+        }
+        if self.layer_weights.len() != self.layer_biases.len() {
+            return Err(invalid_model(
+                "layer_weights and layer_biases have different layer counts",
+            ));
+        }
+        let mut input = p;
+        for (layer, (weights, biases)) in self
+            .layer_weights
+            .iter()
+            .zip(&self.layer_biases)
+            .enumerate()
+        {
+            let output = biases.len();
+            if output == 0 || output > max {
                 return Err(invalid_model(format!(
-                    "NN output layer has width {input}, expected 3"
+                    "NN layer {layer} width {output} is outside 1..={max}"
                 )));
             }
-            return Ok(());
+            check_len(
+                &format!("layer_weights[{layer}]"),
+                weights.len(),
+                input * output,
+            )?;
+            check_finite("layer_weights", weights)?;
+            check_finite("layer_biases", biases)?;
+            input = output;
         }
-        let hidden = usize::try_from(self.hidden_size.max(1)).unwrap_or(usize::MAX);
-        if hidden > max {
+        if input != 3 {
             return Err(invalid_model(format!(
-                "hidden_size {} exceeds {max}",
-                self.hidden_size
+                "NN output layer has width {input}, expected 3"
             )));
-        }
-        check_len("w1", self.w1.len(), p * hidden)?;
-        check_len("b1", self.b1.len(), hidden)?;
-        check_len("w2", self.w2.len(), hidden * 3)?;
-        check_len("b2", self.b2.len(), 3)?;
-        for (name, values) in [
-            ("w1", &self.w1),
-            ("b1", &self.b1),
-            ("w2", &self.w2),
-            ("b2", &self.b2),
-        ] {
-            check_finite(name, values)?;
         }
         Ok(())
     }
@@ -752,59 +735,35 @@ fn apply_linear_map(model: &CorrectionModel, features: &[f64]) -> Vec3 {
 }
 
 fn apply_mlp(model: &CorrectionModel, features: &[f64]) -> Vec3 {
-    if !model.layer_weights.is_empty() && model.layer_weights.len() == model.layer_biases.len() {
-        let mut a = [0.0; crate::mlp::MAX_HIDDEN];
-        let mut b = [0.0; crate::mlp::MAX_HIDDEN];
-        let mut input_width = features.len();
-        a[..input_width].copy_from_slice(features);
-        let last = model.layer_weights.len() - 1;
-        for layer in 0..model.layer_weights.len() {
-            let output_width = model.layer_biases[layer].len();
-            if output_width > crate::mlp::MAX_HIDDEN
-                || model.layer_weights[layer].len() != input_width * output_width
-            {
-                return [f64::NAN; 3];
-            }
-            for out in 0..output_width {
-                let mut value = model.layer_biases[layer][out];
-                for input in 0..input_width {
-                    value += a[input] * model.layer_weights[layer][input * output_width + out];
-                }
-                b[out] = if layer == last { value } else { value.max(0.0) };
-            }
-            a[..output_width].copy_from_slice(&b[..output_width]);
-            input_width = output_width;
-        }
-        if input_width == 3 {
-            return [a[0], a[1], a[2]];
-        }
+    if model.layer_weights.is_empty() || model.layer_weights.len() != model.layer_biases.len() {
         return [f64::NAN; 3];
     }
-
-    let hidden = model.hidden_size.max(1) as usize;
-    let p = model.feature_count as usize;
-    let mut act = [0.0; crate::mlp::MAX_HIDDEN];
-    let h = hidden.min(crate::mlp::MAX_HIDDEN);
-    act[..h].copy_from_slice(&model.b1[..h]);
-    for j in 0..p {
-        let xj = features[j];
-        let row = j * hidden;
-        for hh in 0..h {
-            act[hh] += xj * model.w1[row + hh];
+    let mut a = [0.0; crate::mlp::MAX_HIDDEN];
+    let mut b = [0.0; crate::mlp::MAX_HIDDEN];
+    let mut input_width = features.len();
+    a[..input_width].copy_from_slice(features);
+    let last = model.layer_weights.len() - 1;
+    for layer in 0..model.layer_weights.len() {
+        let output_width = model.layer_biases[layer].len();
+        if output_width > crate::mlp::MAX_HIDDEN
+            || model.layer_weights[layer].len() != input_width * output_width
+        {
+            return [f64::NAN; 3];
         }
-    }
-    for hh in 0..h {
-        act[hh] = act[hh].max(0.0);
-    }
-    let mut output = [0.0; 3];
-    for channel in 0..3 {
-        let mut y = model.b2[channel];
-        for hh in 0..h {
-            y += act[hh] * model.w2[hh * 3 + channel];
+        for out in 0..output_width {
+            let mut value = model.layer_biases[layer][out];
+            for input in 0..input_width {
+                value += a[input] * model.layer_weights[layer][input * output_width + out];
+            }
+            b[out] = if layer == last { value } else { value.max(0.0) };
         }
-        output[channel] = y;
+        a[..output_width].copy_from_slice(&b[..output_width]);
+        input_width = output_width;
     }
-    output
+    if input_width == 3 {
+        return [a[0], a[1], a[2]];
+    }
+    [f64::NAN; 3]
 }
 
 pub fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
@@ -1268,12 +1227,10 @@ mod tests {
             b2: vec![0.0; 3],
             ..CorrectionModel::default()
         };
-        legacy.validate().unwrap();
-        legacy.w2.truncate(5);
-        assert!(legacy.validate().is_err(), "legacy NN truncated w2");
-        legacy.w2 = vec![0.1; 12];
-        legacy.hidden_size = 100_000;
-        assert!(legacy.validate().is_err(), "legacy NN hidden_size");
+        let error = legacy.validate().expect_err("pre-Studio single-layer NN");
+        assert!(error.to_string().contains("fit a new calibration"), "{error}");
+        legacy.nn_residual = true;
+        assert!(legacy.validate().is_err(), "w1..b2 alone are not applied");
     }
 
     #[test]
