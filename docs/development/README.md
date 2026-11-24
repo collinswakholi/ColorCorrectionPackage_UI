@@ -52,6 +52,13 @@ reload, LUT export and FFC reuse. `integration_reference_layouts.py` needs a
 directory with the undistributed generated fixtures `synth_cast.png`,
 `synth_spyder.png` and `synth_sg.png`; without them it records a skipped result
 and exits 2. It uses known geometry, so it does not measure detector accuracy.
+`integration_simple.py --root .` is a short real-image smoke test.
+
+Installed-package suites run in a clean guest (Windows Sandbox or WSL) against the
+wheel, never a source checkout: `acceptance_installed.py` (also run by native CI),
+`acceptance_edge_cases.py`, `acceptance_inference.py` (copy
+`scripts/validate_detector_corpus.py` beside it) and `stress_installed.py`. Each
+docstring lists the fixture bundle it needs.
 
 To execute the tutorials, install the application's SDK wheel and
 `notebooks/requirements-qa.txt` into a clean environment, copy
