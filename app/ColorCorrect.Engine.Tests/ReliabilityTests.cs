@@ -196,7 +196,6 @@ public sealed class ReliabilityTests : IDisposable
     {
         var oldCwd = Directory.GetCurrentDirectory();
         var oldEngine = Environment.GetEnvironmentVariable("CCP_ENGINE_EXE");
-        var oldLegacy = Environment.GetEnvironmentVariable("COLORCORRECT_EXE");
         // EnginePaths searches CCP_NEW_UI_ROOT before the cwd; a launcher or
         // headless-test environment that sets it would otherwise win.
         var oldRoot = Environment.GetEnvironmentVariable("CCP_NEW_UI_ROOT");
@@ -217,7 +216,6 @@ public sealed class ReliabilityTests : IDisposable
             Directory.CreateDirectory(nested);
             Directory.SetCurrentDirectory(nested);
             Environment.SetEnvironmentVariable("CCP_ENGINE_EXE", null);
-            Environment.SetEnvironmentVariable("COLORCORRECT_EXE", null);
             Environment.SetEnvironmentVariable("CCP_NEW_UI_ROOT", null);
 
             Assert.True(EnginePaths.TryFindExecutable(out var found));
@@ -227,7 +225,6 @@ public sealed class ReliabilityTests : IDisposable
         {
             Directory.SetCurrentDirectory(oldCwd);
             Environment.SetEnvironmentVariable("CCP_ENGINE_EXE", oldEngine);
-            Environment.SetEnvironmentVariable("COLORCORRECT_EXE", oldLegacy);
             Environment.SetEnvironmentVariable("CCP_NEW_UI_ROOT", oldRoot);
         }
     }
