@@ -18,7 +18,6 @@ public sealed class SessionState
     public string Theme { get; set; } = "Dark";
     public List<string> TrustedOutputDirs { get; set; } = [];
     public List<string> CatalogFolders { get; set; } = [];
-    public bool ForceCpu { get; set; }
     public string AccelPolicy { get; set; } = "";
     public bool? ShowLattice { get; set; }
     public bool? ShowSample { get; set; }

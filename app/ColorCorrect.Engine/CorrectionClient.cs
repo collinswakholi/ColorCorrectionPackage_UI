@@ -147,7 +147,6 @@ public sealed class CorrectionClient
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "apply",
-                ["cpu_lut"] = options.CpuLut,
                 ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
                 ["policy"] = _worker.Policy,
@@ -265,7 +264,6 @@ public sealed class CorrectionClient
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "preview_stage",
-                ["cpu_lut"] = options.CpuLut,
                 ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
                 ["policy"] = _worker.Policy,
@@ -310,7 +308,6 @@ public sealed class CorrectionClient
         return new Dictionary<string, object?>
         {
             ["policy"] = _worker.Policy,
-            ["cpu_lut"] = options.CpuLut,
             ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
             ["image"] = inputPath,

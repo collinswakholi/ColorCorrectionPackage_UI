@@ -134,10 +134,14 @@ public sealed class ReliabilityTests : IDisposable
     }
 
     [Fact]
-    public void NeuralNetworkOptions_NormalizeLegacySettingsAndRoundTripNewControls()
+    public void NeuralNetworkOptions_NormalizeAndRoundTripNewControls()
     {
-        var legacy = new CorrectionOptions { HiddenSize = 64, HiddenLayers = [] }.Normalize();
-        Assert.Equal([64], legacy.HiddenLayers);
+        // Pre-layers HiddenSize settings are no longer migrated; the key is ignored.
+        var legacy = JsonSerializer.Deserialize<CorrectionOptions>("{\"HiddenSize\":64,\"HiddenLayers\":[]}")!.Normalize();
+        Assert.Equal([100], legacy.HiddenLayers);
+        Assert.Equal(100, legacy.HiddenSize);
+        Assert.DoesNotContain("HiddenSize", JsonSerializer.Serialize(new CorrectionOptions { HiddenLayers = [64] }));
+        Assert.Equal(64, new CorrectionOptions { HiddenLayers = [64, 32] }.HiddenSize);
 
         var path = Path.Combine(_root, "nn-session.json");
         var options = new CorrectionOptions

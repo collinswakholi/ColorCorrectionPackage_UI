@@ -1748,7 +1748,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : [100];
         return new CorrectionOptions
         {
-            CpuLut = Compute.ForceCpu,
             LutDevice = Compute.SelectedProcessingDevice.Value,
             FastMode = Compute.FastMode,
             BatchPreviewResults = Output.BatchPreviewResults,
@@ -1764,7 +1763,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             OutputFormat = Output.SelectedOutputFormat.Value,
             OutputDir = Output.OutputDir,
             PlsComponents = (int)Math.Clamp(Settings.PlsComponents, 0, 64),
-            HiddenSize = hiddenLayers[0],
             HiddenLayers = hiddenLayers,
             NnOptimizer = Settings.SelectedNnOptimizer.Value,
             NnBatchNormalization = Settings.NnBatchNormalization,
