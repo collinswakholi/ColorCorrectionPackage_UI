@@ -55,7 +55,7 @@ public sealed class StillOnlyWorkflowTests
             vm.AddPaths([clip, still, disguised]);
             Assert.Equal(still, Assert.Single(vm.Session).Path);
             Assert.Contains("Skipped 2 unsupported", vm.Job.Status);
-            Assert.Contains("video is not supported", vm.Job.Status);
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
             Assert.False(SupportedStillImage.IsSupportedFile(clip));
             Assert.False(SupportedStillImage.IsSupportedFile(disguised));
             Assert.True(SupportedStillImage.IsSupportedFile(still));
@@ -68,7 +68,7 @@ public sealed class StillOnlyWorkflowTests
     }
 
     [AvaloniaFact]
-    public void RestoreSession_SkipsLegacyVideoFlagAndUnflaggedUnsupportedPaths()
+    public void RestoreSession_SkipsUnsupportedPathsAndKeepsStills()
     {
         var root = Path.Combine(Path.GetTempPath(), "colorcorrect-session-still-only-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -83,18 +83,17 @@ public sealed class StillOnlyWorkflowTests
                 ActivePath = clip,
                 Items =
                 [
-                    new SessionItemDto { Path = still, IsVideo = true },
-                    new SessionItemDto { Path = clip, IsVideo = false },
+                    new SessionItemDto { Path = clip },
                     new SessionItemDto { Path = still, IncludeInBatch = false },
                 ],
             };
-            Assert.Equal(2, vm.RestoreWorkingItems(state));
+            Assert.Equal(1, vm.RestoreWorkingItems(state));
             var item = Assert.Single(vm.Session);
             Assert.Equal(still, item.Path);
             Assert.Same(item, vm.Workspace.Active);
             Assert.False(item.IncludeInBatch);
-            Assert.Contains("Skipped 2 unsupported session", vm.Job.Status);
-            Assert.Contains("Video is not supported", vm.Job.Status);
+            Assert.Contains("Skipped 1 unsupported session", vm.Job.Status);
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
         }
         finally
         {
@@ -104,9 +103,9 @@ public sealed class StillOnlyWorkflowTests
     }
 
     [AvaloniaFact]
-    public async Task RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
+    public async Task RestoreSession_WithOnlyUnsupportedItems_ClearsPreviousStillAndDisablesRun()
     {
-        var root = Path.Combine(Path.GetTempPath(), "colorcorrect-legacy-video-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "colorcorrect-unsupported-session-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         // WorkerReady makes adding the still start automatic detection. Without a
@@ -117,12 +116,14 @@ public sealed class StillOnlyWorkflowTests
         vm.Compute.WorkerReady = true;
         try
         {
+            var clip = Path.Combine(root, "clip.mov");
+            File.WriteAllBytes(clip, [0, 0, 0, 20, 102, 116, 121, 112]);
             vm.AddPaths([Sample()]);
             Assert.True(vm.Workspace.HasImage);
             Assert.NotNull(vm.Workspace.Active);
             var skipped = vm.RestoreWorkingItems(new SessionState
             {
-                Items = [new SessionItemDto { Path = Sample(), IsVideo = true }],
+                Items = [new SessionItemDto { Path = clip }],
             });
             Assert.Equal(1, skipped);
             Assert.Empty(vm.Session);
@@ -133,7 +134,7 @@ public sealed class StillOnlyWorkflowTests
             Assert.Null(vm.Stage.OriginalPreview);
             Assert.False(vm.DetectCommand.CanExecute(null));
             Assert.False(vm.ApplyCommand.CanExecute(null));
-            Assert.Contains("Video is not supported", vm.Job.Status);
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
         }
         finally
         {

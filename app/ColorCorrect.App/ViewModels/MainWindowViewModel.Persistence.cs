@@ -161,7 +161,7 @@ public partial class MainWindowViewModel
             }
             RestoreWorkingItemsCore(state);
             var skipped = state.Items.Count - Session.Count;
-            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
+            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s); only JPEG, PNG and TIFF stills are supported.";
             return skipped;
         }
         finally
@@ -193,7 +193,7 @@ public partial class MainWindowViewModel
         ApplyReport(null);
         foreach (var dto in state.Items)
         {
-            if (dto.IsVideo || !IsImage(dto.Path))
+            if (!IsImage(dto.Path))
             {
                 continue;
             }

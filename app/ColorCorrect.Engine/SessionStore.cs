@@ -44,8 +44,6 @@ public sealed class SessionItemDto
     public bool IncludeInBatch { get; set; } = true;
     public bool PreviewSuppressed { get; set; }
     public string PreviewDir { get; set; } = "";
-    // Read legacy sessions so retired video entries can be skipped safely.
-    public bool IsVideo { get; set; }
     public int[]? FfcPlane { get; set; }
     public int[]? FfcWhiteSize { get; set; }
     public string FfcPlaneSource { get; set; } = "";

@@ -537,7 +537,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         if (skipped > 0)
         {
-            Job.Status = $"Skipped {skipped} unsupported or unreadable file(s); video is not supported.";
+            Job.Status = $"Skipped {skipped} unsupported or unreadable file(s); only JPEG, PNG and TIFF stills are supported.";
             Log("Import", Job.Status, LogLevel.Warning);
         }
     }
