@@ -46,6 +46,7 @@
                     <SolidColorBrush x:Key="ModalOverlayBrush" Color="#B30B0F16" />
                     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
+                    <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
@@ -68,6 +69,8 @@
                     <SolidColorBrush x:Key="DropZoneBorderBrush" Color="#662F6F62" />
                     <SolidColorBrush x:Key="DragOverlayBrush" Color="#CC0B0C0E" />
                     <SolidColorBrush x:Key="DragSubtitleBrush" Color="#9A9CA3" />
+                    <!-- Translucent chrome that floats over the photograph (nav arrows, drop prompt). -->
+                    <SolidColorBrush x:Key="GlassBrush" Color="#D9121316" />
                     <SolidColorBrush x:Key="PopupBrush" Color="{StaticResource CardColor}" />
                     <SolidColorBrush x:Key="PlotBgBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="PlotAxisBrush" Color="#8B8E95" />
@@ -132,6 +135,7 @@
                     <SolidColorBrush x:Key="ModalOverlayBrush" Color="#99141820" />
                     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
+                    <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
@@ -154,6 +158,7 @@
                     <SolidColorBrush x:Key="DropZoneBorderBrush" Color="#662F6F62" />
                     <SolidColorBrush x:Key="DragOverlayBrush" Color="#B316181C" />
                     <SolidColorBrush x:Key="DragSubtitleBrush" Color="#ECEDEE" />
+                    <SolidColorBrush x:Key="GlassBrush" Color="#EBFFFFFF" />
                     <SolidColorBrush x:Key="PopupBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="PlotBgBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="PlotAxisBrush" Color="#5C6168" />
@@ -192,5 +197,8 @@
             <StreamGeometry x:Key="TrashIconGeometry">M6,19A2,2 0,0,0,8,21H16A2,2 0,0,0,18,19V7H6M8,9H16V19H8M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4Z</StreamGeometry>
             <StreamGeometry x:Key="ClearIconGeometry">M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12Z</StreamGeometry>
             <StreamGeometry x:Key="RemoveIconGeometry">M19,13H5V11H19Z</StreamGeometry>
+            <StreamGeometry x:Key="HelpIconGeometry">M11,18H13V16H11V18M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,6A4,4 0 0,0 8,10H10A2,2 0 0,1 12,8A2,2 0 0,1 14,10C14,12 11,11.75 11,15H13C13,12.75 16,12.5 16,10A4,4 0 0,0 12,6Z</StreamGeometry>
+            <StreamGeometry x:Key="ImageIconGeometry">M19,19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M13.96,12.29L11.21,15.83L9.25,13.47L6.5,17H17.5L13.96,12.29Z</StreamGeometry>
+            <StreamGeometry x:Key="DropIconGeometry">M2,12H4V17H20V12H22V17A2,2 0 0,1 20,19H4A2,2 0 0,1 2,17V12M12,15L17.55,9.54L16.13,8.13L13,11.25V2H11V11.25L7.88,8.13L6.46,9.55L12,15Z</StreamGeometry>
             <StreamGeometry x:Key="SpinnerGeometry">M12,2 A10,10 0 1 1 2,12</StreamGeometry>
         </ResourceDictionary>
