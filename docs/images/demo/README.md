@@ -67,4 +67,3 @@ screenshot at full size to read the controls and enlarged figures.
 ### Four-image batch with previews disabled
 
 ![Four-image batch with previews disabled](stills/13-batch-options.png)
-
