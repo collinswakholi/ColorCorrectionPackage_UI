@@ -100,8 +100,8 @@ The example includes custom references, partial-batch outcomes, saved-model FFC
 reuse, an application-stage override, and LUT export. Edit its configuration
 function to use different FFC or CC settings.
 
-Contributor instructions for automated notebook execution and the versioned
-execution record are in [developer validation](../docs/api/VERIFICATION.md).
+Contributor instructions for automated notebook execution are in the
+[Python SDK checks](../docs/development/README.md#python-sdk-checks).
 
 [API guide](../api/README.md) · [Configuration reference](../docs/api/README.md#configuration-reference)
 · [Original study](https://doi.org/10.1002/ppj2.70067)

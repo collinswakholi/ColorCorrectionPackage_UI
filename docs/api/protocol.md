@@ -124,8 +124,8 @@ to install Jupyter and configure the input paths. Both tutorials display
 before/after images; the first includes the FFC stage.
 Never reuse a detection on another image.
 
-For contributor checks and execution records, see
-[developer validation](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md).
+For contributor checks, see the
+[Python SDK checks](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/development/README.md#python-sdk-checks).
 
 ## Python API contract
 

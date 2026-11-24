@@ -1,7 +1,7 @@
 # Processing and graphics
 
-Version 0.2.2 includes CPU detection, Auto inference recovery and device-aware
-setup. Older 0.2.1 engines require a compatible GPU for chart and plane detection.
+Chart and white-plane detection run on a GPU or the CPU, and correction has its
+own device choice.
 
 Choose **Auto**, **CPU** or **GPU** for image correction. The default Fast mode
 combines the enabled GC, WB and CC transforms in one **65³ LUT**. Spatial flat-field
