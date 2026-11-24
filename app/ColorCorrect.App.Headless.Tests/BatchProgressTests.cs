@@ -19,7 +19,7 @@ public sealed class BatchProgressTests
         var path = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(path, "{\"gc_model\":null,\"gc_coeffs\":[],\"wb_diag\":[1,1,1],\"correction\":null}");
+            File.WriteAllText(path, "{\"gc_model\":null,\"gc_coeffs\":null,\"wb_diag\":[1,1,1],\"correction\":null}");
             var source = new CorrectionOptions { DoGc = true, DoWb = true, DoCc = true, OutputDir = "explicit-export-folder" };
             var captured = MainWindowViewModel.CaptureBatchOptions(source, false, path);
             Assert.True(captured.WriteOutput); Assert.Equal("none", captured.PreviewMode); Assert.Equal("", captured.OutputDir);
@@ -34,7 +34,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void EachImageResetsStagesAndCombinedLutDoesNotInventSequentialStages()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true, DoFfc = false, DoWb = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }, Settings = { DoFfc = false, DoWb = true } };
         using var first = new SessionItemViewModel("first.jpg");
         using var second = new SessionItemViewModel("second.jpg");
         var captured = new CorrectionOptions { DoFfc = true, DoGc = true, DoWb = false, DoCc = true };
@@ -49,7 +49,7 @@ public sealed class BatchProgressTests
         Call(vm, "ApplyEngineProgress", "Combined LUT · GC + CC");
         Assert.All(vm.PipelineSteps.Where(x => x.Key is "gc" or "cc"), step => { Assert.True(step.IsActive); Assert.False(step.IsDone); });
         Assert.False(vm.PipelineSteps.Single(x => x.Key == "wb").IsActive);
-        Assert.InRange(first.ProcessingProgress, 1, 99); Assert.Equal(first.ProcessingProgress / 2, vm.BatchProgress, 6);
+        Assert.InRange(first.ProcessingProgress, 1, 99); Assert.Equal(first.ProcessingProgress / 2, vm.Job.BatchProgress, 6);
         Call(vm, "ApplyEngineProgress", "Combined LUT complete");
         Assert.All(vm.PipelineSteps.Where(x => x.Key is "gc" or "cc"), step => Assert.Equal("Complete", step.StatusText));
         Call(vm, "ApplyEngineProgress", "Writing outputs complete");
@@ -57,7 +57,7 @@ public sealed class BatchProgressTests
         Call(vm, "FinishBatchImage", first, true, null);
         Assert.Equal(100, first.ProcessingProgress); Assert.Equal("Complete", first.ProcessingStatus);
         Call(vm, "BeginBatchImage", second, 1, 2, captured, true);
-        Assert.Equal(0, vm.JobProgress); Assert.Equal(50, vm.BatchProgress);
+        Assert.Equal(0, vm.Job.JobProgress); Assert.Equal(50, vm.Job.BatchProgress);
         Assert.All(vm.PipelineSteps.Where(x => x.IsEnabled), step => Assert.Equal("Pending", step.StatusText));
         Call(vm, "ApplyEngineProgress", "FFC");
         Call(vm, "FinishBatchImage", second, false, "Cancelled");
@@ -68,7 +68,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void IdentityApplyAndFailureNeverMarkUnreportedColorStagesComplete()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var item = new SessionItemViewModel("identity.jpg");
         Call(vm, "BeginBatchImage", item, 0, 1, new CorrectionOptions { DoGc = false, DoWb = false, DoCc = false }, true);
         Call(vm, "ApplyEngineProgress", "Loading image");
@@ -82,7 +82,7 @@ public sealed class BatchProgressTests
     [AvaloniaFact]
     public void StartingFusedGcDoesNotCompleteFfcBeforeWorkerConfirmation()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var item = new SessionItemViewModel("fused.jpg");
         Call(vm, "BeginBatchImage", item, 0, 1, new CorrectionOptions { DoFfc = true }, false);
         Call(vm, "ApplyEngineProgress", "FFC");
@@ -124,7 +124,7 @@ public sealed class BatchProgressTests
     public async Task PreviewOffSurvivesSessionReloadAndOnlyExplicitRequestDisplaysResult()
     {
         var root = Path.Combine(Path.GetTempPath(), "ccp-preview-off-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         try
         {
             var source = Path.Combine(root, "source.png"); var corrected = Path.Combine(root, "corrected.png");
@@ -132,20 +132,20 @@ public sealed class BatchProgressTests
             using (var bitmap = PreviewRgb.FromRgb(8, 8, Enumerable.Repeat((byte)160, 8 * 8 * 3).ToArray())) bitmap.Save(corrected);
             var model = Path.Combine(root, "model.json"); File.WriteAllText(model, "{}");
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(source), model, new() { WriteOutput = true, PreviewMode = "none" });
-            using var item = new SessionItemViewModel(source); vm.Session.Add(item); vm.Active = item;
+            using var item = new SessionItemViewModel(source); vm.Session.Add(item); vm.Workspace.Active = item;
             Call(vm, "ApplyOutcome", item, new CorrectionOutcome { Ok = true, OutputPath = corrected, ModelPath = model, CompletedContext = context }, false, true);
-            Assert.True(item.PreviewSuppressed); Assert.True(vm.IsResultPreviewSuppressed); Assert.Null(vm.CorrectedPreview);
+            Assert.True(item.PreviewSuppressed); Assert.True(vm.IsResultPreviewSuppressed); Assert.Null(vm.Stage.CorrectedPreview);
             var session = Path.Combine(root, "session.json");
             Assert.True(SessionStore.Write(session, (SessionState)Call(vm, "BuildSessionState", true)!));
             var (loaded, error) = SessionStore.TryLoadFrom(session); Assert.Null(error);
             vm.RestoreWorkingItems(loaded);
             var deadline = DateTime.UtcNow.AddSeconds(5);
-            while (vm.OriginalPreview is null && DateTime.UtcNow < deadline) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
-            Assert.True(vm.Active!.PreviewSuppressed); Assert.True(vm.Active.IsCorrected); Assert.Null(vm.CorrectedPreview);
-            Assert.True(File.Exists(vm.Active.CorrectedPath));
+            while (vm.Stage.OriginalPreview is null && DateTime.UtcNow < deadline) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+            Assert.True(vm.Workspace.Active!.PreviewSuppressed); Assert.True(vm.Workspace.Active.IsCorrected); Assert.Null(vm.Stage.CorrectedPreview);
+            Assert.True(File.Exists(vm.Workspace.Active.CorrectedPath));
             await vm.ShowResultPreviewCommand.ExecuteAsync(null);
-            Assert.False(vm.Active.PreviewSuppressed); Assert.NotNull(vm.CorrectedPreview);
-            Assert.Equal("Corrected", vm.StageName); Assert.Equal(context.Model.Sha256, vm.Active.CompletedContext!.Model.Sha256);
+            Assert.False(vm.Workspace.Active.PreviewSuppressed); Assert.NotNull(vm.Stage.CorrectedPreview);
+            Assert.Equal("Corrected", vm.Stage.StageName); Assert.Equal(context.Model.Sha256, vm.Workspace.Active.CompletedContext!.Model.Sha256);
         }
         finally { await vm.DisposeAsync(); Dispatcher.UIThread.RunJobs(); Directory.Delete(root, true); }
     }

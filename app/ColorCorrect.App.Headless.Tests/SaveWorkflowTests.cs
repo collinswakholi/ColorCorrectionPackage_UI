@@ -64,10 +64,10 @@ public sealed class SaveWorkflowTests
             : Path.Combine(scratch, "full-corrected.png");
         using (var bitmap = PreviewRgb.FromRgb(16, 16, rgb)) BitmapExport.Save(bitmap, corrected);
         var vm = CreateViewModel(Path.Combine(scratch, "unused-report.json"), output);
-        vm.SaveCorrected = vm.SaveFfc = vm.SaveGc = vm.SaveWb = vm.SaveCc = true;
-        vm.DoFfc = vm.DoGc = vm.DoWb = vm.DoCc = stagesEnabled;
-        vm.SaveReport = false;
-        vm.SelectedOutputFormat = vm.OutputFormats.Single(option => option.Value == format);
+        vm.Output.SaveCorrected = vm.Output.SaveFfc = vm.Output.SaveGc = vm.Output.SaveWb = vm.Output.SaveCc = true;
+        vm.Settings.DoFfc = vm.Settings.DoGc = vm.Settings.DoWb = vm.Settings.DoCc = stagesEnabled;
+        vm.Output.SaveReport = false;
+        vm.Output.SelectedOutputFormat = vm.OutputFormats.Single(option => option.Value == format);
         vm.Session[0].PreviewDir = previews;
         vm.Session[0].CorrectedPath = corrected;
         var window = new MainWindow { DataContext = vm };
@@ -80,7 +80,7 @@ public sealed class SaveWorkflowTests
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
             await saving;
             Assert.False(dialogs.WasRequested); // The explicit destination needs no second approval.
-            Assert.StartsWith($"Saved {(stagesEnabled ? 5 : 1)} file(s) as", vm.Status);
+            Assert.StartsWith($"Saved {(stagesEnabled ? 5 : 1)} file(s) as", vm.Job.Status);
             Assert.Equal(stagesEnabled ? 5 : 1, Directory.GetFiles(output).Length);
             foreach (var stage in stagesEnabled ? new[] { "corrected", "ffc", "gc", "wb", "cc" } : new[] { "corrected" })
             {
@@ -126,9 +126,9 @@ public sealed class SaveWorkflowTests
         var dialogs = new DeferredConfirmation();
         vm.Dialogs = dialogs;
         var changes = 0;
-        vm.PropertyChanged += (_, args) =>
+        vm.Output.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName != nameof(vm.IsSaving)) return;
+            if (args.PropertyName != nameof(vm.Output.IsSaving)) return;
             Dispatcher.UIThread.VerifyAccess();
             changes++;
         };
@@ -139,13 +139,13 @@ public sealed class SaveWorkflowTests
             Assert.False(saving.IsCompleted);
             await Task.Run(() => dialogs.Result.SetResult(accept));
             await saving;
-            Assert.False(vm.IsSaving);
-            Assert.False(vm.ShowSaveProgress);
+            Assert.False(vm.Output.IsSaving);
+            Assert.False(vm.Output.ShowSaveProgress);
             if (accept)
             {
                 Assert.Equal(2, changes);
                 Assert.Equal("{\"ok\":true}", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
-                Assert.StartsWith("Saved 1 file(s)", vm.Status);
+                Assert.StartsWith("Saved 1 file(s)", vm.Job.Status);
             }
             else
             {
@@ -172,7 +172,7 @@ public sealed class SaveWorkflowTests
         var photo = Path.Combine(scratch, "sample.png"); var model = Path.Combine(scratch, "model.json"); var white = Path.Combine(scratch, "white.png");
         await File.WriteAllTextAsync(report, "{\"ok\":true}"); await File.WriteAllTextAsync(photo, "source");
         await File.WriteAllTextAsync(model, "{}"); await File.WriteAllTextAsync(white, "white A");
-        var vm = CreateViewModel(report, output); var item = vm.Session[0]; vm.SaveCorrected = true;
+        var vm = CreateViewModel(report, output); var item = vm.Session[0]; vm.Output.SaveCorrected = true;
         item.ModelPath = model;
         item.CompletedContext = ColorCorrect.Engine.CompletedResultContext.Capture(ColorCorrect.Engine.AssetIdentity.Capture(photo), model,
             new() { DoFfc = true, WhiteImagePath = white });
@@ -182,12 +182,12 @@ public sealed class SaveWorkflowTests
         try
         {
             await vm.ExecuteSaveCommand.ExecuteAsync(null);
-            Assert.StartsWith("Saved 1 file(s); 1 file(s) failed", vm.Status);
+            Assert.StartsWith("Saved 1 file(s); 1 file(s) failed", vm.Job.Status);
             Assert.Equal("{\"ok\":true}", await File.ReadAllTextAsync(Path.Combine(output, "sample_report.json")));
             Assert.False(File.Exists(Path.Combine(output, "sample_corrected.jpg")));
             Assert.Contains(vm.LogEntries, entry => entry.Message.Contains("corrected image is unavailable"));
             Assert.True(item.IsCorrected); Assert.Same(context, item.CompletedContext); Assert.Equal(model, item.ModelPath);
-            Assert.False(vm.IsSaving); Assert.False(vm.ShowSaveProgress);
+            Assert.False(vm.Output.IsSaving); Assert.False(vm.Output.ShowSaveProgress);
         }
         finally { window.Close(); Dispatcher.UIThread.RunJobs(); item.Dispose(); Directory.Delete(scratch, true); }
     }
@@ -222,9 +222,9 @@ public sealed class SaveWorkflowTests
             var saving = vm.ExecuteSaveCommand.ExecuteAsync(null);
             await saving;
             Assert.False(dialogs.WasRequested);
-            Assert.StartsWith("Save failed:", vm.Status);
-            Assert.False(vm.IsSaving);
-            Assert.False(vm.ShowSaveProgress);
+            Assert.StartsWith("Save failed:", vm.Job.Status);
+            Assert.False(vm.Output.IsSaving);
+            Assert.False(vm.Output.ShowSaveProgress);
             Assert.Equal("keep", await File.ReadAllTextAsync(sentinel));
         }
         finally
@@ -240,14 +240,8 @@ public sealed class SaveWorkflowTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
-            Busy = false,
-            OutputDir = output,
-            SaveCorrected = false,
-            SaveFfc = false,
-            SaveGc = false,
-            SaveWb = false,
-            SaveCc = false,
-            SaveReport = true,
+            Job = { Busy = false },
+            Output = { OutputDir = output, SaveCorrected = false, SaveFfc = false, SaveGc = false, SaveWb = false, SaveCc = false, SaveReport = true },
         };
         vm.Session.Add(new SessionItemViewModel(Path.Combine(Path.GetDirectoryName(report)!, "sample.png"))
         {

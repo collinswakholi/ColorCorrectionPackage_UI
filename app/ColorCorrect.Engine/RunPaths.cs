@@ -40,7 +40,7 @@ public static class RunPaths
             .Any(part => part == "..");
     }
 
-    public static void CopyIfNeeded(string src, string destDir, string destName)
+    internal static void CopyIfNeeded(string src, string destDir, string destName)
     {
         if (!File.Exists(src) || string.IsNullOrWhiteSpace(destDir))
         {
@@ -62,20 +62,5 @@ public static class RunPaths
         }
 
         File.Copy(src, dest, overwrite: true);
-    }
-
-    public static bool IsUnderRepo(string path, string repoRoot)
-    {
-        try
-        {
-            var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var root = Path.GetFullPath(repoRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return full.StartsWith(root + Path.DirectorySeparatorChar, PathIdentity.Comparison)
-                   || PathIdentity.Equal(full, root);
-        }
-        catch
-        {
-            return false;
-        }
     }
 }

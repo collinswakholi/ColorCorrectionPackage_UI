@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const ANCHOR_NAMES: [&str; 8] = [
+pub(crate) const ANCHOR_NAMES: [&str; 8] = [
     "tl",
     "tr",
     "br",
@@ -16,18 +16,18 @@ pub const ANCHOR_NAMES: [&str; 8] = [
     "center",
 ];
 
-pub const CHART_TYPES: [&str; 3] = ["classic_4x6", "spyder_4x6", "digital_sg_10x14"];
-pub const CHART_ROWS: [i32; 3] = [4, 4, 10];
-pub const CHART_COLS: [i32; 3] = [6, 6, 14];
-pub const NUM_CLASSES: i32 = 24;
-pub const PRIMARY_SIZE: i32 = 1280;
-pub const RECALL_SIZE: i32 = 1536;
+pub(crate) const CHART_TYPES: [&str; 3] = ["classic_4x6", "spyder_4x6", "digital_sg_10x14"];
+pub(crate) const CHART_ROWS: [i32; 3] = [4, 4, 10];
+pub(crate) const CHART_COLS: [i32; 3] = [6, 6, 14];
+pub(crate) const NUM_CLASSES: i32 = 24;
+pub(crate) const PRIMARY_SIZE: i32 = 1280;
+pub(crate) const RECALL_SIZE: i32 = 1536;
 pub const DEFAULT_CONF: f32 = 0.15;
-pub const DECODE_IOU: f32 = 0.7;
-pub const NMS_CHARTS_IOU: f64 = 0.35;
+pub(crate) const DECODE_IOU: f32 = 0.7;
+pub(crate) const NMS_CHARTS_IOU: f64 = 0.35;
 pub const DEFAULT_CROP: f64 = 0.75;
-pub const DEFAULT_MAX_DET: i32 = 300;
-pub const LETTERBOX_PAD: u8 = 114;
+pub(crate) const DEFAULT_MAX_DET: i32 = 300;
+pub(crate) const LETTERBOX_PAD: u8 = 114;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Vec2 {
@@ -113,7 +113,7 @@ impl ChartKind {
         }
     }
 
-    pub fn rows_cols(self) -> (i32, i32) {
+    pub(crate) fn rows_cols(self) -> (i32, i32) {
         match self {
             Self::DigitalSg => (10, 14),
             Self::Classic | Self::Passport | Self::Spyder => (4, 6),
@@ -146,16 +146,11 @@ pub struct AnchorGeom {
     pub col: i32,
 }
 
-pub fn chart_index(name: &str) -> Option<usize> {
+pub(crate) fn chart_index(name: &str) -> Option<usize> {
     CHART_TYPES.iter().position(|t| *t == name)
 }
 
-pub fn chart_rows_cols(chart_type: &str) -> Option<(i32, i32)> {
-    let i = chart_index(chart_type)?;
-    Some((CHART_ROWS[i], CHART_COLS[i]))
-}
-
-pub fn cli_chart_from_detector(chart_type: &str) -> &'static str {
+pub(crate) fn cli_chart_from_detector(chart_type: &str) -> &'static str {
     match chart_type {
         "spyder_4x6" => "spyder",
         "digital_sg_10x14" => "digital-sg",
@@ -163,11 +158,7 @@ pub fn cli_chart_from_detector(chart_type: &str) -> &'static str {
     }
 }
 
-pub fn class_id(type_i: i32, anchor_i: i32) -> i32 {
-    type_i * 8 + anchor_i
-}
-
-pub fn normalize_chart_id(value: &str) -> String {
+pub(crate) fn normalize_chart_id(value: &str) -> String {
     value
         .chars()
         .map(|ch| match ch {
@@ -177,7 +168,7 @@ pub fn normalize_chart_id(value: &str) -> String {
         .collect()
 }
 
-pub fn parse_chart_kind(value: &str) -> Option<ChartKind> {
+pub(crate) fn parse_chart_kind(value: &str) -> Option<ChartKind> {
     let id = normalize_chart_id(value);
     match id.as_str() {
         "classic" | "classic-4x6" | "colorchecker" | "colorchecker-classic" => {
@@ -192,14 +183,14 @@ pub fn parse_chart_kind(value: &str) -> Option<ChartKind> {
     }
 }
 
-pub fn quad_center(q: Quad) -> Vec2 {
+pub(crate) fn quad_center(q: Quad) -> Vec2 {
     Vec2 {
         x: 0.25 * (q.top_left.x + q.top_right.x + q.bottom_right.x + q.bottom_left.x),
         y: 0.25 * (q.top_left.y + q.top_right.y + q.bottom_right.y + q.bottom_left.y),
     }
 }
 
-pub fn order_visual_quad(pts_in: [Vec2; 4]) -> Quad {
+pub(crate) fn order_visual_quad(pts_in: [Vec2; 4]) -> Quad {
     let mut pts = pts_in;
     let mut center = Vec2::default();
     for p in &pts {
@@ -240,7 +231,7 @@ pub fn order_visual_quad(pts_in: [Vec2; 4]) -> Quad {
     Quad::new(ordered[0], ordered[1], ordered[2], ordered[3])
 }
 
-pub fn scale_quad(q: Quad, crop: f64) -> Quad {
+pub(crate) fn scale_quad(q: Quad, crop: f64) -> Quad {
     let c = quad_center(q);
     let k = crop.max(0.02);
     let scale = |p: Vec2| Vec2 {
@@ -255,7 +246,7 @@ pub fn scale_quad(q: Quad, crop: f64) -> Quad {
     )
 }
 
-pub fn solve_8x8(a: &[[f64; 8]; 8], b: &[f64; 8]) -> Option<[f64; 8]> {
+pub(crate) fn solve_8x8(a: &[[f64; 8]; 8], b: &[f64; 8]) -> Option<[f64; 8]> {
     let mut m = [[0.0f64; 9]; 8];
     for r in 0..8 {
         for c in 0..8 {
@@ -301,7 +292,7 @@ pub fn solve_8x8(a: &[[f64; 8]; 8], b: &[f64; 8]) -> Option<[f64; 8]> {
     Some(x)
 }
 
-pub fn homography_4(src: &[Vec2; 4], dst: &[Vec2; 4]) -> Option<[f64; 9]> {
+pub(crate) fn homography_4(src: &[Vec2; 4], dst: &[Vec2; 4]) -> Option<[f64; 9]> {
     let mut a = [[0.0f64; 8]; 8];
     let mut b = [0.0f64; 8];
     for i in 0..4 {
@@ -331,11 +322,7 @@ pub fn homography_4(src: &[Vec2; 4], dst: &[Vec2; 4]) -> Option<[f64; 9]> {
     Some(h)
 }
 
-pub fn homography(src: &[Vec2; 4], dst: &[Vec2; 4]) -> Option<[f64; 9]> {
-    homography_4(src, dst)
-}
-
-pub fn warp(h: &[f64; 9], p: Vec2) -> Vec2 {
+pub(crate) fn warp(h: &[f64; 9], p: Vec2) -> Vec2 {
     let z = h[6] * p.x + h[7] * p.y + h[8];
     if z.abs() < 1e-12 {
         return p;
@@ -346,7 +333,7 @@ pub fn warp(h: &[f64; 9], p: Vec2) -> Vec2 {
     }
 }
 
-pub fn anchors_for(rows: i32, cols: i32) -> [AnchorGeom; 8] {
+pub(crate) fn anchors_for(rows: i32, cols: i32) -> [AnchorGeom; 8] {
     let r_bot = rows - 1;
     let c_right = cols - 1;
     let r_center = rows / 2;
@@ -395,24 +382,24 @@ pub fn anchors_for(rows: i32, cols: i32) -> [AnchorGeom; 8] {
     ]
 }
 
-pub fn canonical_center(spec: &AnchorGeom, rows: i32, cols: i32) -> Vec2 {
+pub(crate) fn canonical_center(spec: &AnchorGeom, rows: i32, cols: i32) -> Vec2 {
     Vec2 {
         x: (f64::from(spec.col) + 0.5) / f64::from(cols),
         y: (f64::from(spec.row) + 0.5) / f64::from(rows),
     }
 }
 
-pub fn dist2(a: Vec2, b: Vec2) -> f64 {
+pub(crate) fn dist2(a: Vec2, b: Vec2) -> f64 {
     let dx = a.x - b.x;
     let dy = a.y - b.y;
     dx * dx + dy * dy
 }
 
-pub fn patch_diag(q: Quad) -> f64 {
+pub(crate) fn patch_diag(q: Quad) -> f64 {
     (q.top_left.x - q.bottom_right.x).hypot(q.top_left.y - q.bottom_right.y)
 }
 
-pub fn quad_area(q: Quad) -> f64 {
+pub(crate) fn quad_area(q: Quad) -> f64 {
     let pts = q.points();
     let mut area = 0.0;
     for i in 0..4 {
@@ -423,11 +410,11 @@ pub fn quad_area(q: Quad) -> f64 {
     0.5 * area
 }
 
-pub fn edge_len(a: Vec2, b: Vec2) -> f64 {
+pub(crate) fn edge_len(a: Vec2, b: Vec2) -> f64 {
     (a.x - b.x).hypot(a.y - b.y)
 }
 
-pub fn face_edge_imbalance(q: Quad) -> f64 {
+pub(crate) fn face_edge_imbalance(q: Quad) -> f64 {
     let edges = [
         edge_len(q.top_left, q.top_right),
         edge_len(q.top_right, q.bottom_right),
@@ -443,7 +430,7 @@ pub fn face_edge_imbalance(q: Quad) -> f64 {
     1.0 - ratio_a.min(ratio_b)
 }
 
-pub fn lattice_plausible(chart: &ChartDetection, width: i32, height: i32) -> bool {
+pub(crate) fn lattice_plausible(chart: &ChartDetection, width: i32, height: i32) -> bool {
     if !chart.corners.finite() {
         return false;
     }
@@ -475,7 +462,7 @@ pub fn lattice_plausible(chart: &ChartDetection, width: i32, height: i32) -> boo
     span < limit
 }
 
-pub fn aabb_iou(a: Quad, b: Quad) -> f64 {
+pub(crate) fn aabb_iou(a: Quad, b: Quad) -> f64 {
     let box_of = |q: Quad| -> [f64; 4] {
         let xs = [
             q.top_left.x,
@@ -514,7 +501,7 @@ pub fn aabb_iou(a: Quad, b: Quad) -> f64 {
     }
 }
 
-pub fn format_quad(quad: Quad) -> String {
+pub(crate) fn format_quad(quad: Quad) -> String {
     let one = |p: Vec2| format!("{:.3},{:.3}", p.x, p.y);
     format!(
         "{};{};{};{}",
@@ -525,7 +512,7 @@ pub fn format_quad(quad: Quad) -> String {
     )
 }
 
-pub fn format_xy(p: Vec2) -> [f64; 2] {
+pub(crate) fn format_xy(p: Vec2) -> [f64; 2] {
     [
         if p.x.is_finite() { p.x } else { 0.0 },
         if p.y.is_finite() { p.y } else { 0.0 },

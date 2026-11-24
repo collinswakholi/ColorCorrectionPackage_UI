@@ -1,4 +1,4 @@
-using ColorCorrect.App.Services;
+using ColorCorrect.App.Views;
 using Xunit;
 
 namespace ColorCorrect.App.Headless.Tests;

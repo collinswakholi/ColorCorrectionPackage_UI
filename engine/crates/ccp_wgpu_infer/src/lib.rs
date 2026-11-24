@@ -1,6 +1,6 @@
 //! GPU-only fallback for WSL's Vulkan/D3D12 translation driver. It does not
 //! emulate missing graphics features or register a CPU tensor backend.
-use burn::tensor::wgpu::{wgpu, WgpuSetup};
+use burn::tensor::wgpu::{WgpuSetup, wgpu};
 use burn::tensor::{Device, Tensor, TensorData};
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,21 +8,24 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-#[allow(dead_code)]
+// Burn-generated model code: its constructors take one argument per layer.
+#[allow(dead_code, clippy::too_many_arguments)]
 mod plane {
     include!(concat!(
         env!("OUT_DIR"),
         "/models/plane_det_model_YOLO_512_n.rs"
     ));
 }
-#[allow(dead_code)]
+// Burn-generated model code: its constructors take one argument per layer.
+#[allow(dead_code, clippy::too_many_arguments)]
 mod chart {
     include!(concat!(
         env!("OUT_DIR"),
         "/models/best_assemble_fp32_1280.rs"
     ));
 }
-#[allow(dead_code)]
+// Burn-generated model code: its constructors take one argument per layer.
+#[allow(dead_code, clippy::too_many_arguments)]
 mod large {
     include!(concat!(
         env!("OUT_DIR"),

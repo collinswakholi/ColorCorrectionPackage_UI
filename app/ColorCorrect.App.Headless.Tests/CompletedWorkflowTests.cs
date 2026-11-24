@@ -11,7 +11,7 @@ public sealed class CompletedWorkflowTests
     [AvaloniaFact]
     public void RelinkButtonRequiresAnActiveMissingImage()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         var window = new ColorCorrect.App.Views.MainWindow { DataContext = vm };
         var available = Path.GetTempFileName();
         using var missing = new SessionItemViewModel(available + ".missing.jpg");
@@ -21,11 +21,11 @@ public sealed class CompletedWorkflowTests
         {
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
-            vm.Active = missing; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = missing; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.True(window.RelinkSelectedImage.IsVisible);
-            vm.Active = present; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = present; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
-            vm.Active = null; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            vm.Workspace.Active = null; Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.False(window.RelinkSelectedImage.IsVisible);
         }
         finally { window.Close(); Avalonia.Threading.Dispatcher.UIThread.RunJobs(); File.Delete(available); }
@@ -44,7 +44,7 @@ public sealed class CompletedWorkflowTests
             var context = CompletedResultContext.Capture(AssetIdentity.Capture(photo), b, new() { DoGc = false, DoWb = true, FastMode = false });
             var apply = typeof(MainWindowViewModel).GetMethod("ApplyOutcome", BindingFlags.Instance | BindingFlags.NonPublic)!;
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = true, ModelPath = b, CompletedContext = context }, false, false]);
-            vm.LoadedModelPath = c; vm.DoGc = true; vm.DoWb = false; vm.FastMode = true;
+            vm.Output.LoadedModelPath = c; vm.Settings.DoGc = true; vm.Settings.DoWb = false; vm.Compute.FastMode = true;
             Assert.Equal(b, item.ModelPath); Assert.Equal(b, item.CompletedContext!.Model.Path);
             Assert.False(vm.ReplayOptions(item)!.DoGc); Assert.True(vm.ReplayOptions(item)!.DoWb); Assert.False(vm.ReplayOptions(item)!.FastMode);
             apply.Invoke(vm, [item, new CorrectionOutcome { Ok = false, ModelPath = c, Error = "cancelled" }, false, false]);
@@ -81,28 +81,28 @@ public sealed class CompletedWorkflowTests
     public void NumericDraftsAreValidatedOnlyForTheRequestedOperation()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.NnEpochsText = "bad";
+        vm.Settings.SelectedMethod = vm.Methods.Single(x => x.Value == "nn"); vm.Settings.NnEpochsText = "bad";
         Assert.Contains("Epochs", vm.OperationError(true)); Assert.Null(vm.OperationError(false));
-        vm.NnEpochsText = "50.5"; Assert.Contains("whole number", vm.OperationError(true));
-        vm.NnEpochsText = "50"; Assert.Null(vm.OperationError(true));
-        vm.FfcBinsText = "bad"; Assert.Null(vm.OperationError(true));
-        vm.DoFfc = true; Assert.Contains("white reference", vm.OperationError(true));
-        vm.DoFfc = false; vm.DoCc = false; vm.HiddenLayersText = "bad"; Assert.Null(vm.OperationError(true));
+        vm.Settings.NnEpochsText = "50.5"; Assert.Contains("whole number", vm.OperationError(true));
+        vm.Settings.NnEpochsText = "50"; Assert.Null(vm.OperationError(true));
+        vm.Settings.FfcBinsText = "bad"; Assert.Null(vm.OperationError(true));
+        vm.Settings.DoFfc = true; Assert.Contains("white reference", vm.OperationError(true));
+        vm.Settings.DoFfc = false; vm.Settings.DoCc = false; vm.Settings.HiddenLayersText = "bad"; Assert.Null(vm.OperationError(true));
     }
 
     [AvaloniaFact]
     public void CancelIsAvailableDuringSingleImageWork()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = false }};
         Assert.True(vm.CancelBatchCommand.CanExecute(null)); vm.CancelBatchCommand.Execute(null);
-        Assert.Contains("Completed results are kept", vm.Status);
-        vm.Busy = false; Assert.False(vm.CancelBatchCommand.CanExecute(null));
+        Assert.Contains("Completed results are kept", vm.Job.Status);
+        vm.Job.Busy = false; Assert.False(vm.CancelBatchCommand.CanExecute(null));
     }
 
     [AvaloniaFact]
     public void CancelSignalsCurrentJobWithoutRemovingEarlierBatchResults()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = true, IsBatching = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = true, IsBatching = true }};
         using var completed = new SessionItemViewModel("completed.jpg") { IsCorrected = true, ModelPath = "owned-B.json", CorrectedPath = "saved-B.jpg" };
         vm.Session.Add(completed);
         var token = (CancellationToken)typeof(MainWindowViewModel).GetMethod("BeginJob", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(vm, null)!;
@@ -170,11 +170,11 @@ public sealed class CompletedWorkflowTests
             File.WriteAllText(model, System.Text.Json.JsonSerializer.Serialize(new { do_ffc = true, do_gc = false, do_wb = true, do_cc = true,
                 ffc_params = new { method, bins = 17, smooth_window = 3, degree = 4, nn_max_iter = 90, tol = 1e-7 },
                 python_api = new { white, white_sha256 = AssetIdentity.Capture(white).Sha256.ToLowerInvariant(), crop_rect = "1,2,30,40" } }));
-            var vm = new MainWindowViewModel(persistenceEnabled: false) { LoadedModelPath = model };
+            var vm = new MainWindowViewModel(persistenceEnabled: false) { Output = { LoadedModelPath = model }};
             vm.RestoreLoadedModelSettings(model);
-            Assert.Equal(method, vm.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.FfcBins); Assert.Equal(3m, vm.FfcSmoothWindow);
-            Assert.Equal(4m, vm.FfcDegree); Assert.Equal(90m, vm.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.FfcTol);
-            Assert.Equal("1,2,30,40", vm.CropRect); Assert.False(vm.DoGc); Assert.True(vm.DoFfc);
+            Assert.Equal(method, vm.Settings.SelectedFfcFitMethod.Value); Assert.Equal(17m, vm.Settings.FfcBins); Assert.Equal(3m, vm.Settings.FfcSmoothWindow);
+            Assert.Equal(4m, vm.Settings.FfcDegree); Assert.Equal(90m, vm.Settings.FfcNnMaxIter); Assert.Equal(0.0000001m, vm.Settings.FfcTol);
+            Assert.Equal("1,2,30,40", vm.Stage.CropRect); Assert.False(vm.Settings.DoGc); Assert.True(vm.Settings.DoFfc);
             Assert.Null(vm.OperationError(false));
             File.WriteAllText(white, "white B"); Assert.Contains("white reference changed", vm.OperationError(false));
             File.WriteAllText(white, "white A"); File.WriteAllText(model, "{}"); Assert.Contains("model changed", vm.OperationError(false));

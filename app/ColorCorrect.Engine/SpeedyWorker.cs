@@ -31,7 +31,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
     public string Policy { get; set; } = "auto";
     public string RepoRoot => _repoRoot;
     public string ExePath => _exePath;
-    public IReadOnlySet<string> Capabilities { get; private set; } = new HashSet<string>();
+    private IReadOnlySet<string> Capabilities { get; set; } = new HashSet<string>();
     public event Action<string>? Progress;
 
     public async Task RequireCapabilityAsync(string capability, CancellationToken cancellationToken = default)
@@ -149,21 +149,6 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }
     }
 
-    public async Task<WorkerReply> ExecAsync(
-        IReadOnlyList<string> argv,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-    {
-        // Legacy argv path is not used by ColorCorrect Studio. Map a lone detect/correct token to typed cmds.
-        var cmd = argv.Count > 0 ? argv[0] : "ping";
-        var payload = new Dictionary<string, object?> { ["cmd"] = cmd == "correct" ? "run" : cmd };
-        var result = await SendAsync(payload, timeout, cancellationToken).ConfigureAwait(false);
-        var ok = result.TryGetProperty("ok", out var okEl) && okEl.ValueKind != JsonValueKind.False && okEl.GetBoolean();
-        var raw = result.GetRawText();
-        var err = result.TryGetProperty("error", out var e) ? e.GetString() ?? "" : "";
-        return new WorkerReply(ok, ok ? 0 : 1, raw, err, raw);
-    }
-
     public async Task<DetectOutcome> DetectAsync(
         string inputPath,
         double crop = 0.75,
@@ -213,16 +198,10 @@ public sealed class SpeedyWorker : IAsyncDisposable
         await SendAsync(new Dictionary<string, object?> { ["cmd"] = "devices", ["policy"] = Policy }, TimeSpan.FromSeconds(30), cancellationToken)
             .ConfigureAwait(false);
 
-    public IReadOnlyList<string> RecentStderr(int max = 20)
-    {
-        var snapshot = _stderrLines.ToArray();
-        return snapshot.Length <= max ? snapshot : snapshot[^max..];
-    }
-
     public string FormatRecentStderr(int max = 8)
     {
-        var lines = RecentStderr(max);
-        return lines.Count == 0 ? "" : string.Join(Environment.NewLine, lines);
+        var snapshot = _stderrLines.ToArray();
+        return string.Join(Environment.NewLine, snapshot.Length <= max ? snapshot : snapshot[^max..]);
     }
 
     public ValueTask DisposeAsync()
@@ -507,12 +486,24 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }, cancellationToken);
     }
 
+    /// <summary>A command that keeps reporting progress may run this many timeouts in total.</summary>
+    public const int ProgressCeilingFactor = 6;
+
+    /// <summary>
+    /// Read progress lines until the reply. <paramref name="timeout"/> bounds silence: each
+    /// progress line restarts it, so slow but advancing work (large TIFFs on CPU) is not
+    /// killed mid-run. A command that never replies still stops at
+    /// <see cref="ProgressCeilingFactor"/> times the timeout.
+    /// </summary>
     private static async Task<JsonElement> ReadResultAsync(StreamReader reader, TimeSpan timeout, Action<string>? progress, CancellationToken cancellationToken = default)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        var started = DateTime.UtcNow;
+        var ceiling = started + TimeSpan.FromTicks(Math.Min(timeout.Ticks * ProgressCeilingFactor, TimeSpan.MaxValue.Ticks / 2));
+        var deadline = started + timeout;
         while (true)
         {
-            var remain = deadline - DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            var remain = (deadline < ceiling ? deadline : ceiling) - now;
             if (remain <= TimeSpan.Zero)
             {
                 throw new TimeoutException("timed out waiting for the worker");
@@ -535,6 +526,7 @@ public sealed class SpeedyWorker : IAsyncDisposable
                     progress?.Invoke(message);
                 }
 
+                deadline = DateTime.UtcNow + timeout; // the worker is alive and advancing
                 continue;
             }
 

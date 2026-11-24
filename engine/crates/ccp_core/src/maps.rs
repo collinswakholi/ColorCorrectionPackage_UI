@@ -8,13 +8,27 @@ use crate::color::{
     encoded_to_linear_rgb, lab_d50_to_target_linear, linear_to_encoded_rgb, parse_rgb_color_space,
     parse_white_point, RgbColorSpace, Vec3, WhitePoint,
 };
+use crate::error::{Error, Result};
+use crate::linalg::fit_least_squares;
+use crate::mlp::{fit_mlp, MlpOptimizer, MlpParams, MAX_HIDDEN};
+use crate::pls::{auto_ncomp, fit_pls, PLS_TOL};
 use crate::refs::ChartPatch;
-use crate::{Error, Result, RIDGE_LAMBDA};
+use crate::sample::SATURATION_THRESHOLD;
 use serde::{Deserialize, Serialize};
+
+/// Ridge used by Speedy OLS maps (CCM, RPCC, linear).
+pub const RIDGE_LAMBDA: f64 = 1e-5;
+
+/// CCP_rs sat-check working floor (`clamp(-0.2, 1.3)` before the 0–1 stretch).
+pub(crate) const RGB_CLIP_LO: f64 = -0.2;
+
+/// CCP_rs sat-check working ceiling (`clamp(-0.2, 1.3)` before the 0–1 stretch).
+pub(crate) const RGB_CLIP_HI: f64 = 1.3;
 
 const MIN_POLY_DEGREE: i32 = 1;
 const MAX_POLY_DEGREE: i32 = 7;
-const MAX_FEATURES: usize = 96;
+/// Degree-7 RGB polynomial with bias and combinations: C(7 + 3, 3) = 120 terms.
+const MAX_FEATURES: usize = 120;
 const MIN_CHANNEL: f64 = 1e-12;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,11 +109,11 @@ pub struct MappingOptions {
 }
 
 fn default_clip_lo() -> f64 {
-    crate::RGB_CLIP_LO
+    RGB_CLIP_LO
 }
 
 fn default_clip_hi() -> f64 {
-    crate::RGB_CLIP_HI
+    RGB_CLIP_HI
 }
 
 fn default_nn_optimizer() -> String {
@@ -110,7 +124,7 @@ impl Default for MappingOptions {
     fn default() -> Self {
         Self {
             extrapolate_saturated: true,
-            saturation_threshold: 0.99,
+            saturation_threshold: SATURATION_THRESHOLD,
             poly_degree: 2,
             include_combinations: true,
             pls_components: 0,
@@ -123,8 +137,54 @@ impl Default for MappingOptions {
             nn_patience: 1500,
             learning_rate: 0.001,
             tol: 1e-6,
-            clip_lo: crate::RGB_CLIP_LO,
-            clip_hi: crate::RGB_CLIP_HI,
+            clip_lo: RGB_CLIP_LO,
+            clip_hi: RGB_CLIP_HI,
+        }
+    }
+}
+
+impl MappingOptions {
+    /// CCP_rs `MlpParams::from_cc_regressor` (UI: hidden 100, 10000 iter, patience 15%).
+    pub(crate) fn mlp_params(&self) -> MlpParams {
+        let max_iter = self.nn_epochs.max(1) as usize;
+        let patience = if self.nn_patience > 0 {
+            self.nn_patience as usize
+        } else {
+            ((max_iter as f64) * 0.15).max(10.0) as usize
+        };
+        MlpParams {
+            hidden: self.hidden_size.max(1) as usize,
+            hidden_layers: if self.hidden_layers.is_empty() {
+                vec![self.hidden_size.max(1) as usize]
+            } else {
+                self.hidden_layers
+                    .iter()
+                    .take(4)
+                    .map(|&width| width.clamp(4, MAX_HIDDEN as i32) as usize)
+                    .collect()
+            },
+            optimizer: MlpOptimizer::parse(&self.nn_optimizer),
+            batch_normalization: self.nn_batch_norm,
+            dropout: self.nn_dropout.clamp(0.0, 0.8),
+            n_out: 3,
+            max_iter,
+            learning_rate: self.learning_rate,
+            tol: if self.tol.is_finite() && self.tol > 0.0 {
+                self.tol
+            } else {
+                1e-6
+            },
+            random_state: 42,
+            shuffle: false,
+            early_stopping: true,
+            validation_fraction: 0.15,
+            n_iter_no_change: patience.max(1),
+            alpha: 1e-4,
+            lr_decay_factor: 0.2,
+            max_lr_reductions: 0,
+            convergence_floor: 0.0,
+            use_numpy_rng: true,
+            residual_output: true,
         }
     }
 }
@@ -164,9 +224,9 @@ pub struct CorrectionModel {
     pub nn_batch_norm: bool,
     #[serde(default)]
     pub nn_dropout: f64,
-    /// New NN models predict a correction residual and therefore start from
-    /// an identity-safe baseline. Old serialized absolute-output models keep
-    /// their original behaviour through the serde default.
+    /// NN models predict a correction residual and therefore start from an
+    /// identity-safe baseline. Every Studio release writes `true`; absolute-
+    /// output networks from older tools are rejected by `validate`.
     #[serde(default)]
     pub nn_residual: bool,
     #[serde(default)]
@@ -234,13 +294,145 @@ impl Default for CorrectionModel {
     }
 }
 
+fn invalid_model(detail: impl std::fmt::Display) -> Error {
+    Error::InvalidModel(format!("invalid correction model: {detail}"))
+}
+
+fn check_len(name: &str, actual: usize, expected: usize) -> Result<()> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(invalid_model(format!(
+            "{name} has {actual} values, expected {expected}"
+        )))
+    }
+}
+
+fn check_finite<'a>(name: &str, values: impl IntoIterator<Item = &'a f64>) -> Result<()> {
+    if values.into_iter().all(|v| v.is_finite()) {
+        Ok(())
+    } else {
+        Err(invalid_model(format!("{name} contains non-finite values")))
+    }
+}
+
 impl CorrectionModel {
+    /// Check that every coefficient buffer matches the model's declared
+    /// shape so [`apply_model`] can never index out of bounds. Saved models
+    /// are untrusted input; call this before applying a deserialized model.
+    pub fn validate(&self) -> Result<()> {
+        if uses_polynomial_features(self.kind)
+            && !(MIN_POLY_DEGREE..=MAX_POLY_DEGREE).contains(&self.poly_degree)
+        {
+            return Err(invalid_model(format!(
+                "poly_degree {} is outside {MIN_POLY_DEGREE}..={MAX_POLY_DEGREE}",
+                self.poly_degree
+            )));
+        }
+        let mut scratch = [0.0; MAX_FEATURES];
+        let probe = [0.25, 0.25, 0.25];
+        let expected = write_features_for(
+            probe,
+            self.kind,
+            self.poly_degree,
+            self.include_combinations,
+            &mut scratch,
+        );
+        // Linear models historically also accept the bias-augmented basis.
+        let alternate = (self.kind == ModelKind::Linear).then(|| {
+            write_polynomial_features(
+                probe,
+                self.poly_degree,
+                true,
+                self.include_combinations,
+                &mut scratch,
+            )
+        });
+        let p = usize::try_from(self.feature_count).unwrap_or(usize::MAX);
+        if p != expected && Some(p) != alternate {
+            return Err(invalid_model(format!(
+                "feature_count {} does not match {} (expected {expected})",
+                self.feature_count,
+                self.kind.name()
+            )));
+        }
+        check_finite("intercept", &self.intercept)?;
+        check_finite("y_mean", &self.y_mean)?;
+        check_finite("y_std", &self.y_std)?;
+        match self.kind {
+            ModelKind::NeuralNet => self.validate_mlp(p),
+            ModelKind::Linear | ModelKind::Pls => {
+                check_len("coefficients", self.coefficients.len(), p * 3)?;
+                check_finite("coefficients", &self.coefficients)?;
+                if !self.x_mean.is_empty() || !self.x_std.is_empty() {
+                    check_len("x_mean", self.x_mean.len(), p)?;
+                    check_len("x_std", self.x_std.len(), p)?;
+                    check_finite("x_mean", &self.x_mean)?;
+                    check_finite("x_std", &self.x_std)?;
+                    if self.x_std.contains(&0.0) {
+                        return Err(invalid_model("x_std contains zero"));
+                    }
+                }
+                Ok(())
+            }
+            _ => {
+                check_len("coefficients", self.coefficients.len(), p * 3)?;
+                check_finite("coefficients", &self.coefficients)
+            }
+        }
+    }
+
+    fn validate_mlp(&self, p: usize) -> Result<()> {
+        let max = MAX_HIDDEN;
+        if p > max {
+            return Err(invalid_model(format!("NN input width {p} exceeds {max}")));
+        }
+        if self.layer_weights.is_empty() || !self.nn_residual {
+            return Err(invalid_model(
+                "this single-hidden-layer network was written by a release older than ColorCorrect Studio 0.1 and is no longer supported; fit a new calibration",
+            ));
+        }
+        if self.layer_weights.len() != self.layer_biases.len() {
+            return Err(invalid_model(
+                "layer_weights and layer_biases have different layer counts",
+            ));
+        }
+        let mut input = p;
+        for (layer, (weights, biases)) in self
+            .layer_weights
+            .iter()
+            .zip(&self.layer_biases)
+            .enumerate()
+        {
+            let output = biases.len();
+            if output == 0 || output > max {
+                return Err(invalid_model(format!(
+                    "NN layer {layer} width {output} is outside 1..={max}"
+                )));
+            }
+            check_len(
+                &format!("layer_weights[{layer}]"),
+                weights.len(),
+                input * output,
+            )?;
+            check_finite("layer_weights", weights)?;
+            check_finite("layer_biases", biases)?;
+            input = output;
+        }
+        if input != 3 {
+            return Err(invalid_model(format!(
+                "NN output layer has width {input}, expected 3"
+            )));
+        }
+        Ok(())
+    }
+
     pub fn apply_linear(&self, linear_rgb: Vec3) -> Result<Vec3> {
         apply_model(self, linear_rgb)
     }
 }
 
-pub fn write_polynomial_features(
+pub(crate) fn write_polynomial_features(
     rgb: Vec3,
     degree: i32,
     include_bias: bool,
@@ -280,7 +472,7 @@ pub fn write_polynomial_features(
     count
 }
 
-pub fn write_features_for(
+pub(crate) fn write_features_for(
     linear_rgb: Vec3,
     kind: ModelKind,
     poly_degree: i32,
@@ -337,7 +529,7 @@ pub fn write_features_for(
     }
 }
 
-pub fn features_for(
+pub(crate) fn features_for(
     linear_rgb: Vec3,
     kind: ModelKind,
     poly_degree: i32,
@@ -352,81 +544,6 @@ pub fn features_for(
         &mut scratch,
     );
     scratch[..n].to_vec()
-}
-
-pub fn solve_linear_system(mut matrix: Vec<f64>, mut rhs: Vec<f64>, n: usize) -> Result<Vec<f64>> {
-    for pivot in 0..n {
-        let mut best_row = pivot;
-        let mut best_value = matrix[pivot * n + pivot].abs();
-        for row in (pivot + 1)..n {
-            let value = matrix[row * n + pivot].abs();
-            if value > best_value {
-                best_value = value;
-                best_row = row;
-            }
-        }
-        if best_value < 1e-12 {
-            return Err(Error::Runtime(
-                "correction fit is singular; check chart samples".into(),
-            ));
-        }
-        if best_row != pivot {
-            for column in 0..n {
-                matrix.swap(pivot * n + column, best_row * n + column);
-            }
-            rhs.swap(pivot, best_row);
-        }
-        let divisor = matrix[pivot * n + pivot];
-        for column in pivot..n {
-            matrix[pivot * n + column] /= divisor;
-        }
-        rhs[pivot] /= divisor;
-        for row in 0..n {
-            if row == pivot {
-                continue;
-            }
-            let factor = matrix[row * n + pivot];
-            if factor == 0.0 {
-                continue;
-            }
-            for column in pivot..n {
-                matrix[row * n + column] -= factor * matrix[pivot * n + column];
-            }
-            rhs[row] -= factor * rhs[pivot];
-        }
-    }
-    Ok(rhs)
-}
-
-pub fn fit_least_squares(x: &[f64], y: &[f64], n: usize, p: usize, ridge: f64) -> Result<Vec<f64>> {
-    let mut xtx = vec![0.0; p * p];
-    let mut xty = vec![0.0; p * 3];
-    for row in 0..n {
-        for i in 0..p {
-            let xi = x[row * p + i];
-            for j in 0..p {
-                xtx[i * p + j] += xi * x[row * p + j];
-            }
-            for channel in 0..3 {
-                xty[i * 3 + channel] += xi * y[row * 3 + channel];
-            }
-        }
-    }
-    for i in 0..p {
-        xtx[i * p + i] += ridge;
-    }
-    let mut coefficients = vec![0.0; p * 3];
-    for channel in 0..3 {
-        let mut rhs = vec![0.0; p];
-        for i in 0..p {
-            rhs[i] = xty[i * 3 + channel];
-        }
-        let solution = solve_linear_system(xtx.clone(), rhs, p)?;
-        for i in 0..p {
-            coefficients[i * 3 + channel] = solution[i];
-        }
-    }
-    Ok(coefficients)
 }
 
 fn fit_least_squares_intercept(
@@ -444,6 +561,8 @@ fn fit_least_squares_intercept(
         }
         x_aug[row * p_aug + p] = 1.0;
     }
+    // The intercept column stays ridge-penalized: exempting it moved fitted
+    // outputs on the reference fixtures by 2.6e-5 (degree 1) to 0.26 (degree 2).
     let coeffs_aug = fit_least_squares(&x_aug, y, n, p_aug, ridge)?;
     let mut coefficients = vec![0.0; p * 3];
     for j in 0..p {
@@ -497,14 +616,14 @@ fn fit_pls_model(
     tol: f64,
     model: &mut CorrectionModel,
 ) -> Result<()> {
-    let k = crate::pls::auto_ncomp(n, p, ncomp);
+    let k = auto_ncomp(n, p, ncomp);
     model.pls_components = k as i32;
     let pls_tol = if tol.is_finite() && tol > 0.0 {
         tol
     } else {
-        crate::pls::PLS_TOL
+        PLS_TOL
     };
-    let (coefficients, intercept) = crate::pls::fit_pls(&x, &y, n, p, 3, k, pls_tol)?;
+    let (coefficients, intercept) = fit_pls(&x, &y, n, p, 3, k, pls_tol)?;
     pack_pls_into_model(coefficients, intercept, p, model);
     Ok(())
 }
@@ -517,7 +636,7 @@ fn fit_nn_model(
     mapping: &MappingOptions,
     model: &mut CorrectionModel,
 ) {
-    let params = crate::mlp::MlpParams::from_cc(mapping);
+    let params = mapping.mlp_params();
     let residual_targets: Vec<f64> = (0..n)
         .flat_map(|row| {
             (0..3).map({
@@ -526,7 +645,7 @@ fn fit_nn_model(
             })
         })
         .collect();
-    let fitted = crate::mlp::fit_mlp(&x, &residual_targets, n, p, &params);
+    let fitted = fit_mlp(&x, &residual_targets, n, p, &params);
     model.hidden_size = fitted.hidden as i32;
     model.hidden_layers = fitted
         .hidden_layers
@@ -575,62 +694,38 @@ fn apply_linear_map(model: &CorrectionModel, features: &[f64]) -> Vec3 {
 }
 
 fn apply_mlp(model: &CorrectionModel, features: &[f64]) -> Vec3 {
-    if !model.layer_weights.is_empty() && model.layer_weights.len() == model.layer_biases.len() {
-        let mut a = [0.0; crate::mlp::MAX_HIDDEN];
-        let mut b = [0.0; crate::mlp::MAX_HIDDEN];
-        let mut input_width = features.len();
-        a[..input_width].copy_from_slice(features);
-        let last = model.layer_weights.len() - 1;
-        for layer in 0..model.layer_weights.len() {
-            let output_width = model.layer_biases[layer].len();
-            if output_width > crate::mlp::MAX_HIDDEN
-                || model.layer_weights[layer].len() != input_width * output_width
-            {
-                return [f64::NAN; 3];
-            }
-            for out in 0..output_width {
-                let mut value = model.layer_biases[layer][out];
-                for input in 0..input_width {
-                    value += a[input] * model.layer_weights[layer][input * output_width + out];
-                }
-                b[out] = if layer == last { value } else { value.max(0.0) };
-            }
-            a[..output_width].copy_from_slice(&b[..output_width]);
-            input_width = output_width;
-        }
-        if input_width == 3 {
-            return [a[0], a[1], a[2]];
-        }
+    if model.layer_weights.is_empty() || model.layer_weights.len() != model.layer_biases.len() {
         return [f64::NAN; 3];
     }
-
-    let hidden = model.hidden_size.max(1) as usize;
-    let p = model.feature_count as usize;
-    let mut act = [0.0; crate::mlp::MAX_HIDDEN];
-    let h = hidden.min(crate::mlp::MAX_HIDDEN);
-    act[..h].copy_from_slice(&model.b1[..h]);
-    for j in 0..p {
-        let xj = features[j];
-        let row = j * hidden;
-        for hh in 0..h {
-            act[hh] += xj * model.w1[row + hh];
+    let mut a = [0.0; MAX_HIDDEN];
+    let mut b = [0.0; MAX_HIDDEN];
+    let mut input_width = features.len();
+    a[..input_width].copy_from_slice(features);
+    let last = model.layer_weights.len() - 1;
+    for layer in 0..model.layer_weights.len() {
+        let output_width = model.layer_biases[layer].len();
+        if output_width > MAX_HIDDEN
+            || model.layer_weights[layer].len() != input_width * output_width
+        {
+            return [f64::NAN; 3];
         }
-    }
-    for hh in 0..h {
-        act[hh] = act[hh].max(0.0);
-    }
-    let mut output = [0.0; 3];
-    for channel in 0..3 {
-        let mut y = model.b2[channel];
-        for hh in 0..h {
-            y += act[hh] * model.w2[hh * 3 + channel];
+        for out in 0..output_width {
+            let mut value = model.layer_biases[layer][out];
+            for input in 0..input_width {
+                value += a[input] * model.layer_weights[layer][input * output_width + out];
+            }
+            b[out] = if layer == last { value } else { value.max(0.0) };
         }
-        output[channel] = y;
+        a[..output_width].copy_from_slice(&b[..output_width]);
+        input_width = output_width;
     }
-    output
+    if input_width == 3 {
+        return [a[0], a[1], a[2]];
+    }
+    [f64::NAN; 3]
 }
 
-pub fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
+pub(crate) fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
     let mut features = [0.0; MAX_FEATURES];
     let mut n = write_features_for(
         linear_rgb,
@@ -676,7 +771,7 @@ pub fn apply_model(model: &CorrectionModel, linear_rgb: Vec3) -> Result<Vec3> {
     })
 }
 
-pub fn collect_xy(
+pub(crate) fn collect_xy(
     patches: &[ChartPatch],
     kind: ModelKind,
     poly_degree: i32,
@@ -684,10 +779,9 @@ pub fn collect_xy(
     settings: &CorrectionSettings,
 ) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
     let p = features_for([0.25, 0.25, 0.25], kind, poly_degree, include_combinations).len();
-    let n = patches.len();
-    let mut x = vec![0.0; n * p];
-    let mut y = vec![0.0; n * 3];
-    for (row, patch) in patches.iter().enumerate() {
+    let mut x = Vec::with_capacity(patches.len() * p);
+    let mut y = Vec::with_capacity(patches.len() * 3);
+    for patch in patches {
         let measured = encoded_to_linear_rgb(patch.measured_srgb, &settings.input_space);
         let reference = lab_d50_to_target_linear(
             patch.reference_lab_d50,
@@ -695,12 +789,25 @@ pub fn collect_xy(
             &settings.target_white,
         )?;
         let feats = features_for(measured, kind, poly_degree, include_combinations);
-        for j in 0..p {
-            x[row * p + j] = feats[j];
+        // A non-finite sample would poison every coefficient (or, through the
+        // feature clamp, silently read as black); leave it out.
+        let values = patch
+            .measured_srgb
+            .iter()
+            .chain(&measured)
+            .chain(&reference);
+        if !values.chain(&feats).all(|v| v.is_finite()) {
+            continue;
         }
-        for channel in 0..3 {
-            y[row * 3 + channel] = reference[channel];
-        }
+        x.extend_from_slice(&feats[..p]);
+        y.extend_from_slice(&reference);
+    }
+    let n = y.len() / 3;
+    if n == 0 {
+        return Err(Error::InvalidArgument(
+            "cannot fit correction model: no chart patch has finite measured and reference values"
+                .into(),
+        ));
     }
     Ok((x, y, n, p))
 }
@@ -774,6 +881,8 @@ pub fn fit_correction_model(
         }
     }
     let _ = MIN_CHANNEL;
+    // PLS and NN fits do not go through the solver; check every family.
+    model.validate()?;
     Ok(model)
 }
 
@@ -797,6 +906,7 @@ pub fn build_encoded_lut(
     settings: &CorrectionSettings,
     size: usize,
 ) -> Result<Vec<f32>> {
+    model.validate()?;
     let gs = size.max(2);
     let mut lut = vec![0f32; gs * gs * gs * 3];
     let denom = (gs - 1) as f64;
@@ -932,6 +1042,135 @@ mod tests {
         assert!(model.x_mean.is_empty());
         let y = apply_model(&model, [0.4, 0.3, 0.2]).unwrap();
         assert!(y.iter().all(|v| v.is_finite()));
+    }
+
+    fn fitted(kind: ModelKind, degree: i32) -> CorrectionModel {
+        let settings = CorrectionSettings::srgb_d65().unwrap();
+        let mapping = MappingOptions {
+            poly_degree: degree,
+            hidden_size: 8,
+            hidden_layers: vec![8],
+            nn_epochs: 40,
+            nn_patience: 10,
+            ..MappingOptions::default()
+        };
+        fit_correction_model(&classic_ish_patches(), kind, &settings, 0.0, &mapping).unwrap()
+    }
+
+    #[test]
+    fn non_finite_samples_are_dropped_before_fitting() {
+        let settings = CorrectionSettings::srgb_d65().unwrap();
+        let mut patches = classic_ish_patches();
+        let clean = fit_correction_model(
+            &patches,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default(),
+        )
+        .unwrap();
+        let mut bad = patches[0].clone();
+        bad.measured_srgb = [f64::NAN, 0.2, 0.3];
+        patches.push(bad);
+        let mut infinite = patches[1].clone();
+        infinite.reference_lab_d50.l = f64::INFINITY;
+        patches.push(infinite);
+        let (_, _, n, _) =
+            collect_xy(&patches, ModelKind::RootPolynomial2, 2, true, &settings).unwrap();
+        assert_eq!(n, patches.len() - 2);
+        let model = fit_correction_model(
+            &patches,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(model.coefficients, clean.coefficients);
+        let all_bad = vec![patches[patches.len() - 2].clone()];
+        assert!(fit_correction_model(
+            &all_bad,
+            ModelKind::RootPolynomial2,
+            &settings,
+            0.0,
+            &MappingOptions::default()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn degree_seven_polynomial_models_fit_and_apply_without_panicking() {
+        for kind in [ModelKind::Linear, ModelKind::Pls, ModelKind::NeuralNet] {
+            let model = fitted(kind, 7);
+            assert_eq!(model.poly_degree, 7);
+            model.validate().unwrap();
+            let y = apply_model(&model, [0.4, 0.3, 0.2]).unwrap();
+            assert!(y.iter().all(|v| v.is_finite()), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn validate_accepts_fitted_models_and_rejects_crafted_ones() {
+        for kind in [
+            ModelKind::Ccm3x3,
+            ModelKind::RootPolynomial2,
+            ModelKind::RootPolynomial3,
+            ModelKind::Linear,
+            ModelKind::Pls,
+            ModelKind::NeuralNet,
+        ] {
+            let model = fitted(kind, 2);
+            model.validate().unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+
+            let mut short = model.clone();
+            if kind == ModelKind::NeuralNet {
+                short.layer_weights[0].pop();
+            } else {
+                short.coefficients.pop();
+            }
+            assert!(short.validate().is_err(), "{kind:?} truncated");
+
+            let mut count = model.clone();
+            count.feature_count += 1;
+            assert!(count.validate().is_err(), "{kind:?} feature_count");
+
+            let mut huge = model.clone();
+            huge.feature_count = 10_000;
+            assert!(huge.validate().is_err(), "{kind:?} huge feature_count");
+
+            let mut nan = model.clone();
+            nan.intercept[0] = f64::NAN;
+            if kind == ModelKind::NeuralNet {
+                nan.layer_biases[0][0] = f64::INFINITY;
+            } else {
+                nan.coefficients[0] = f64::INFINITY;
+            }
+            assert!(nan.validate().is_err(), "{kind:?} non-finite");
+        }
+
+        let mut standardized = fitted(ModelKind::Linear, 2);
+        standardized.x_mean = vec![0.0; 2];
+        standardized.x_std = vec![1.0; 2];
+        assert!(standardized.validate().is_err(), "short standardization");
+
+        let mut legacy = CorrectionModel {
+            kind: ModelKind::NeuralNet,
+            poly_degree: 1,
+            feature_count: 4,
+            hidden_size: 4,
+            w1: vec![0.2; 16],
+            b1: vec![0.0; 4],
+            w2: vec![0.1; 12],
+            b2: vec![0.0; 3],
+            ..CorrectionModel::default()
+        };
+        let error = legacy.validate().expect_err("pre-Studio single-layer NN");
+        assert!(
+            error.to_string().contains("fit a new calibration"),
+            "{error}"
+        );
+        legacy.nn_residual = true;
+        assert!(legacy.validate().is_err(), "w1..b2 alone are not applied");
     }
 
     #[test]

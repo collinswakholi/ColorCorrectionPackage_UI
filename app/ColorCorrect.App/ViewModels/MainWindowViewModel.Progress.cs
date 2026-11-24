@@ -30,7 +30,7 @@ public partial class MainWindowViewModel
         var generation = _batchProgressGeneration;
         Dispatcher.UIThread.Post(() =>
         {
-            if (IsBatching && generation != _batchProgressGeneration) return;
+            if (Job.IsBatching && generation != _batchProgressGeneration) return;
             ApplyEngineProgress(message);
         });
     }
@@ -67,10 +67,10 @@ public partial class MainWindowViewModel
             AddStep("write", "Save result", true);
         }
 
-        ShowPipeline = PipelineSteps.Count > 0;
-        ShowJobProgress = true;
-        JobProgress = 6;
-        CurrentStage = mode switch
+        Job.ShowPipeline = PipelineSteps.Count > 0;
+        Job.ShowJobProgress = true;
+        Job.JobProgress = 6;
+        Job.CurrentStage = mode switch
         {
             "detect" => "Detect",
             "apply" => "Apply model",
@@ -85,29 +85,29 @@ public partial class MainWindowViewModel
             step.IsActive = false;
         }
 
-        ShowJobProgress = IsBatching || IsSaving;
-        if (!IsBatching && !IsSaving)
+        Job.ShowJobProgress = Job.IsBatching || Output.IsSaving;
+        if (!Job.IsBatching && !Output.IsSaving)
         {
-            JobProgress = 0;
-            CurrentStage = "";
+            Job.JobProgress = 0;
+            Job.CurrentStage = "";
             RefreshIdlePipeline();
         }
     }
 
     private void RefreshIdlePipeline()
     {
-        if (Busy || IsBatching || IsSaving)
+        if (Job.Busy || Job.IsBatching || Output.IsSaving)
         {
             return;
         }
 
         PipelineSteps.Clear();
-        AddStep("ffc", "FFC", DoFfc);
-        AddStep("sat", "SAT", !SkipSaturated);
-        AddStep("gc", "GC", DoGc);
-        AddStep("wb", "WB", DoWb);
-        AddStep("cc", CcChipLabel(), DoCc);
-        ShowPipeline = true;
+        AddStep("ffc", "FFC", Settings.DoFfc);
+        AddStep("sat", "SAT", !Settings.SkipSaturated);
+        AddStep("gc", "GC", Settings.DoGc);
+        AddStep("wb", "WB", Settings.DoWb);
+        AddStep("cc", CcChipLabel(), Settings.DoCc);
+        Job.ShowPipeline = true;
     }
 
     private void AddStep(string key, string label, bool enabled) =>
@@ -132,23 +132,23 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (!Busy && !IsSaving && !IsBatching)
+        if (!Job.Busy && !Output.IsSaving && !Job.IsBatching)
         {
             return;
         }
 
         var key = ClassifyProgress(message);
         var completed = message.TrimEnd().EndsWith(" complete", StringComparison.OrdinalIgnoreCase);
-        CurrentStage = FormatStage(message);
+        Job.CurrentStage = FormatStage(message);
         if (key == "combined" && !completed)
             _combinedProgressKeys = new[] { "gc", "wb", "cc" }.Where(stage => message.Contains(stage, StringComparison.OrdinalIgnoreCase)).ToArray();
         MarkPipeline(key, skipped: message.Contains("skipped", StringComparison.OrdinalIgnoreCase), completed: completed);
-        JobProgress = Math.Max(JobProgress, EstimateProgress(key, completed));
-        if (IsBatching) UpdateBatchStageProgress();
-        if (Busy && !IsSaving)
+        Job.JobProgress = Math.Max(Job.JobProgress, EstimateProgress(key, completed));
+        if (Job.IsBatching) UpdateBatchStageProgress();
+        if (Job.Busy && !Output.IsSaving)
         {
-            var name = IsBatching ? BatchLabel : Active?.Name;
-            Status = string.IsNullOrWhiteSpace(name) ? CurrentStage : $"{CurrentStage} · {name}";
+            var name = Job.IsBatching ? Job.BatchLabel : Workspace.Active?.Name;
+            Job.Status = string.IsNullOrWhiteSpace(name) ? Job.CurrentStage : $"{Job.CurrentStage} · {name}";
         }
     }
 
@@ -175,7 +175,7 @@ public partial class MainWindowViewModel
         var m = message.Trim();
         if (m.StartsWith("Combined LUT", StringComparison.OrdinalIgnoreCase)) return m.Replace("Combined LUT", "Color correction", StringComparison.OrdinalIgnoreCase);
         if (m.StartsWith("Saturation", StringComparison.OrdinalIgnoreCase)) return "SAT";
-        if (m.Equals("CC", StringComparison.OrdinalIgnoreCase)) return IsBatching ? "CC" : CcChipLabel();
+        if (m.Equals("CC", StringComparison.OrdinalIgnoreCase)) return Job.IsBatching ? "CC" : CcChipLabel();
         if (m.StartsWith("Writing", StringComparison.OrdinalIgnoreCase)) return "Writing";
         if (m.StartsWith("Loading", StringComparison.OrdinalIgnoreCase)) return "Load";
         if (m.StartsWith("Detecting", StringComparison.OrdinalIgnoreCase)) return "Detect";
@@ -218,7 +218,7 @@ public partial class MainWindowViewModel
         var enabled = PipelineSteps.Where(s => s.IsEnabled).Select(s => s.Key).ToList();
         if (enabled.Count == 0)
         {
-            return Math.Max(JobProgress, 8);
+            return Math.Max(Job.JobProgress, 8);
         }
 
         var idx = key == "combined"
@@ -226,14 +226,14 @@ public partial class MainWindowViewModel
             : enabled.IndexOf(key);
         if (idx < 0)
         {
-            return Math.Max(JobProgress, 10);
+            return Math.Max(Job.JobProgress, 10);
         }
 
         var end = key == "combined" ? enabled.FindLastIndex(stage => _combinedProgressKeys.Contains(stage)) + 1 : idx + 1;
         return Math.Clamp(8 + (completed ? end : idx + 0.15) * 88.0 / enabled.Count, 8, 96);
     }
 
-    private bool CanEditSession() => !Busy && !IsSaving;
+    private bool CanEditSession() => !Job.Busy && !Output.IsSaving;
 
     [RelayCommand(CanExecute = nameof(CanEditSession))]
     private async Task SaveSessionAsAsync()
@@ -250,22 +250,22 @@ public partial class MainWindowViewModel
         }
 
         var state = BuildSessionState(includeItems: true);
-        IsSaving = true;
-        Status = "Saving session…";
+        Output.IsSaving = true;
+        Job.Status = "Saving session…";
         bool saved;
         try { saved = await Task.Run(() => SessionStore.Write(path, state)); }
-        finally { IsSaving = false; }
+        finally { Output.IsSaving = false; }
         if (!saved)
         {
-            Status = "Session could not be saved. Check folder permissions and free space.";
-            Log("Session", Status, LogLevel.Error, [path]);
-            ToastService.ShowWarning(Status);
+            Job.Status = "Session could not be saved. Check folder permissions and free space.";
+            Log("Session", Job.Status, LogLevel.Error, [path]);
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
-        Status = $"Session saved · {Path.GetFileName(path)}";
-        Log("Session", Status, LogLevel.Success);
-        ToastService.ShowSuccess(Status);
+        Job.Status = $"Session saved · {Path.GetFileName(path)}";
+        Log("Session", Job.Status, LogLevel.Success);
+        ToastService.ShowSuccess(Job.Status);
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSession))]
@@ -293,25 +293,25 @@ public partial class MainWindowViewModel
             }
         }
 
-        IsSaving = true;
-        Status = "Loading session…";
+        Output.IsSaving = true;
+        Job.Status = "Loading session…";
         SessionState state;
         string? error;
         try { (state, error) = await Task.Run(() => SessionStore.TryLoadFrom(path)); }
-        finally { IsSaving = false; }
+        finally { Output.IsSaving = false; }
         if (!string.IsNullOrWhiteSpace(error))
         {
-            Status = "Could not load session.";
+            Job.Status = "Could not load session.";
             Log("Session", error, LogLevel.Error);
-            ToastService.ShowWarning(Status);
+            ToastService.ShowWarning(Job.Status);
             return;
         }
 
         RestoreWorkingItems(state);
         var missing = Session.Count(item => item.IsMissing);
-        Status = $"Session loaded · {Session.Count} image(s)" + (missing > 0 ? $" · {missing} unavailable — select an item and Relink image" : "");
-        Log("Session", Status, LogLevel.Success);
-        ToastService.ShowSuccess(Status);
+        Job.Status = $"Session loaded · {Session.Count} image(s)" + (missing > 0 ? $" · {missing} unavailable — select an item and Relink image" : "");
+        Log("Session", Job.Status, LogLevel.Success);
+        ToastService.ShowSuccess(Job.Status);
     }
 
     internal void ClearTransientCache()

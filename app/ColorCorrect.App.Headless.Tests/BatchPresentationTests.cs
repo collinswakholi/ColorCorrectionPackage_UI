@@ -22,8 +22,8 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Busy = true, IsBatching = true, IsLightTheme = light,
-                DoFfc = true, DoGc = true, DoWb = true, DoCc = true,
+                Job = { Busy = true, IsBatching = true }, Layout = { IsLightTheme = light },
+                Settings = { DoFfc = true, DoGc = true, DoWb = true, DoCc = true },
             };
             var window = new MainWindow { Width = 1000, Height = 640, DataContext = vm };
             window.Show();
@@ -87,7 +87,7 @@ public sealed class BatchPresentationTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                Busy = false, IsLightTheme = light, DoFfc = true,
+                Job = { Busy = false }, Layout = { IsLightTheme = light }, Settings = { DoFfc = true },
             };
             for (var i = 0; i < 4; i++)
                 vm.Session.Add(new SessionItemViewModel($"batch-{i + 1}.jpg")
@@ -97,7 +97,7 @@ public sealed class BatchPresentationTests
                 });
             // Direct collection setup bypasses AddPaths' normal UI refresh.
             vm.PrepareSaveMenu();
-            Assert.True(vm.HasSession);
+            Assert.True(vm.Workspace.HasSession);
             Assert.All(vm.Session, item => Assert.True(item.HasProcessingProgress));
             var window = new MainWindow { Width = 1000, Height = 640, DataContext = vm };
             window.Show();
@@ -116,15 +116,15 @@ public sealed class BatchPresentationTests
                 choice.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Space });
                 choice.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyUpEvent, Key = Key.Space });
                 Dispatcher.UIThread.RunJobs();
-                Assert.False(vm.BatchPreviewResults);
+                Assert.False(vm.Output.BatchPreviewResults);
                 Assert.True(window.BatchMenuScroll.Bounds.Width <= window.ClientSize.Width);
                 Assert.True(window.BatchMenuScroll.Bounds.Height <= window.ClientSize.Height - 48);
                 window.BatchMenu.IsOpen = false;
 
-                vm.Busy = true;
-                vm.IsBatching = true;
-                vm.ShowBatchProgress = true;
-                vm.BatchCurrentImageLabel = "Image 80 of 80 · " + new string('W', 180) + ".jpg";
+                vm.Job.Busy = true;
+                vm.Job.IsBatching = true;
+                vm.Job.ShowBatchProgress = true;
+                vm.Job.BatchCurrentImageLabel = "Image 80 of 80 · " + new string('W', 180) + ".jpg";
                 typeof(MainWindowViewModel).GetMethod("BeginPipeline", BindingFlags.NonPublic | BindingFlags.Instance)!
                     .Invoke(vm, ["apply"]);
                 Dispatcher.UIThread.RunJobs();

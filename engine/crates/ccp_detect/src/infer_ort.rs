@@ -5,13 +5,13 @@ use std::sync::Mutex;
 
 use crate::assemble::assemble_charts;
 use crate::decode::{decode_obb, dets_from_raw, letterbox_rgb, preds_to_obb_rows};
+use crate::detection::{DetectResult, DetectSettings};
 use crate::geom::{
     cli_chart_from_detector, format_quad, DECODE_IOU, DEFAULT_CONF, DEFAULT_CROP, DEFAULT_MAX_DET,
     PRIMARY_SIZE, RECALL_SIZE,
 };
 use crate::handshake::{make_handshake, warmup_json};
 use crate::paths::{default_deploy_dir, primary_onnx_path, recall_onnx_path};
-use crate::{DetectResult, DetectSettings};
 
 use crate::gpu_inference::{CachedInference, ExecutionRecord, InferenceSession};
 
@@ -19,18 +19,33 @@ static DETECT_PRIMARY: Mutex<Option<CachedInference>> = Mutex::new(None);
 static DETECT_RECALL: Mutex<Option<CachedInference>> = Mutex::new(None);
 
 pub fn inference_records(include_recall: bool) -> serde_json::Value {
-    let detect=last_record(false);
-    let recall=if include_recall {last_record(true)} else {None};
+    let detect = last_record(false);
+    let recall = if include_recall {
+        last_record(true)
+    } else {
+        None
+    };
     serde_json::json!({"detect":detect,"recall":recall})
 }
 fn last_record(recall: bool) -> Option<ExecutionRecord> {
-    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
-    cache.lock().ok().and_then(|c|c.as_ref().map(|active|active.record.clone()))
+    let cache = if recall {
+        &DETECT_RECALL
+    } else {
+        &DETECT_PRIMARY
+    };
+    cache
+        .lock()
+        .ok()
+        .and_then(|c| c.as_ref().map(|active| active.record.clone()))
 }
 
 pub(crate) fn clear_sessions() {
-    if let Ok(mut cache) = DETECT_PRIMARY.lock() { *cache = None; }
-    if let Ok(mut cache) = DETECT_RECALL.lock() { *cache = None; }
+    if let Ok(mut cache) = DETECT_PRIMARY.lock() {
+        *cache = None;
+    }
+    if let Ok(mut cache) = DETECT_RECALL.lock() {
+        *cache = None;
+    }
 }
 
 pub fn last_detect_ep() -> Option<String> {
@@ -50,11 +65,16 @@ fn last_detect_ep_for(recall: bool) -> Option<String> {
 }
 
 fn with_detect_session<F, T>(model_path: &Path, recall: bool, f: F) -> Result<T, String>
-where F: FnMut(&mut InferenceSession, &str) -> Result<T, String>,
+where
+    F: FnMut(&mut InferenceSession, &str) -> Result<T, String>,
 {
-    let cache=if recall {&DETECT_RECALL} else {&DETECT_PRIMARY};
-    let mut guard=cache.lock().map_err(|e|e.to_string())?;
-    crate::gpu_inference::execute(&mut guard,model_path,f)
+    let cache = if recall {
+        &DETECT_RECALL
+    } else {
+        &DETECT_PRIMARY
+    };
+    let mut guard = cache.lock().map_err(|e| e.to_string())?;
+    crate::gpu_inference::execute(&mut guard, model_path, f)
 }
 
 fn letterbox_to_nchw(canvas: &[u8], imgsz: i32) -> Vec<f32> {
@@ -91,7 +111,7 @@ fn run_detect_forward(
         validate_output(&dims, &data)?;
         let rows = preds_to_obb_rows(&data, &dims.iter().map(|&d| d as usize).collect::<Vec<_>>());
         let raw = decode_obb(&rows, conf, iou, max_det.max(1) as usize);
-        Ok(dets_from_raw(&raw, imgsz, lb.gain, lb.pad_x, lb.pad_y))
+        Ok(dets_from_raw(&raw, lb.gain, lb.pad_x, lb.pad_y))
     })
 }
 
@@ -119,9 +139,23 @@ fn resolve_deploy(settings: &DetectSettings) -> PathBuf {
     }
 }
 
-fn load_rgb_f32(path: &Path) -> Result<(Vec<f32>, i32, i32), String> {
-    let img = ccp_core::sample::load_image(path).map_err(|e| e.to_string())?;
+/// Decode through the shared `ccp_core` loader so detection honours the same
+/// pixel cap (`CCP_MAX_IMAGE_MEGAPIXELS`) as every other engine command.
+fn load_rgb_f32(path: &Path, max_pixels: u64) -> Result<(Vec<f32>, i32, i32), ccp_core::Error> {
+    let img = ccp_core::sample::load_image_with_limit(path, true, max_pixels)?;
     Ok((img.rgb, img.width as i32, img.height as i32))
+}
+
+/// Protocol-3 code for a failed input decode; mirrors the bridge's
+/// `classify_image_load` (which `ccp_detect` cannot depend on).
+fn image_load_code(err: &ccp_core::Error) -> &'static str {
+    use ccp_core::Error as Core;
+    use image::ImageError;
+    match err {
+        Core::ImageTooLarge { .. } | Core::Image(ImageError::Limits(_)) => "image_too_large",
+        Core::Io(_) | Core::Image(ImageError::IoError(_)) => "io_error",
+        _ => "image_decode_failed",
+    }
 }
 
 fn is_oom(err: &str) -> bool {
@@ -140,45 +174,59 @@ pub fn warmup_detector_ort(_settings: &DetectSettings) -> DetectResult {
     let primary = primary_onnx_path(&deploy);
     if !primary.is_file() {
         result.error = format!("missing {}", primary.display());
+        result.error_code = "inference_failed".into();
         return result;
     }
     let imgsz = PRIMARY_SIZE;
     let chw = vec![0.0f32; (3 * imgsz * imgsz) as usize];
     match with_detect_session(&primary, false, |session, ep| {
-            let (dims,data)=session.forward(chw.clone(),imgsz as usize)?;
-            validate_output(&dims,&data)?;
-            Ok(ep.to_string())
-        }) {
-            Ok(ep) => {
-                result.ok = true;
-                result.device = ep;
-                if result.device.contains(":wgpu:") { result.runtime="burn-wgpu".into(); }
-                result.json = warmup_json(&result.device);
-                result.inference = inference_records(false);
-                result
+        let (dims, data) = session.forward(chw.clone(), imgsz as usize)?;
+        validate_output(&dims, &data)?;
+        Ok(ep.to_string())
+    }) {
+        Ok(ep) => {
+            result.ok = true;
+            result.device = ep;
+            if result.device.contains(":wgpu:") {
+                result.runtime = "burn-wgpu".into();
             }
-            Err(err) if is_oom(&err) => {
-                result.error = format!("failed: oom_on_warmup ({err})");
-                result
-            }
-            Err(err) => {
-                result.error = err;
-                result
-            }
+            result.json = warmup_json(&result.device);
+            result.inference = inference_records(false);
+            result
+        }
+        Err(err) if is_oom(&err) => {
+            result.error = format!("failed: oom_on_warmup ({err})");
+            result.error_code = "inference_failed".into();
+            result
+        }
+        Err(err) => {
+            result.error = err;
+            result.error_code = "inference_failed".into();
+            result
+        }
     }
 }
 
 pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectResult {
+    detect_chart_ort_with_limit(image_path, settings, ccp_core::sample::max_image_pixels())
+}
+
+fn detect_chart_ort_with_limit(
+    image_path: &Path,
+    settings: &DetectSettings,
+    max_pixels: u64,
+) -> DetectResult {
     let mut result = DetectResult {
         backend: "onnx".into(),
         runtime: "ort".into(),
         recall_source: "none".into(),
         ..DetectResult::default()
     };
-    let (rgb, width, height) = match load_rgb_f32(image_path) {
+    let (rgb, width, height) = match load_rgb_f32(image_path, max_pixels) {
         Ok(v) => v,
         Err(err) => {
-            result.error = err;
+            result.error_code = image_load_code(&err).into();
+            result.error = err.to_string();
             return result;
         }
     };
@@ -186,6 +234,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     let primary = primary_onnx_path(&deploy);
     if !primary.is_file() {
         result.error = format!("missing {}", primary.display());
+        result.error_code = "inference_failed".into();
         return result;
     }
     let conf = if settings.conf > 0.0 {
@@ -223,11 +272,14 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
         Ok(d) => d,
         Err(err) => {
             result.error = err;
+            result.error_code = "inference_failed".into();
             return result;
         }
     };
     result.device = last_detect_ep_for(false).unwrap_or_else(|| "unknown".into());
-    if result.device.contains(":wgpu:") { result.runtime="burn-wgpu".into(); }
+    if result.device.contains(":wgpu:") {
+        result.runtime = "burn-wgpu".into();
+    }
     result.recall_source = "primary".into();
     let mut charts = assemble_charts(&dets, &settings.prefer, crop, width, height);
     if charts.is_empty() && settings.allow_recall {
@@ -254,7 +306,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
                     result.recall_source = "recall_1536".into();
                     charts = assemble_charts(&dets, &settings.prefer, crop, width, height);
                 }
-                Err(err) => return failed_recall(result,err),
+                Err(err) => return failed_recall(result, err),
             }
         }
     }
@@ -262,6 +314,7 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     result.n_dets = dets.len() as i32;
     if charts.is_empty() {
         result.error = "no lattice".into();
+        result.error_code = "no_chart_detected".into();
         result.n_charts = 0;
         return result;
     }
@@ -275,7 +328,10 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
     result.inference = inference_records(result.recall_source == "recall_1536");
     match make_handshake(&result, &charts, crop, image_path) {
         Ok(json) => result.json = json,
-        Err(err) => result.error = err.to_string(),
+        Err(err) => {
+            result.error = err.to_string();
+            result.error_code = "processing_failed".into();
+        }
     }
     result
 }
@@ -283,24 +339,63 @@ pub fn detect_chart_ort(image_path: &Path, settings: &DetectSettings) -> DetectR
 /// Recall only runs after primary produced no usable chart. An unavailable
 /// recall engine is not evidence that the photograph contains no chart.
 fn failed_recall(mut result: DetectResult, reason: String) -> DetectResult {
-    result.ok=false;
+    result.ok = false;
     result.error=format!("Recall chart detection failed: {reason}. Check setup, choose Auto or CPU, and retry detection.");
-    result.recall_source="failed".into();
-    result.inference=inference_records(false);
-    result.inference["recall_error"]=serde_json::json!(reason);
+    result.recall_source = "failed".into();
+    result.error_code = "inference_failed".into();
+    result.inference = inference_records(false);
+    result.inference["recall_error"] = serde_json::json!(reason);
     result
+}
+
+#[cfg(test)]
+mod image_limit_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_detect_input_reports_image_too_large_before_inference() {
+        let dir = std::env::temp_dir().join(format!("ccp-detect-cap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.png");
+        image::RgbImage::from_pixel(8, 8, image::Rgb([128, 128, 128]))
+            .save(&path)
+            .unwrap();
+        let settings = DetectSettings {
+            deploy_dir: dir.join("no-models-here"),
+            ..DetectSettings::default()
+        };
+        let result = detect_chart_ort_with_limit(&path, &settings, 63);
+        assert!(!result.ok);
+        assert_eq!(result.error_code, "image_too_large", "{}", result.error);
+        assert!(
+            result.error.contains("CCP_MAX_IMAGE_MEGAPIXELS"),
+            "{}",
+            result.error
+        );
+
+        // At the cap the image decodes and detection proceeds to the model check.
+        let result = detect_chart_ort_with_limit(&path, &settings, 64);
+        assert_eq!(result.error_code, "inference_failed", "{}", result.error);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]
 mod recall_failure_tests {
     #[test]
     fn failed_recall_is_not_reported_as_a_no_chart_result() {
-        let result=super::failed_recall(crate::DetectResult::default(),"CPU execution failed after GPU was unavailable".into());
+        let result = super::failed_recall(
+            crate::detection::DetectResult::default(),
+            "CPU execution failed after GPU was unavailable".into(),
+        );
         assert!(!result.ok);
         assert!(result.error.contains("Recall chart detection failed"));
         assert!(result.error.contains("CPU execution failed"));
-        assert_ne!(result.error,"no lattice");
-        assert_eq!(result.recall_source,"failed");
-        assert_eq!(result.inference["recall_error"],"CPU execution failed after GPU was unavailable");
+        assert_ne!(result.error, "no lattice");
+        assert_eq!(result.recall_source, "failed");
+        assert_eq!(
+            result.inference["recall_error"],
+            "CPU execution failed after GPU was unavailable"
+        );
     }
 }

@@ -1,10 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace ColorCorrect.Engine;
 
 public sealed class CorrectionOptions
 {
-    /// Use CPU for LUT application without changing the GPU inference provider.
-    public bool CpuLut { get; set; }
-    /// Image-correction device; chart/plane detection has its own GPU provider.
+    /// Image-correction device (auto, cpu or gpu); chart/plane detection has its own
+    /// provider. "cpu" applies the LUT on the CPU without changing inference.
     public string LutDevice { get; set; } = "auto";
     public bool FastMode { get; set; } = true;
     public bool BatchPreviewResults { get; set; } = true;
@@ -22,8 +23,9 @@ public sealed class CorrectionOptions
     public string OutputFormat { get; set; } = "jpg";
     public string OutputDir { get; set; } = "";
     public int PlsComponents { get; set; }
-    /// <summary>Legacy first hidden-layer width. Kept for older saved sessions and workers.</summary>
-    public int HiddenSize { get; set; } = 100;
+    /// <summary>First hidden-layer width, still sent as the documented `hidden_size` request
+    /// field. Derived from <see cref="HiddenLayers"/>; not persisted.</summary>
+    [JsonIgnore] public int HiddenSize => NormalizeHiddenLayers(HiddenLayers, 100)[0];
     public List<int> HiddenLayers { get; set; } = [];
     public string NnOptimizer { get; set; } = "adam";
     public bool NnBatchNormalization { get; set; }
@@ -71,8 +73,7 @@ public sealed class CorrectionOptions
         }
 
         Method = CanonicalMethod(Method);
-        HiddenLayers = NormalizeHiddenLayers(HiddenLayers, HiddenSize);
-        HiddenSize = HiddenLayers[0];
+        HiddenLayers = NormalizeHiddenLayers(HiddenLayers, 100);
         NnOptimizer = CanonicalOptimizer(NnOptimizer);
         NnDropout = double.IsFinite(NnDropout) ? Math.Clamp(NnDropout, 0.0, 0.8) : 0.0;
         return this;
@@ -122,7 +123,7 @@ public sealed class CorrectionOptions
         return normalized.Count == 1 ? normalized[0].ToString() : $"[{string.Join(", ", normalized)}]";
     }
 
-    public static string CanonicalOptimizer(string? optimizer) => optimizer?.Trim().ToLowerInvariant() switch
+    private static string CanonicalOptimizer(string? optimizer) => optimizer?.Trim().ToLowerInvariant() switch
     {
         "sgd" or "momentum" => "sgd",
         "rmsprop" or "rms" => "rmsprop",

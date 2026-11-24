@@ -26,6 +26,56 @@ public sealed class StillImageDecoderTests
         finally { File.Delete(path); }
     }
 
+    [Fact]
+    public void OriginalPreviewCacheDoesNotReuseChannelSwappedV1Pixels()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        try
+        {
+            var info = new FileInfo(path);
+            var v1Key = $"oriented-srgb-v1|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+            var v1Name = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(v1Key)))[..16] + ".rgb";
+            Assert.NotEqual(v1Name, System.IO.Path.GetFileName(MainWindowViewModel.OriginalCachePath(path, info)));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [AvaloniaFact]
+    public void OriginalPreviewDiskCacheRoundTripKeepsRedAndBlue()
+    {
+        // Regression: the original-preview disk cache read StillImageDecoder's Rgba8888
+        // pixels as BGRA, so every reopen from the cache showed red and blue swapped.
+        SKColor[] colours = [new(220, 30, 20), new(20, 40, 230), new(30, 200, 40), new(240, 220, 30)];
+        using var raw = new SKBitmap(colours.Length, 1);
+        for (var x = 0; x < colours.Length; x++) raw.SetPixel(x, 0, colours[x]);
+        var source = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ccp-ui-rgb-{Guid.NewGuid():N}.png");
+        var cache = System.IO.Path.ChangeExtension(source, ".rgb");
+        try
+        {
+            using (var image = SKImage.FromBitmap(raw))
+            using (var encoded = image.Encode(SKEncodedImageFormat.Png, 100))
+                File.WriteAllBytes(source, encoded.ToArray());
+
+            using var decoded = StillImageDecoder.Decode(source, 100);
+            using var bgra = PreviewRgb.FromRgb(colours.Length, 1, [.. colours.SelectMany(c => new[] { c.Red, c.Green, c.Blue })]);
+            foreach (var bitmap in new[] { decoded, bgra })
+            {
+                PreviewRgb.WriteFromBitmap(cache, bitmap);
+                using var reloaded = PreviewRgb.TryLoad(cache);
+                Assert.NotNull(reloaded);
+                using var output = new MemoryStream();
+                reloaded.Save(output);
+                using var actual = SKBitmap.Decode(output.ToArray());
+                for (var x = 0; x < colours.Length; x++) Assert.Equal(colours[x], actual.GetPixel(x, 0));
+            }
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(cache);
+        }
+    }
+
     [AvaloniaFact]
     public void DecoderAndSourceSizeAgreeForAllExifOrientationsInBothByteOrders()
     {

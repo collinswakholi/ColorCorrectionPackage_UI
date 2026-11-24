@@ -119,17 +119,18 @@ public partial class MainWindow : Window
 
     private static double HorizontalSidebarPad(double width)
     {
+        // Both horizontal insets of a sidebar block (see .sidebarBlock / .sidebarBody in Theme.axaml).
         if (width < 300)
-        {
-            return 16;
-        }
-
-        if (width < 348)
         {
             return 20;
         }
 
-        return 28;
+        if (width < 348)
+        {
+            return 28;
+        }
+
+        return 32;
     }
 
     private void SetClass(string name, bool on)
@@ -232,7 +233,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (DataContext is not MainWindowViewModel { Active: { } active } vm)
+            if (DataContext is not MainWindowViewModel { Workspace.Active: { } active } vm)
             {
                 return;
             }
@@ -260,6 +261,11 @@ public partial class MainWindow : Window
         try
         {
             await dialog.ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            // Callers are async void click handlers; an escaping exception would end the app.
+            ToastService.ShowError($"Could not open {dialog.Title ?? "the dialog"}: {ex.Message}");
         }
         finally
         {
@@ -335,7 +341,9 @@ public partial class MainWindow : Window
 
         if (ProcessModelHost is not null)
         {
-            ProcessModelHost.MaxWidth = Math.Max(160, width - 36);
+            // Exactly the inner width (minus the 1 px sidebar rule), so a stretched host is
+            // never centred a few pixels off the shared left edge.
+            ProcessModelHost.MaxWidth = Math.Max(160, width - HorizontalSidebarPad(width) - 1);
         }
 
         if (ModelSourceGrid is not null)
@@ -516,16 +524,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void OnSessionWhiteClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { Tag: SessionItemViewModel item } && DataContext is MainWindowViewModel vm)
-        {
-            vm.UseWhitePath(item.Path);
-        }
-
-        e.Handled = true;
-    }
-
     private void OnRemoveCatalogFolderClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { Tag: CatalogFolderViewModel folder } && DataContext is MainWindowViewModel vm)
@@ -662,28 +660,29 @@ public partial class MainWindow : Window
         string suggested,
         params (PatchPlotControl Control, PlotKind Kind, string Suffix)[] plots)
     {
-        if (DataContext is not MainWindowViewModel vm || vm.Dialogs is null || vm.Report is null)
-        {
-            return;
-        }
-
-        var path = await vm.Dialogs.SavePlotAsync(title, suggested);
-        if (string.IsNullOrWhiteSpace(path))
+        if (DataContext is not MainWindowViewModel vm || vm.Dialogs is null || vm.Analysis.Report is null)
         {
             return;
         }
 
         try
         {
+            // The picker can throw (e.g. no storage provider); keep it inside the guard.
+            var path = await vm.Dialogs.SavePlotAsync(title, suggested);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
             if (plots.Length == 1)
             {
-                PlotExport.Save(path, vm.Report, plots[0].Kind, plots[0].Control);
+                PlotExport.Save(path, vm.Analysis.Report, plots[0].Kind, plots[0].Control);
             }
             else
             {
                 foreach (var plot in plots)
                 {
-                    PlotExport.Save(PlotExport.WithSuffix(path, plot.Suffix), vm.Report, plot.Kind, plot.Control);
+                    PlotExport.Save(PlotExport.WithSuffix(path, plot.Suffix), vm.Analysis.Report, plot.Kind, plot.Control);
                 }
             }
 
@@ -862,15 +861,11 @@ public partial class MainWindow : Window
 
     private void SetDropActive(bool on)
     {
+        // The overlay is shown first and then given .on, so Motion.axaml can fade it in.
         DragOverlay.IsVisible = on;
-        if (on)
-        {
-            DropZone.Classes.Add("is-dragging");
-        }
-        else
-        {
-            DropZone.Classes.Remove("is-dragging");
-        }
+        SetClassOn(DragOverlay, "on", on);
+        SetClassOn(DropZone, "is-dragging", on);
+        SetClassOn(InputEmpty, "is-dragging", on);
     }
 
     private void OnWhiteDragOver(object? sender, DragEventArgs e)

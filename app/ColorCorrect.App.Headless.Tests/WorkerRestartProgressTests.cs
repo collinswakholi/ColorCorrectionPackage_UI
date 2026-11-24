@@ -49,17 +49,17 @@ public sealed class WorkerRestartProgressTests
             };
             vm.Session.Add(item);
             var requestedPolicy = scenario == "auto-rejected" ? "auto" : mode == "rejected" ? "vulkan" : "cpu-inference";
-            vm.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == requestedPolicy);
+            vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == requestedPolicy);
 
             if (scenario == "rejected-startup")
             {
-                vm.Busy = true; // Initial startup owns the same busy state as InitializeAsync.
+                vm.Job.Busy = true; // Initial startup owns the same busy state as InitializeAsync.
                 restart = (Task)typeof(MainWindowViewModel).GetMethod("StartWorkerAsync", flags)!.Invoke(vm, null)!;
             }
             else restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
-            await Until(() => vm.CurrentStage == "Warming Opt2 1280");
-            Assert.True(vm.Busy);
-            Assert.True(vm.JobProgress > 0);
+            await Until(() => vm.Job.CurrentStage == "Warming Opt2 1280");
+            Assert.True(vm.Job.Busy);
+            Assert.True(vm.Job.JobProgress > 0);
             ObserveWorker();
 
             if (mode == "cancel") vm.CancelBatchCommand.Execute(null);
@@ -67,19 +67,19 @@ public sealed class WorkerRestartProgressTests
             await restart.WaitAsync(TimeSpan.FromSeconds(15));
             Dispatcher.UIThread.RunJobs();
 
-            Assert.False(vm.Busy);
-            Assert.Empty(vm.CurrentStage);
-            Assert.False(vm.ShowJobProgress);
-            Assert.Equal(0, vm.JobProgress);
-            Assert.Equal(mode == "success", vm.WorkerReady);
-            Assert.True(vm.WorkerStartupComplete);
+            Assert.False(vm.Job.Busy);
+            Assert.Empty(vm.Job.CurrentStage);
+            Assert.False(vm.Job.ShowJobProgress);
+            Assert.Equal(0, vm.Job.JobProgress);
+            Assert.Equal(mode == "success", vm.Compute.WorkerReady);
+            Assert.True(vm.Compute.WorkerStartupComplete);
             if (mode == "success")
             {
-                Assert.Contains("Warmed", vm.Status);
-                Assert.Empty(vm.WorkerStartupError);
+                Assert.Contains("Warmed", vm.Job.Status);
+                Assert.Empty(vm.Compute.WorkerStartupError);
                 Assert.Contains("optional adapter warning", worker.LastError);
             }
-            else Assert.NotEmpty(vm.WorkerStartupError);
+            else Assert.NotEmpty(vm.Compute.WorkerStartupError);
             Assert.True(item.IsCorrected);
             Assert.Equal(model, item.ModelPath);
             Assert.Equal(output, item.CorrectedPath);
@@ -88,10 +88,10 @@ public sealed class WorkerRestartProgressTests
 
             if (mode == "rejected")
             {
-                Assert.Contains("Fixture inference runtime unavailable", vm.WorkerStartupError);
-                Assert.Contains("Check setup", vm.WorkerStartupError);
-                Assert.Equal(vm.WorkerStartupError, vm.Status);
-                Assert.DoesNotContain("not checked", vm.WorkerLine);
+                Assert.Contains("Fixture inference runtime unavailable", vm.Compute.WorkerStartupError);
+                Assert.Contains("Check setup", vm.Compute.WorkerStartupError);
+                Assert.Equal(vm.Compute.WorkerStartupError, vm.Job.Status);
+                Assert.DoesNotContain("not checked", vm.Compute.WorkerLine);
                 Assert.True(vm.HasWorkerError);
                 Assert.True(vm.ForceCpuRestartCommand.CanExecute(null));
                 Assert.False(observers[0].HasExited);
@@ -101,19 +101,19 @@ public sealed class WorkerRestartProgressTests
                 // A failed engine selection must leave recovery available.
                 File.WriteAllText(Path.Combine(folder, "mode"), "success");
                 File.Delete(Path.Combine(folder, "continue"));
-                vm.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == "cpu-inference");
+                vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(policy => policy.Value == "cpu-inference");
                 restart = vm.ForceCpuRestartCommand.ExecuteAsync(null);
-                await Until(() => vm.CurrentStage == "Warming Opt2 1280");
+                await Until(() => vm.Job.CurrentStage == "Warming Opt2 1280");
                 ObserveWorker();
                 Assert.True(observers[0].HasExited);
                 File.WriteAllText(Path.Combine(folder, "continue"), "");
                 await restart.WaitAsync(TimeSpan.FromSeconds(15));
-                Assert.True(vm.WorkerReady);
+                Assert.True(vm.Compute.WorkerReady);
                 Assert.False(vm.HasWorkerError);
-                Assert.Empty(vm.WorkerStartupError);
-                Assert.Empty(vm.CurrentStage);
-                Assert.False(vm.ShowJobProgress);
-                Assert.Equal(0, vm.JobProgress);
+                Assert.Empty(vm.Compute.WorkerStartupError);
+                Assert.Empty(vm.Job.CurrentStage);
+                Assert.False(vm.Job.ShowJobProgress);
+                Assert.Equal(0, vm.Job.JobProgress);
                 Assert.True(item.IsCorrected);
                 Assert.Equal(model, item.ModelPath);
                 Assert.Equal(output, item.CorrectedPath);
@@ -142,7 +142,20 @@ public sealed class WorkerRestartProgressTests
             if (restart is not null) await restart.WaitAsync(TimeSpan.FromSeconds(12));
             foreach (var observer in observers) observer.Dispose();
             Dispatcher.UIThread.RunJobs();
-            Directory.Delete(folder, true);
+            await DeleteFolderAsync(folder);
+        }
+    }
+
+    /// <summary>Windows keeps an exiting process image locked briefly after the process ends.</summary>
+    private static async Task DeleteFolderAsync(string folder)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { Directory.Delete(folder, true); return; }
+            catch (Exception exception) when (attempt < 50 && exception is UnauthorizedAccessException or IOException)
+            {
+                await Task.Delay(100);
+            }
         }
     }
 

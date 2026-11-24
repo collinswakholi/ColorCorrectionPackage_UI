@@ -54,8 +54,8 @@ public sealed class StillOnlyWorkflowTests
             var still = Sample();
             vm.AddPaths([clip, still, disguised]);
             Assert.Equal(still, Assert.Single(vm.Session).Path);
-            Assert.Contains("Skipped 2 unsupported", vm.Status);
-            Assert.Contains("video is not supported", vm.Status);
+            Assert.Contains("Skipped 2 unsupported", vm.Job.Status);
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
             Assert.False(SupportedStillImage.IsSupportedFile(clip));
             Assert.False(SupportedStillImage.IsSupportedFile(disguised));
             Assert.True(SupportedStillImage.IsSupportedFile(still));
@@ -68,7 +68,7 @@ public sealed class StillOnlyWorkflowTests
     }
 
     [AvaloniaFact]
-    public void RestoreSession_SkipsLegacyVideoFlagAndUnflaggedUnsupportedPaths()
+    public void RestoreSession_SkipsUnsupportedPathsAndKeepsStills()
     {
         var root = Path.Combine(Path.GetTempPath(), "colorcorrect-session-still-only-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -83,18 +83,17 @@ public sealed class StillOnlyWorkflowTests
                 ActivePath = clip,
                 Items =
                 [
-                    new SessionItemDto { Path = still, IsVideo = true },
-                    new SessionItemDto { Path = clip, IsVideo = false },
+                    new SessionItemDto { Path = clip },
                     new SessionItemDto { Path = still, IncludeInBatch = false },
                 ],
             };
-            Assert.Equal(2, vm.RestoreWorkingItems(state));
+            Assert.Equal(1, vm.RestoreWorkingItems(state));
             var item = Assert.Single(vm.Session);
             Assert.Equal(still, item.Path);
-            Assert.Same(item, vm.Active);
+            Assert.Same(item, vm.Workspace.Active);
             Assert.False(item.IncludeInBatch);
-            Assert.Contains("Skipped 2 unsupported session", vm.Status);
-            Assert.Contains("Video is not supported", vm.Status);
+            Assert.Contains("Skipped 1 unsupported session", vm.Job.Status);
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
         }
         finally
         {
@@ -104,26 +103,45 @@ public sealed class StillOnlyWorkflowTests
     }
 
     [AvaloniaFact]
-    public void RestoreSession_WithOnlyLegacyVideo_ClearsPreviousStillAndDisablesRun()
+    public async Task RestoreSession_WithOnlyUnsupportedItems_ClearsPreviousStillAndDisablesRun()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, WorkerReady = true };
-        vm.AddPaths([Sample()]);
-        Assert.True(vm.HasImage);
-        Assert.NotNull(vm.Active);
-        var skipped = vm.RestoreWorkingItems(new SessionState
+        var root = Path.Combine(Path.GetTempPath(), "colorcorrect-unsupported-session-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        // WorkerReady makes adding the still start automatic detection. Without a
+        // stand-in worker that launched the real engine, and the never-disposed
+        // view model leaked it for the rest of the test run.
+        await TestWorkers.UseNonLaunchingWorkerAsync(vm, root);
+        vm.Job.Busy = false;
+        vm.Compute.WorkerReady = true;
+        try
         {
-            Items = [new SessionItemDto { Path = Sample(), IsVideo = true }],
-        });
-        Assert.Equal(1, skipped);
-        Assert.Empty(vm.Session);
-        Assert.Null(vm.Active);
-        Assert.False(vm.HasImage);
-        Assert.False(vm.ShowStillPreview);
-        Assert.Null(vm.Preview);
-        Assert.Null(vm.OriginalPreview);
-        Assert.False(vm.DetectCommand.CanExecute(null));
-        Assert.False(vm.ApplyCommand.CanExecute(null));
-        Assert.Contains("Video is not supported", vm.Status);
+            var clip = Path.Combine(root, "clip.mov");
+            File.WriteAllBytes(clip, [0, 0, 0, 20, 102, 116, 121, 112]);
+            vm.AddPaths([Sample()]);
+            Assert.True(vm.Workspace.HasImage);
+            Assert.NotNull(vm.Workspace.Active);
+            var skipped = vm.RestoreWorkingItems(new SessionState
+            {
+                Items = [new SessionItemDto { Path = clip }],
+            });
+            Assert.Equal(1, skipped);
+            Assert.Empty(vm.Session);
+            Assert.Null(vm.Workspace.Active);
+            Assert.False(vm.Workspace.HasImage);
+            Assert.False(vm.ShowStillPreview);
+            Assert.Null(vm.Stage.Preview);
+            Assert.Null(vm.Stage.OriginalPreview);
+            Assert.False(vm.DetectCommand.CanExecute(null));
+            Assert.False(vm.ApplyCommand.CanExecute(null));
+            Assert.Contains("only JPEG, PNG and TIFF stills are supported", vm.Job.Status);
+        }
+        finally
+        {
+            await vm.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(12));
+            Dispatcher.UIThread.RunJobs();
+            await TestWorkers.DeleteDirectoryAsync(root);
+        }
     }
 
     private static string Sample()

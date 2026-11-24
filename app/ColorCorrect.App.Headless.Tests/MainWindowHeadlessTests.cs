@@ -20,17 +20,17 @@ public sealed class MainWindowHeadlessTests
         {
             window.AccelMenu.IsOpen = true;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.FastMode);
             Assert.False(window.AdvancedAcceleration.IsExpanded);
-            Assert.Equal("auto", vm.SelectedProcessingDevice.Value);
+            Assert.Equal("auto", vm.Compute.SelectedProcessingDevice.Value);
             window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[1];
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.ForceCpu);
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.ForceCpu);
+            Assert.True(vm.Compute.FastMode);
             window.ProcessingDevice.SelectedItem = vm.ProcessingDevices[2];
             Dispatcher.UIThread.RunJobs();
-            Assert.False(vm.ForceCpu);
-            Assert.True(vm.FastMode);
+            Assert.False(vm.Compute.ForceCpu);
+            Assert.True(vm.Compute.FastMode);
             var build = typeof(MainWindowViewModel).GetMethod("BuildOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             Assert.Equal("gpu", Assert.IsType<ColorCorrect.Engine.CorrectionOptions>(build.Invoke(vm, null)).LutDevice);
             window.AdvancedAcceleration.IsExpanded = true;
@@ -38,10 +38,10 @@ public sealed class MainWindowHeadlessTests
             Assert.True(window.AdvancedAcceleration.IsExpanded);
             window.CompatibilityProcessing.IsChecked = true;
             Dispatcher.UIThread.RunJobs();
-            Assert.False(vm.FastMode);
+            Assert.False(vm.Compute.FastMode);
             window.CompatibilityProcessing.IsChecked = false;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.FastMode);
+            Assert.True(vm.Compute.FastMode);
         }
         finally { window.Close(); Dispatcher.UIThread.RunJobs(); }
     }
@@ -52,11 +52,11 @@ public sealed class MainWindowHeadlessTests
         var (window, vm) = ShowMain(2000, 740, light: true);
         try
         {
-            vm.Report = new ColorCorrect.Engine.CorrectionReport
+            vm.Analysis.Report = new ColorCorrect.Engine.CorrectionReport
             {
                 HasMetrics = true, MeanBefore = 15, MeanAfter = 2,
             };
-            vm.HasMetrics = true;
+            vm.Analysis.HasMetrics = true;
             window.TabDeltaE.IsSelected = true;
             Dispatcher.UIThread.RunJobs();
             Assert.True(window.PlotDeltaE.Bounds.Height >= 180);
@@ -95,22 +95,22 @@ public sealed class MainWindowHeadlessTests
                 // Exercise the real 240 px splitter minimum, not just the default sidebar width.
                 var grid = Assert.IsType<Grid>(window.Sidebar.Parent);
                 grid.ColumnDefinitions[0].Width = new GridLength(240);
-                vm.LibraryExpanded = true;
-                vm.ProcessExpanded = true;
-                vm.ModelExpanded = true;
-                vm.DoFfc = true;
+                vm.Layout.LibraryExpanded = true;
+                vm.Layout.ProcessExpanded = true;
+                vm.Layout.ModelExpanded = true;
+                vm.Settings.DoFfc = true;
                 vm.AddPaths([TestImagePath("ColorCard_Big.JPG"), TestImagePath("ColorCard_Combo.JPG"),
                     TestImagePath("Sample_3572.JPG"), TestImagePath("Sample_3573.JPG")]);
-                vm.LibraryExpanded = true; // Adding media deliberately closes Catalog; reopen for this stress case.
+                vm.Layout.LibraryExpanded = true; // Adding media deliberately closes Catalog; reopen for this stress case.
                 // A cold decode is asynchronous. Never compare a transient blank
                 // canvas to the populated reference, or depend on a warm disk cache.
                 var previewDeadline = DateTime.UtcNow.AddSeconds(10);
-                while ((vm.OriginalPreview is null || vm.FilteredSamples.Any(item => item.Thumb is null)) && DateTime.UtcNow < previewDeadline)
+                while ((vm.Stage.OriginalPreview is null || vm.FilteredSamples.Any(item => item.Thumb is null)) && DateTime.UtcNow < previewDeadline)
                 {
                     await Task.Delay(20);
                     Dispatcher.UIThread.RunJobs();
                 }
-                Assert.NotNull(vm.OriginalPreview);
+                Assert.NotNull(vm.Stage.OriginalPreview);
                 Assert.All(vm.FilteredSamples, item => Assert.NotNull(item.Thumb));
                 Dispatcher.UIThread.RunJobs();
 
@@ -129,11 +129,11 @@ public sealed class MainWindowHeadlessTests
                 processHeader.IsChecked = false;
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(chevron.IsVisible);
-                Assert.False(vm.ProcessExpanded);
+                Assert.False(vm.Layout.ProcessExpanded);
                 processHeader.IsChecked = true;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(chevron.IsVisible);
-                Assert.True(vm.ProcessExpanded);
+                Assert.True(vm.Layout.ProcessExpanded);
                 foreach (var button in new[] { window.ImageUpload, window.FolderUpload,
                     window.FfcSettingsButton, window.GcSettingsButton, window.CcSettingsButton })
                 {
@@ -235,7 +235,7 @@ public sealed class MainWindowHeadlessTests
             window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Same(item, vm.Active);
+            Assert.Same(item, vm.Workspace.Active);
             Assert.True(item.IsSelected);
         }
         finally
@@ -264,12 +264,12 @@ public sealed class MainWindowHeadlessTests
             Assert.False(vm.NextSessionCommand.CanExecute(null));
 
             vm.PreviousSessionCommand.Execute(null);
-            Assert.Equal("ColorCard_Combo.JPG", vm.Active?.Name);
+            Assert.Equal("ColorCard_Combo.JPG", vm.Workspace.Active?.Name);
             Assert.Equal("2 of 3 · ColorCard_Combo", vm.ActivePositionLabel);
             Assert.True(vm.NextSessionCommand.CanExecute(null));
 
             vm.PreviousSessionCommand.Execute(null);
-            Assert.Equal("ColorCard_Big.JPG", vm.Active?.Name);
+            Assert.Equal("ColorCard_Big.JPG", vm.Workspace.Active?.Name);
             Assert.False(vm.PreviousSessionCommand.CanExecute(null));
             Assert.True(window.PreviousImageButton.IsEffectivelyVisible);
             Assert.True(window.NextImageButton.IsEffectivelyVisible);
@@ -287,19 +287,19 @@ public sealed class MainWindowHeadlessTests
         var (window, vm) = ShowMain(1200, 760, light: false);
         try
         {
-            vm.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
-            vm.HiddenLayersText = "[128, 64, 32]";
-            vm.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
-            vm.NnBatchNormalization = true;
-            vm.NnDropout = 0.25m;
+            vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
+            vm.Settings.HiddenLayersText = "[128, 64, 32]";
+            vm.Settings.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
+            vm.Settings.NnBatchNormalization = true;
+            vm.Settings.NnDropout = 0.25m;
 
-            Assert.True(vm.ShowNn);
-            Assert.False(vm.ShowPolyCombinations);
+            Assert.True(vm.Settings.ShowNn);
+            Assert.False(vm.Settings.ShowPolyCombinations);
             Assert.True(vm.NnSettingsValid);
             Assert.False(vm.HasHiddenLayersError);
-            Assert.Equal("rmsprop", vm.SelectedNnOptimizer.Value);
+            Assert.Equal("rmsprop", vm.Settings.SelectedNnOptimizer.Value);
 
-            vm.HiddenLayersText = "[128, nope]";
+            vm.Settings.HiddenLayersText = "[128, nope]";
             Assert.False(vm.NnSettingsValid);
             Assert.True(vm.HasHiddenLayersError);
             Assert.NotEmpty(vm.HiddenLayersError);
@@ -311,15 +311,15 @@ public sealed class MainWindowHeadlessTests
             {
                 Assert.False(dialog.PolyCombinationsToggle.IsVisible);
                 Assert.True(dialog.DegreeSelect.IsVisible);
-                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "pls");
+                vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "pls");
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(dialog.PolyCombinationsToggle.IsVisible);
                 Assert.True(dialog.DegreeSelect.IsVisible);
-                vm.SelectedMethod = vm.Methods.Single(method => method.Value == "linear");
+                vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "linear");
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(dialog.PolyCombinationsToggle.IsVisible);
                 dialog.PolyCombinationsToggle.IsChecked = false;
-                Assert.False(vm.IncludeCombinations);
+                Assert.False(vm.Settings.IncludeCombinations);
             }
             finally { dialog.Close(); Dispatcher.UIThread.RunJobs(); }
         }
@@ -400,12 +400,12 @@ public sealed class MainWindowHeadlessTests
         try
         {
             var blank = TestImagePath("Blank.JPG");
-            vm.WhiteImagePath = Path.Combine(Path.GetTempPath(), "moved-colorcorrect-fixture", "Blank.JPG");
+            vm.Settings.WhiteImagePath = Path.Combine(Path.GetTempPath(), "moved-colorcorrect-fixture", "Blank.JPG");
 
             vm.AddPaths([blank]);
             Dispatcher.UIThread.RunJobs();
 
-            Assert.Equal(Path.GetFullPath(blank), vm.WhiteImagePath);
+            Assert.Equal(Path.GetFullPath(blank), vm.Settings.WhiteImagePath);
             Assert.False(Assert.Single(vm.Session).IncludeInBatch);
         }
         finally
@@ -457,11 +457,11 @@ public sealed class MainWindowHeadlessTests
     public void CcSettings_NeuralNetworkControls_FitAndMatchBaseline()
     {
         var (owner, vm) = ShowMain(1002, 672, light: false);
-        vm.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
-        vm.HiddenLayersText = "[128, 64, 32]";
-        vm.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
-        vm.NnBatchNormalization = true;
-        vm.NnDropout = 0.25m;
+        vm.Settings.SelectedMethod = vm.Methods.Single(method => method.Value == "nn");
+        vm.Settings.HiddenLayersText = "[128, 64, 32]";
+        vm.Settings.SelectedNnOptimizer = vm.NnOptimizers.Single(item => item.Value == "rmsprop");
+        vm.Settings.NnBatchNormalization = true;
+        vm.Settings.NnDropout = 0.25m;
         var dialog = new CcSettingsDialog { DataContext = vm };
         try
         {
@@ -536,8 +536,8 @@ public sealed class MainWindowHeadlessTests
         {
             // The real main window appears after the splash has finished worker startup.
             // Render the post-splash idle state instead of the transient constructor state.
-            Busy = false,
-            IsLightTheme = light,
+            Job = { Busy = false },
+            Layout = { IsLightTheme = light },
         };
         PublicFixtureCatalog.Install(vm);
         var window = new MainWindow

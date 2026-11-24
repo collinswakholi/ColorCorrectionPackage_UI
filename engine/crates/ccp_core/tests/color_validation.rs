@@ -1,6 +1,6 @@
 //! Independent published vectors + invariants; see docs/color-science-validation.md.
 use ccp_core::color::*;
-use ccp_core::honest::{delta_e00_in_space, delta_e00_same_index};
+use ccp_core::honest::delta_e00_in_space;
 use ccp_core::refs::{chart_spec, ChartKind};
 
 fn close(a: f64, b: f64, tol: f64) {
@@ -9,6 +9,16 @@ fn close(a: f64, b: f64, tol: f64) {
 fn close3(a: Vec3, b: Vec3, tol: f64) {
     for i in 0..3 {
         close(a[i], b[i], tol);
+    }
+}
+
+trait IntoArray {
+    fn into_array(self) -> Vec3;
+}
+
+impl IntoArray for Lab {
+    fn into_array(self) -> Vec3 {
+        [self.l, self.a, self.b]
     }
 }
 
@@ -42,7 +52,7 @@ fn classic_and_passport_match_independent_cgats_same_cells() {
             let row = (v[0].as_bytes()[1] - b'1') as usize;
             let expected = [v[1], v[2], v[3]].map(|x| x.replace(',', ".").parse::<f64>().unwrap());
             close3(
-                spec.reference_lab_d50[row * 6 + col].to_array(),
+                spec.reference_lab_d50[row * 6 + col].into_array(),
                 expected,
                 1e-12,
             );
@@ -75,7 +85,7 @@ fn sg_and_spyder_match_independent_named_cell_tables() {
             }
             if let Some(index) = spec.index_of(v[0]) {
                 let expected = [v[1], v[2], v[3]].map(|s| s.replace(',', ".").parse().unwrap());
-                close3(spec.reference_lab_d50[index].to_array(), expected, 1e-12);
+                close3(spec.reference_lab_d50[index].into_array(), expected, 1e-12);
                 count += 1;
             }
         }
@@ -231,7 +241,8 @@ fn wrong_srgb_interpretation_is_detectably_wrong_for_linear_output() {
     let space = parse_rgb_color_space("linear-srgb", &white).unwrap();
     let reference = Lab::new(60.0, 5.0, -5.0);
     let rgb = lab_d50_to_target_linear(reference, &space, &white).unwrap();
-    let old = delta_e00_same_index(rgb, reference).unwrap();
+    // The pre-fix interpretation read every RGB triple as encoded sRGB.
+    let old = delta_e00_in_space(rgb, reference, srgb_d65_space().1).unwrap();
     let fixed = delta_e00_in_space(rgb, reference, &space).unwrap();
     println!("Identical color linear-sRGB: old false error {old:.8}, fixed {fixed:.12}");
     assert!(old > 15.0);

@@ -21,9 +21,12 @@ public sealed class ProcessingSettingsLayoutTests
         {
             var vm = new MainWindowViewModel(persistenceEnabled: false)
             {
-                IsLightTheme = light, Busy = false, WorkerReady = true,
-                WorkerStartupComplete = true, WorkerLine = "Ready", Status = "Ready",
-                AccelHint = "Synthetic layout fixture; hardware execution is tested separately.",
+                Layout = { IsLightTheme = light }, Job = { Busy = false, Status = "Ready" },
+                Compute =
+                {
+                    WorkerReady = true, WorkerStartupComplete = true, WorkerLine = "Ready",
+                    AccelHint = "Synthetic layout fixture; hardware execution is tested separately.",
+                },
             };
             for (var index = 0; index < 6; index++)
                 vm.AccelRows.Add(new AccelRow

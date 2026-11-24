@@ -1,11 +1,12 @@
-use ccp_core::ffc::{apply_ffc_float, identity_gain};
+use ccp_core::color::Lab;
+use ccp_core::ffc::apply_ffc_inplace;
 use ccp_core::lut::{cube_text, LutPipeline, LUT_NO_FFC_COMMENT};
 use ccp_core::refs::{ChartPatch, Vec2};
+use ccp_core::sample::SATURATION_THRESHOLD;
 use ccp_core::stages::{
-    apply_gc_image, apply_gc_pixel, extrapolate_saturated, flag_saturated, GammaModel,
+    apply_gc_inplace, apply_gc_pixel, extrapolate_saturated, flag_saturated, GammaModel,
 };
-use ccp_core::{Lab, SATURATION_THRESHOLD};
-use ndarray::Array3;
+use ndarray::{Array2, Array3};
 
 #[test]
 fn apply_ffc_float_identity() {
@@ -17,8 +18,8 @@ fn apply_ffc_float_identity() {
             img[[y, x, 2]] = 0.55;
         }
     }
-    let gain = identity_gain(4, 5);
-    let out = apply_ffc_float(&img, &gain);
+    let mut out = img.clone();
+    apply_ffc_inplace(&mut out, &Array2::from_elem((4, 5), 1.0));
     for y in 0..4 {
         for x in 0..5 {
             for c in 0..3 {
@@ -76,7 +77,7 @@ fn sat_flags_stay_on_measured_index() {
 
 #[test]
 fn apply_gc_image_matches_pixel() {
-    let model = GammaModel::legacy(vec![1.0, 0.0]);
+    let model = GammaModel::curve(vec![0.0, 50.0, 100.0], vec![0.0, 45.0, 100.0]);
     let mut img = Array3::<f32>::zeros((8, 8, 3));
     for y in 0..8 {
         for x in 0..8 {
@@ -85,7 +86,8 @@ fn apply_gc_image_matches_pixel() {
             img[[y, x, 2]] = 0.33 + 0.01 * y as f32;
         }
     }
-    let out = apply_gc_image(&img, &model).unwrap();
+    let mut out = img.clone();
+    apply_gc_inplace(&mut out, &model).unwrap();
     for y in 0..8 {
         for x in 0..8 {
             let rgb = [

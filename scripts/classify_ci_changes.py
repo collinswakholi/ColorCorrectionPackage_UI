@@ -23,9 +23,7 @@ def lightweight_path(path: str) -> bool:
         return False
     return path == "README.md" or (
         path.startswith(DEMO_DIRECTORY)
-        and (PurePosixPath(path).suffix.lower() in DEMO_EXTENSIONS
-             or path in (DEMO_DIRECTORY + "manifest.json", DEMO_DIRECTORY + "demo-manifest.json",
-                         DEMO_DIRECTORY + "storyboard.json"))
+        and PurePosixPath(path).suffix.lower() in DEMO_EXTENSIONS
     )
 
 

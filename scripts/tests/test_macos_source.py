@@ -15,7 +15,7 @@ from native_ci_acceptance import clean_environment
 from stage_macos_source import stage
 import test_package_native as fixtures
 
-spec = importlib.util.spec_from_file_location("source_test_engine", SCRIPTS.parent / "api/colorcorrect.py")
+spec = importlib.util.spec_from_file_location("source_test_engine", SCRIPTS.parent / "api/colorcorrect_engine.py")
 engine_api = importlib.util.module_from_spec(spec)
 sys.path.insert(0, str(SCRIPTS.parent / "api"))
 try:

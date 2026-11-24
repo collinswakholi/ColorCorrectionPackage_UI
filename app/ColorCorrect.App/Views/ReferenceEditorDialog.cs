@@ -51,7 +51,7 @@ public sealed class ReferenceEditorDialog : Window
     public ReferenceEditorDialog(MainWindowViewModel vm)
     {
         _vm = vm;
-        _item = vm.Active ?? throw new InvalidOperationException("Select a chart image first.");
+        _item = vm.Workspace.Active ?? throw new InvalidOperationException("Select a chart image first.");
         _handshake = _item.Handshake ?? throw new InvalidOperationException("Detect a chart before entering references.");
         Title = "Chart references";
         Width = 1080; Height = 740; MinWidth = 760; MinHeight = 520;
@@ -100,12 +100,12 @@ public sealed class ReferenceEditorDialog : Window
 
         var photo = new StackPanel { Spacing = 10 };
         photo.Children.Add(new TextBlock { Text = "Photographed chart · canonical orientation", TextWrapping = TextWrapping.Wrap });
-        var imageWidth = vm.OriginalPreview?.PixelSize.Width ?? 1;
-        var imageHeight = vm.OriginalPreview?.PixelSize.Height ?? 1;
+        var imageWidth = vm.Stage.OriginalPreview?.PixelSize.Width ?? 1;
+        var imageHeight = vm.Stage.OriginalPreview?.PixelSize.Height ?? 1;
         if (ColorCorrect.App.Services.ImageSizeReader.TryRead(_item.Path, out var fullW, out var fullH))
         { _overlay.OverlayScaleX = imageWidth / (double)fullW; _overlay.OverlayScaleY = imageHeight / (double)fullH; }
         var photoGrid = new Grid { Width = imageWidth, Height = imageHeight };
-        photoGrid.Children.Add(new Image { Source = vm.OriginalPreview, Stretch = Stretch.Fill });
+        photoGrid.Children.Add(new Image { Source = vm.Stage.OriginalPreview, Stretch = Stretch.Fill });
         _overlay.Handshake = _handshake; photoGrid.Children.Add(_overlay);
         photo.Children.Add(new Viewbox { Child = photoGrid, Stretch = Stretch.Uniform, Height = 220 });
         photo.Children.Add(new TextBlock { Text = "Lab/XYZ values retain their declared white point. RGB input is an encoded reference, not a sampled display swatch. Canonical Lab is calculated by the processing engine.", TextWrapping = TextWrapping.Wrap });

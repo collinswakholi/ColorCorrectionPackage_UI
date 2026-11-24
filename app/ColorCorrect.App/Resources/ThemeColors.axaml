@@ -2,7 +2,7 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="PrimaryColor">#2F6F62</Color>
-                    <Color x:Key="PrimaryHoverColor">#3A8576</Color>
+                    <Color x:Key="PrimaryHoverColor">#33796B</Color>
                     <Color x:Key="PrimaryLightColor">#1A2C28</Color>
                     <Color x:Key="SystemAccentColor">#2F6F62</Color>
                     <Color x:Key="SystemAccentColorDark1">#24574D</Color>
@@ -11,7 +11,6 @@
                     <Color x:Key="SystemAccentColorLight1">#3A8576</Color>
                     <Color x:Key="SystemAccentColorLight2">#5BA394</Color>
                     <Color x:Key="SystemAccentColorLight3">#8BC4B8</Color>
-                    <Color x:Key="BackgroundColor">#0B0C0E</Color>
                     <Color x:Key="SurfaceColor">#121316</Color>
                     <Color x:Key="SidebarColor">#101113</Color>
                     <Color x:Key="CardColor">#18191D</Color>
@@ -20,20 +19,20 @@
                     <Color x:Key="StageColor">#08090B</Color>
                     <Color x:Key="TextPrimaryColor">#ECEDEE</Color>
                     <Color x:Key="TextSecondaryColor">#9A9CA3</Color>
-                    <Color x:Key="TextMutedColor">#6E7178</Color>
+                    <Color x:Key="TextMutedColor">#8B8E95</Color>
                     <Color x:Key="BorderColor">#2A2C30</Color>
                     <Color x:Key="BorderFocusColor">#D4A574</Color>
-                    <Color x:Key="StageGateColor">#5C5348</Color>
+                    <Color x:Key="StageGateColor">#7A6E5F</Color>
                     <Color x:Key="SuccessColor">#3D9B7A</Color>
-                    <Color x:Key="ErrorColor">#C45C5C</Color>
+                    <Color x:Key="ErrorColor">#D97070</Color>
                     <Color x:Key="WarningColor">#C9A05A</Color>
                     <Color x:Key="DangerLightColor">#3A1616</Color>
                     <Color x:Key="RadioCheckedBgColor">#332F6F62</Color>
                     <Color x:Key="QualityExcellentColor">#3D9B7A</Color>
-                    <Color x:Key="QualityGoodColor">#4A8F86</Color>
+                    <Color x:Key="QualityGoodColor">#4F9A90</Color>
                     <Color x:Key="QualityFairColor">#C9A05A</Color>
-                    <Color x:Key="QualityWarningColor">#C9A05A</Color>
-                    <Color x:Key="QualityPoorColor">#C45C5C</Color>
+                    <Color x:Key="QualityWarningColor">#D9822B</Color>
+                    <Color x:Key="QualityPoorColor">#D97070</Color>
                     <SolidColorBrush x:Key="QualityExcellentBrush" Color="{StaticResource QualityExcellentColor}" />
                     <SolidColorBrush x:Key="QualityGoodBrush" Color="{StaticResource QualityGoodColor}" />
                     <SolidColorBrush x:Key="QualityFairBrush" Color="{StaticResource QualityFairColor}" />
@@ -47,8 +46,8 @@
                     <SolidColorBrush x:Key="ModalOverlayBrush" Color="#B30B0F16" />
                     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
+                    <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
-                    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
                     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
@@ -68,12 +67,13 @@
                     <SolidColorBrush x:Key="StageGateBrush" Color="{StaticResource StageGateColor}" />
                     <SolidColorBrush x:Key="DropZoneBgBrush" Color="#1A2F6F62" />
                     <SolidColorBrush x:Key="DropZoneBorderBrush" Color="#662F6F62" />
-                    <SolidColorBrush x:Key="ChartOverlayBrush" Color="#B3121316" />
                     <SolidColorBrush x:Key="DragOverlayBrush" Color="#CC0B0C0E" />
                     <SolidColorBrush x:Key="DragSubtitleBrush" Color="#9A9CA3" />
+                    <!-- Translucent chrome that floats over the photograph (nav arrows, drop prompt). -->
+                    <SolidColorBrush x:Key="GlassBrush" Color="#D9121316" />
                     <SolidColorBrush x:Key="PopupBrush" Color="{StaticResource CardColor}" />
                     <SolidColorBrush x:Key="PlotBgBrush" Color="#08090B" />
-                    <SolidColorBrush x:Key="PlotAxisBrush" Color="#6E7178" />
+                    <SolidColorBrush x:Key="PlotAxisBrush" Color="#8B8E95" />
                     <SolidColorBrush x:Key="PlotGridBrush" Color="#332A2C30" />
                     <SolidColorBrush x:Key="PlotLabelBrush" Color="#9A9CA3" />
                     <SolidColorBrush x:Key="PlotBeforeValueBrush" Color="#FCA5A5" />
@@ -83,7 +83,7 @@
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="LogBgBrush" Color="#08090B" />
                     <SolidColorBrush x:Key="LogTextBrush" Color="#D4D5D7" />
-                    <SolidColorBrush x:Key="LogTimeBrush" Color="#6E7178" />
+                    <SolidColorBrush x:Key="LogTimeBrush" Color="#8B8E95" />
                     <LinearGradientBrush x:Key="BackgroundGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                         <GradientStop Color="#0B0C0E" Offset="0.0"/>
                         <GradientStop Color="#121316" Offset="1.0"/>
@@ -100,7 +100,6 @@
                     <Color x:Key="SystemAccentColorLight1">#3A8576</Color>
                     <Color x:Key="SystemAccentColorLight2">#5BA394</Color>
                     <Color x:Key="SystemAccentColorLight3">#8BC4B8</Color>
-                    <Color x:Key="BackgroundColor">#F3F4F6</Color>
                     <Color x:Key="SurfaceColor">#FFFFFF</Color>
                     <Color x:Key="SidebarColor">#F6F7F8</Color>
                     <Color x:Key="CardColor">#FFFFFF</Color>
@@ -109,20 +108,20 @@
                     <Color x:Key="StageColor">#E4E6EA</Color>
                     <Color x:Key="TextPrimaryColor">#16181C</Color>
                     <Color x:Key="TextSecondaryColor">#5C6168</Color>
-                    <Color x:Key="TextMutedColor">#7A8088</Color>
+                    <Color x:Key="TextMutedColor">#62676F</Color>
                     <Color x:Key="BorderColor">#D4D7DC</Color>
-                    <Color x:Key="BorderFocusColor">#B8894E</Color>
-                    <Color x:Key="StageGateColor">#B8A07A</Color>
-                    <Color x:Key="SuccessColor">#047857</Color>
-                    <Color x:Key="ErrorColor">#DC2626</Color>
-                    <Color x:Key="WarningColor">#B45309</Color>
+                    <Color x:Key="BorderFocusColor">#8F6630</Color>
+                    <Color x:Key="StageGateColor">#8F7A55</Color>
+                    <Color x:Key="SuccessColor">#036149</Color>
+                    <Color x:Key="ErrorColor">#B91C1C</Color>
+                    <Color x:Key="WarningColor">#9A4A0A</Color>
                     <Color x:Key="DangerLightColor">#FEE2E2</Color>
                     <Color x:Key="RadioCheckedBgColor">#262F6F62</Color>
-                    <Color x:Key="QualityExcellentColor">#047857</Color>
-                    <Color x:Key="QualityGoodColor">#0F766E</Color>
-                    <Color x:Key="QualityFairColor">#B45309</Color>
-                    <Color x:Key="QualityWarningColor">#C2410C</Color>
-                    <Color x:Key="QualityPoorColor">#DC2626</Color>
+                    <Color x:Key="QualityExcellentColor">#036149</Color>
+                    <Color x:Key="QualityGoodColor">#0B655E</Color>
+                    <Color x:Key="QualityFairColor">#8A5A00</Color>
+                    <Color x:Key="QualityWarningColor">#B13A06</Color>
+                    <Color x:Key="QualityPoorColor">#B91C1C</Color>
                     <SolidColorBrush x:Key="QualityExcellentBrush" Color="{StaticResource QualityExcellentColor}" />
                     <SolidColorBrush x:Key="QualityGoodBrush" Color="{StaticResource QualityGoodColor}" />
                     <SolidColorBrush x:Key="QualityFairBrush" Color="{StaticResource QualityFairColor}" />
@@ -136,8 +135,8 @@
                     <SolidColorBrush x:Key="ModalOverlayBrush" Color="#99141820" />
                     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
+                    <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
-                    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
                     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
@@ -157,9 +156,9 @@
                     <SolidColorBrush x:Key="StageGateBrush" Color="{StaticResource StageGateColor}" />
                     <SolidColorBrush x:Key="DropZoneBgBrush" Color="#1A2F6F62" />
                     <SolidColorBrush x:Key="DropZoneBorderBrush" Color="#662F6F62" />
-                    <SolidColorBrush x:Key="ChartOverlayBrush" Color="#E6FFFFFF" />
                     <SolidColorBrush x:Key="DragOverlayBrush" Color="#B316181C" />
                     <SolidColorBrush x:Key="DragSubtitleBrush" Color="#ECEDEE" />
+                    <SolidColorBrush x:Key="GlassBrush" Color="#EBFFFFFF" />
                     <SolidColorBrush x:Key="PopupBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="PlotBgBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="PlotAxisBrush" Color="#5C6168" />
@@ -172,7 +171,7 @@
                     <SolidColorBrush x:Key="RenditionBgBrush" Color="#2A2C30" />
                     <SolidColorBrush x:Key="LogBgBrush" Color="#F4F5F6" />
                     <SolidColorBrush x:Key="LogTextBrush" Color="#1F2228" />
-                    <SolidColorBrush x:Key="LogTimeBrush" Color="#7A8088" />
+                    <SolidColorBrush x:Key="LogTimeBrush" Color="#62676F" />
                     <LinearGradientBrush x:Key="BackgroundGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                         <GradientStop Color="#F3F4F6" Offset="0.0"/>
                         <GradientStop Color="#F3F4F6" Offset="1.0"/>
@@ -198,9 +197,8 @@
             <StreamGeometry x:Key="TrashIconGeometry">M6,19A2,2 0,0,0,8,21H16A2,2 0,0,0,18,19V7H6M8,9H16V19H8M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4Z</StreamGeometry>
             <StreamGeometry x:Key="ClearIconGeometry">M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12Z</StreamGeometry>
             <StreamGeometry x:Key="RemoveIconGeometry">M19,13H5V11H19Z</StreamGeometry>
-            <StreamGeometry x:Key="PlayIconGeometry">M8,5.14V19.14L19,12.14L8,5.14Z</StreamGeometry>
+            <StreamGeometry x:Key="HelpIconGeometry">M11,18H13V16H11V18M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,6A4,4 0 0,0 8,10H10A2,2 0 0,1 12,8A2,2 0 0,1 14,10C14,12 11,11.75 11,15H13C13,12.75 16,12.5 16,10A4,4 0 0,0 12,6Z</StreamGeometry>
+            <StreamGeometry x:Key="ImageIconGeometry">M19,19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M13.96,12.29L11.21,15.83L9.25,13.47L6.5,17H17.5L13.96,12.29Z</StreamGeometry>
+            <StreamGeometry x:Key="DropIconGeometry">M2,12H4V17H20V12H22V17A2,2 0 0,1 20,19H4A2,2 0 0,1 2,17V12M12,15L17.55,9.54L16.13,8.13L13,11.25V2H11V11.25L7.88,8.13L6.46,9.55L12,15Z</StreamGeometry>
             <StreamGeometry x:Key="SpinnerGeometry">M12,2 A10,10 0 1 1 2,12</StreamGeometry>
-            <StreamGeometry x:Key="PauseIconGeometry">M6,5H10V19H6V5M14,5H18V19H14V5Z</StreamGeometry>
-            <SolidColorBrush x:Key="BrandMarkOuterBrush" Color="#2F6F62" />
-            <SolidColorBrush x:Key="BrandMarkInnerBrush" Color="#D4A574" />
         </ResourceDictionary>

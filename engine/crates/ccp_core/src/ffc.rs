@@ -4,14 +4,20 @@
 #![allow(clippy::needless_range_loop)]
 
 use crate::color::{
-    clamp01, lab_to_xyz, linear_rgb_to_xyz, linear_to_srgb, srgb_d65_space, srgb_lstar_d65,
-    srgb_to_linear, xyz_to_lab, xyz_to_linear_rgb,
+    lab_to_xyz, linear_rgb_to_xyz, linear_to_srgb, srgb_d65_space, srgb_lstar_d65, srgb_to_linear,
+    xyz_to_lab, xyz_to_linear_rgb,
 };
-use crate::maps::{fit_least_squares, solve_linear_system};
+use crate::error::{Error, Result};
+use crate::linalg::{fit_least_squares, solve_linear_system};
 use crate::mlp::{fit_mlp, MlpParams, MlpWeights};
 use crate::pls::{auto_ncomp, fit_pls, PLS_TOL};
 use crate::stages::GammaModel;
-use crate::{Error, Result, FFC_EXTREMITY_CUT_OFF, FFC_EXTREMITY_MAX};
+
+/// CCP_rs FFC `transform_extremity` — tanh soft-cap starts here.
+const FFC_EXTREMITY_CUT_OFF: f32 = 1.3;
+
+/// CCP_rs FFC `transform_extremity` — asymptotic gain ceiling.
+const FFC_EXTREMITY_MAX: f32 = 1.8;
 use ndarray::{Array2, Array3};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -69,8 +75,48 @@ impl Default for FfcFitParams {
     }
 }
 
+/// Accepted FFC grid bins per axis (desktop UI offers 4–200).
+pub const FFC_BINS_RANGE: std::ops::RangeInclusive<i64> = 2..=1000;
+/// Accepted odd smoothing window (desktop UI offers 1–51). Even values round up.
+pub const FFC_SMOOTH_RANGE: std::ops::RangeInclusive<i64> = 1..=255;
+/// Accepted polynomial surface degree (desktop UI offers 1–7).
+pub const FFC_DEGREE_RANGE: std::ops::RangeInclusive<i64> = 1..=10;
+/// Accepted NN surface iterations (desktop UI offers 50–20000).
+pub const FFC_NN_MAX_ITER_RANGE: std::ops::RangeInclusive<i64> = 1..=100_000;
+
+fn check_ffc_range(name: &str, value: i64, range: &std::ops::RangeInclusive<i64>) -> Result<()> {
+    if range.contains(&value) {
+        Ok(())
+    } else {
+        Err(Error::InvalidArgument(format!(
+            "ffc.{name} must be an integer from {} to {} (got {value})",
+            range.start(),
+            range.end()
+        )))
+    }
+}
+
+impl FfcFitParams {
+    /// Reject parameters that would make the fit unbounded in time or memory.
+    pub fn validate(&self) -> Result<()> {
+        let as_i64 = |v: usize| i64::try_from(v).unwrap_or(i64::MAX);
+        check_ffc_range("bins", as_i64(self.bins), &FFC_BINS_RANGE)?;
+        check_ffc_range(
+            "smooth_window",
+            i64::from(self.smooth_window),
+            &FFC_SMOOTH_RANGE,
+        )?;
+        check_ffc_range("degree", as_i64(self.degree), &FFC_DEGREE_RANGE)?;
+        check_ffc_range(
+            "nn_max_iter",
+            as_i64(self.nn_max_iter),
+            &FFC_NN_MAX_ITER_RANGE,
+        )
+    }
+}
+
 /// Keep a usable (cut-off, ceiling) pair. Invalid numbers fall back to CCP_rs 1.3 → 1.8.
-pub fn sanitize_ffc_extremity(cut_off: f32, max_val: f32) -> (f32, f32) {
+pub(crate) fn sanitize_ffc_extremity(cut_off: f32, max_val: f32) -> (f32, f32) {
     let cut = if cut_off.is_finite() && cut_off > 0.0 {
         cut_off.clamp(0.5, 4.0)
     } else {
@@ -115,7 +161,7 @@ fn inclusive_window_mean(src: &Array2<f32>, yc: i32, xc: i32, h_win: i32) -> Opt
 }
 
 /// Soft-cap values above `cut_off` toward `max_val` with tanh (CCP 1.3 → 1.8).
-pub fn transform_extremity(data: &mut [f32], cut_off: f32, max_val: f32) {
+pub(crate) fn transform_extremity(data: &mut [f32], cut_off: f32, max_val: f32) {
     for v in data.iter_mut() {
         if *v > cut_off {
             *v = cut_off + (max_val - cut_off) * (max_val * (*v - cut_off)).tanh();
@@ -171,7 +217,12 @@ fn cubic_sample(src: &Array2<f32>, y: f32, x: f32) -> f32 {
     acc
 }
 
-pub fn resize_gain(src: &Array2<f32>, height: usize, width: usize, mode: Upsample) -> Array2<f32> {
+pub(crate) fn resize_gain(
+    src: &Array2<f32>,
+    height: usize,
+    width: usize,
+    mode: Upsample,
+) -> Array2<f32> {
     if src.nrows() == height && src.ncols() == width {
         return src.clone();
     }
@@ -200,12 +251,6 @@ pub fn resize_gain(src: &Array2<f32>, height: usize, width: usize, mode: Upsampl
 }
 
 /// sRGB [0,1] HxWx3 → Lab D65, L* *= gain, clip L 0–100, back to sRGB [0,1].
-pub fn apply_ffc_float(img_rgb: &Array3<f32>, multiplier: &Array2<f32>) -> Array3<f32> {
-    let mut out = img_rgb.clone();
-    apply_ffc_inplace(&mut out, multiplier);
-    out
-}
-
 pub fn apply_ffc_inplace(img_rgb: &mut Array3<f32>, multiplier: &Array2<f32>) {
     apply_ffc_transform_inplace(img_rgb, multiplier, None);
 }
@@ -292,9 +337,10 @@ fn apply_ffc_transform_inplace(
         });
 }
 
+#[cfg(test)]
 /// One sRGB↔Lab trip: L* × gain, then the GC curve on L*. Matches FFC-then-GC order
 /// without the intermediate encode.
-pub fn apply_ffc_gc_fused(
+pub(crate) fn apply_ffc_gc_fused(
     img_rgb: &Array3<f32>,
     multiplier: &Array2<f32>,
     gc: &GammaModel,
@@ -479,34 +525,8 @@ impl FfcSurface {
     }
 }
 
-/// Parse `"x1,y1,x2,y2"` → `(x, y, w, h)` with `w = x2 - x1`.
-pub fn parse_crop_rect(text: &str) -> Result<[i32; 4]> {
-    let parts: Vec<&str> = text.split(',').map(str::trim).collect();
-    if parts.len() != 4 {
-        return Err(Error::InvalidArgument(
-            "crop_rect must be x1,y1,x2,y2".into(),
-        ));
-    }
-    let nums: Result<Vec<i32>> = parts
-        .iter()
-        .map(|p| {
-            p.parse::<i32>()
-                .map_err(|_| Error::InvalidArgument(format!("bad crop_rect value {p}")))
-        })
-        .collect();
-    let n = nums?;
-    let w = n[2] - n[0];
-    let h = n[3] - n[1];
-    if w <= 0 || h <= 0 {
-        return Err(Error::InvalidArgument(
-            "crop_rect has non-positive size".into(),
-        ));
-    }
-    Ok([n[0], n[1], w, h])
-}
-
 /// Fit a full-frame gain map. Missing/empty white → identity ones.
-pub fn fit_gain_map(
+pub(crate) fn fit_gain_map(
     white: Option<&Array3<f32>>,
     crop_rect: Option<[i32; 4]>,
     params: &FfcFitParams,
@@ -663,21 +683,8 @@ pub fn compute_multiplier(
     crop_rect: Option<[i32; 4]>,
     params: &FfcFitParams,
 ) -> Result<Array2<f32>> {
+    params.validate()?;
     fit_gain_map(white, crop_rect, params)
-}
-
-pub fn identity_gain(height: usize, width: usize) -> Array2<f32> {
-    Array2::from_elem((height.max(1), width.max(1)), 1.0)
-}
-
-/// Keep `solve_linear_system` referenced for 1-D FFC fallback surfaces.
-#[allow(dead_code)]
-fn ridge_solve_1d(xtx: Vec<f64>, rhs: Vec<f64>, n: usize) -> Result<Vec<f64>> {
-    solve_linear_system(xtx, rhs, n)
-}
-
-pub fn clip01(v: f32) -> f32 {
-    clamp01(v as f64) as f32
 }
 
 #[cfg(test)]
@@ -759,7 +766,7 @@ mod tests {
             }
         }
         let gain = Array2::from_elem((6, 6), 1.2);
-        let gc = GammaModel::legacy(vec![1.05, 0.0]);
+        let gc = GammaModel::curve(vec![0.0, 50.0, 100.0], vec![0.0, 55.0, 100.0]);
         let fused = apply_ffc_gc_fused(&img, &gain, &gc);
         assert!(fused
             .iter()

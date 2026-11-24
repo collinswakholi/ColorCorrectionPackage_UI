@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ColorCorrect.App.ViewModels"
-        xmlns:conv="using:ColorCorrect.App.Converters"
         x:Class="ColorCorrect.App.Views.FfcSettingsDialog"
         x:DataType="vm:MainWindowViewModel"
         Title="FFC settings"
@@ -15,13 +14,9 @@
         KeyboardNavigation.TabNavigation="Cycle"
         Opened="OnOpened">
 
-    <Window.Resources>
-        <conv:NumericToStringConverter x:Key="NumericToString"/>
-    </Window.Resources>
-
     <Border Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-            CornerRadius="8"
+            CornerRadius="{DynamicResource RadiusLg}"
             VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
         <DockPanel LastChildFill="True">
             <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}"
@@ -31,7 +26,7 @@
                     <Button DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
                             Click="Close_Click" FontSize="16" MinWidth="36" MinHeight="36"
                             AutomationProperties.Name="Close FFC settings"/>
-                    <TextBlock Text="FFC settings" Classes="heading" FontSize="15" VerticalAlignment="Center"/>
+                    <TextBlock Text="FFC settings" Classes="heading" FontSize="{DynamicResource FontSizeSubheading}" VerticalAlignment="Center"/>
                 </DockPanel>
             </Border>
             <Border DockPanel.Dock="Bottom" Padding="16,12"
@@ -44,7 +39,7 @@
                     <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" AutomationProperties.LiveSetting="Polite"/>
                 <TextBlock Text="Fit method" Classes="settingsLabel"/>
                 <ComboBox x:Name="FfcMethodSelect" Classes="config" ItemsSource="{Binding FfcFitMethods}"
-                          SelectedItem="{Binding SelectedFfcFitMethod}" Margin="0,0,0,10"
+                          SelectedItem="{Binding Settings.SelectedFfcFitMethod}" Margin="0,0,0,10"
                           HorizontalAlignment="Stretch" MinWidth="0"
                           AutomationProperties.Name="FFC fit method">
                     <ComboBox.ItemTemplate>
@@ -54,24 +49,24 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <TextBlock Text="Sampling grid (4–200)" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcBinsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcBinsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC bins"/>
                 <TextBlock Text="Smoothing window (odd, 1–51)" Classes="settingsLabel"/>
-                <TextBox Classes="config" Text="{Binding FfcSmoothWindowText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcSmoothWindowText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          HorizontalAlignment="Stretch" MinWidth="0"
                          AutomationProperties.Name="FFC smooth window"/>
                 <TextBlock Text="Polynomial degree (1–7)" Classes="settingsLabel" IsVisible="{Binding ShowFfcDegree}"/>
-                <TextBox Classes="config" Text="{Binding FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
+                <TextBox Classes="config" Text="{Binding Settings.FfcDegreeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"
                          AutomationProperties.Name="FFC degree" IsVisible="{Binding ShowFfcDegree}"/>
-                <StackPanel IsVisible="{Binding ShowFfcIter}" Margin="0,0,0,10">
+                <StackPanel IsVisible="{Binding Settings.ShowFfcIter}" Margin="0,0,0,10">
                     <TextBlock Text="Tolerance" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Classes="config" Text="{Binding Settings.FfcTolText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC tolerance"/>
                 </StackPanel>
-                <StackPanel IsVisible="{Binding ShowFfcNn}" Margin="0,0,0,10">
+                <StackPanel IsVisible="{Binding Settings.ShowFfcNn}" Margin="0,0,0,10">
                     <TextBlock Text="NN max iterations" Classes="settingsLabel"/>
-                    <TextBox Classes="config" Text="{Binding FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    <TextBox Classes="config" Text="{Binding Settings.FfcNnMaxIterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="FFC NN max iterations"/>
                 </StackPanel>
             </StackPanel>

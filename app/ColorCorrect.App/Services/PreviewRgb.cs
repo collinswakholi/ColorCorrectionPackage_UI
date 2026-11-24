@@ -109,11 +109,17 @@ internal static class PreviewRgb
             return;
         }
 
-        var bgra = new byte[checked(width * height * 4)];
-        var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+        // CopyPixels copies raw pixels in the bitmap's own layout. StillImageDecoder
+        // produces Rgba8888 and FromRgb produces Bgra8888, so read the channel order
+        // from the format instead of assuming BGRA.
+        var (red, blue) = bitmap.Format == PixelFormat.Rgba8888 ? (0, 2)
+            : bitmap.Format == PixelFormat.Bgra8888 ? (2, 0)
+            : throw new NotSupportedException($"Unsupported preview pixel format {bitmap.Format}.");
+        var pixels = new byte[checked(width * height * 4)];
+        var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
         try
         {
-            bitmap.CopyPixels(new PixelRect(0, 0, width, height), handle.AddrOfPinnedObject(), bgra.Length, width * 4);
+            bitmap.CopyPixels(new PixelRect(0, 0, width, height), handle.AddrOfPinnedObject(), pixels.Length, width * 4);
         }
         finally
         {
@@ -123,9 +129,9 @@ internal static class PreviewRgb
         var rgb = new byte[checked(width * height * 3)];
         for (var i = 0; i < width * height; i++)
         {
-            rgb[i * 3] = bgra[i * 4 + 2];
-            rgb[i * 3 + 1] = bgra[i * 4 + 1];
-            rgb[i * 3 + 2] = bgra[i * 4];
+            rgb[i * 3] = pixels[i * 4 + red];
+            rgb[i * 3 + 1] = pixels[i * 4 + 1];
+            rgb[i * 3 + 2] = pixels[i * 4 + blue];
         }
 
         Write(path, width, height, rgb);

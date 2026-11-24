@@ -28,40 +28,17 @@ public sealed class HandshakeDocument
     public bool Ok => !Root.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.False;
     public string ChartType => Str("chart_type", Str("cli_chart"));
     public int ChartCount => Faces().Count;
-    public string CliChart => Str("cli_chart");
-    public string Runtime => Str("runtime");
-    public string Backend => Str("backend");
     public string Device => Str("device");
     public JsonElement? Inference => Root.TryGetProperty("inference", out var inference) ? inference : null;
     public string Provider => Str("provider");
-    public JsonElement? Fallback => Root.TryGetProperty("fallback", out var fallback) ? fallback : null;
     public string SnapshotId => Str("snapshot_id");
     public string ChartId(int choice) => GetStr(ActiveFace(choice), "chart_id") ?? "";
-    public int DetectionCount => GetInt("n_dets");
     private int? _patchCount;
     private IReadOnlyList<JsonElement>? _faces;
 
     public int PatchCount => _patchCount ??= Math.Max(AllLatticeQuads().Count, AllSampleQuads(1).Count);
 
     public string GetString(string name, string fallback = "") => Str(name, fallback);
-
-    public int GetInt(string name, int fallback = 0)
-    {
-        if (Root.TryGetProperty(name, out var el))
-        {
-            if (el.TryGetInt32(out var n))
-            {
-                return n;
-            }
-
-            if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out n))
-            {
-                return n;
-            }
-        }
-
-        return fallback;
-    }
 
     public IReadOnlyList<JsonElement> Faces()
     {

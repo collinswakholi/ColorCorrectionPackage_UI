@@ -1,6 +1,6 @@
 using System.Linq;
 using Avalonia.Media;
-using ColorCorrect.App.Controls;
+using ColorCorrect.App.Services;
 using ColorCorrect.Engine;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -21,7 +21,6 @@ public partial class ColorHoverState : ObservableObject
     [ObservableProperty] private string _extra = "";
     [ObservableProperty] private IBrush? _swatch;
     [ObservableProperty] private IBrush? _swatch2;
-    [ObservableProperty] private string _swatch2Label = "";
     [ObservableProperty] private bool _isCompare;
     [ObservableProperty] private string _sampleLabel = "";
     [ObservableProperty] private string _refR = "";
@@ -57,22 +56,6 @@ public partial class ColorHoverState : ObservableObject
         IsVisible = false;
     }
 
-    public void ShowPixel(PickedColor picked)
-    {
-        Title = picked.Pixel;
-        Context = "Pixel";
-        IsCompare = false;
-        SampleLabel = "";
-        ApplyChannels(picked.R, picked.G, picked.B, picked.L, picked.A, picked.LabB);
-        ClearDeltas();
-        Extra = "";
-        Swatch2 = null;
-        Swatch2Label = "";
-        IsVisible = true;
-        OnPropertyChanged(nameof(HasExtra));
-        OnPropertyChanged(nameof(HasSwatch2));
-    }
-
     public void ShowPatch(PatchRow row, bool corrected)
     {
         var sample = corrected && row.Corrected.Length >= 3 ? row.Corrected : row.Measured;
@@ -100,7 +83,6 @@ public partial class ColorHoverState : ObservableObject
         var after = double.IsFinite(row.After) ? row.After.ToString("0.00") : "—";
         Extra = row.Saturated ? $"ΔE {before} → {after}  sat" : $"ΔE {before} → {after}";
         Swatch2 = new SolidColorBrush(Color.FromRgb(rr, rg, rb));
-        Swatch2Label = "Reference";
         IsVisible = true;
         OnPropertyChanged(nameof(HasExtra));
         OnPropertyChanged(nameof(HasSwatch2));
@@ -177,16 +159,5 @@ public partial class ColorHoverState : ObservableObject
         var b = Ch(2);
         var lab = PixelSampler.SrgbToLab(r, g, b);
         return (r, g, b, lab.L, lab.A, lab.B);
-    }
-
-    private static IBrush BrushFrom(double[] rgb)
-    {
-        if (rgb.Length < 3)
-        {
-            return Brushes.Gray;
-        }
-
-        byte Ch(double v) => (byte)Math.Clamp((int)Math.Round(v * 255), 0, 255);
-        return new SolidColorBrush(Color.FromRgb(Ch(rgb[0]), Ch(rgb[1]), Ch(rgb[2])));
     }
 }

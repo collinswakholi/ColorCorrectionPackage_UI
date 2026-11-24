@@ -32,38 +32,8 @@ public partial class MainWindowViewModel
     public IReadOnlyList<NamedValue> ProcessingDevices { get; } = new NamedValue[] {
         new("auto", "Auto (recommended)"), new("cpu", "CPU"), new("gpu", "GPU")
     };
-    [ObservableProperty] private NamedValue _selectedProcessingDevice = new("auto", "Auto (recommended)");
 
-    [ObservableProperty] private bool _doFfc;
-    [ObservableProperty] private bool _doGc = true;
-    [ObservableProperty] private bool _doWb = true;
-    [ObservableProperty] private bool _doCc = true;
-    [ObservableProperty] private string _whiteImagePath = "";
-    [ObservableProperty] private string _cropRect = "";
-    [ObservableProperty] private NamedValue _selectedFfcFitMethod = new("poly", "Polynomial");
-    [ObservableProperty] private decimal _ffcBins = 50;
-    [ObservableProperty] private decimal _ffcSmoothWindow = 5;
-    [ObservableProperty] private decimal _ffcDegree = 3;
-    [ObservableProperty] private decimal _ffcNnMaxIter = 10000;
-    [ObservableProperty] private decimal _ffcTol = 0.00000001m;
-    [ObservableProperty] private decimal _ffcCutOff = 1.3m;
-    [ObservableProperty] private decimal _ffcMaxVal = 1.8m;
-    [ObservableProperty] private decimal _clipLo = -0.2m;
-    [ObservableProperty] private decimal _clipHi = 1.3m;
-    [ObservableProperty] private bool _showFfcNn;
-    [ObservableProperty] private bool _showFfcIter;
-    [ObservableProperty] private string _stageName = "Original";
-    [ObservableProperty] private bool _isStagePreviewLoading;
-    [ObservableProperty] private string _stagePreviewLoadingLabel = "";
-    [ObservableProperty] private string _accelJson = "";
-    [ObservableProperty] private string _lutNote = "LUT does not include flat-field.";
-    [ObservableProperty] private bool _forceCpu;
-    [ObservableProperty] private bool _fastMode = true;
-    [ObservableProperty] private NamedValue _selectedAccelPolicy = new("auto", "Auto (recommended)");
     private bool _accelSync;
-    [ObservableProperty] private bool _phase2Teacher = true;
-    [ObservableProperty] private string _lastPreviewDir = "";
-    [ObservableProperty] private string _accelHint = "Checking graphics hardware…";
     private readonly Dictionary<string, Bitmap> _stageBitmaps = new(StringComparer.OrdinalIgnoreCase);
     private string _usedDetect = "";
     private string _detectFallback = "";
@@ -75,58 +45,58 @@ public partial class MainWindowViewModel
 
     public bool IsStageOriginal
     {
-        get => StageName == "Original";
-        set { if (value) StageName = "Original"; }
+        get => Stage.StageName == "Original";
+        set { if (value) Stage.StageName = "Original"; }
     }
 
     public bool IsStageFfc
     {
-        get => StageName == "FFC";
-        set { if (value) StageName = "FFC"; }
+        get => Stage.StageName == "FFC";
+        set { if (value) Stage.StageName = "FFC"; }
     }
 
     public bool IsStageGc
     {
-        get => StageName == "GC";
-        set { if (value) StageName = "GC"; }
+        get => Stage.StageName == "GC";
+        set { if (value) Stage.StageName = "GC"; }
     }
 
     public bool IsStageWb
     {
-        get => StageName == "WB";
-        set { if (value) StageName = "WB"; }
+        get => Stage.StageName == "WB";
+        set { if (value) Stage.StageName = "WB"; }
     }
 
     public bool IsStageCc
     {
-        get => StageName == "CC";
-        set { if (value) StageName = "CC"; }
+        get => Stage.StageName == "CC";
+        set { if (value) Stage.StageName = "CC"; }
     }
 
     public bool IsStageCorrected
     {
-        get => StageName == "Corrected";
-        set { if (value) StageName = "Corrected"; }
+        get => Stage.StageName == "Corrected";
+        set { if (value) Stage.StageName = "Corrected"; }
     }
 
-    public bool IsFfcPreviewLoading => IsStagePreviewLoading && StageName == "FFC";
-    public bool IsGcPreviewLoading => IsStagePreviewLoading && StageName == "GC";
-    public bool IsWbPreviewLoading => IsStagePreviewLoading && StageName == "WB";
+    public bool IsFfcPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "FFC";
+    public bool IsGcPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "GC";
+    public bool IsWbPreviewLoading => Stage.IsStagePreviewLoading && Stage.StageName == "WB";
 
-    public bool HasStageFfc => ResultStageEnabled(Active, "ffc") && (Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
-    public bool HasStageGc => ResultStageEnabled(Active, "gc") && (Active?.IsCorrected == true || StageFileExists("gc.jpg"));
-    public bool HasStageWb => ResultStageEnabled(Active, "wb") && (Active?.IsCorrected == true || StageFileExists("wb.jpg"));
-    public bool HasStageCc => ResultStageEnabled(Active, "cc") && (Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
-    public bool HasStageCorrected => HasCorrected || Active?.IsCorrected == true || StageFileExists("corrected.jpg");
+    public bool HasStageFfc => ResultStageEnabled(Workspace.Active, "ffc") && (Workspace.Active?.IsCorrected == true || StageFileExists("ffc.jpg"));
+    public bool HasStageGc => ResultStageEnabled(Workspace.Active, "gc") && (Workspace.Active?.IsCorrected == true || StageFileExists("gc.jpg"));
+    public bool HasStageWb => ResultStageEnabled(Workspace.Active, "wb") && (Workspace.Active?.IsCorrected == true || StageFileExists("wb.jpg"));
+    public bool HasStageCc => ResultStageEnabled(Workspace.Active, "cc") && (Workspace.Active?.IsCorrected == true || StageFileExists("cc.jpg") || StageFileExists("corrected.jpg"));
+    public bool HasStageCorrected => Workspace.HasCorrected || Workspace.Active?.IsCorrected == true || StageFileExists("corrected.jpg");
 
-    public string WhiteImageLabel => string.IsNullOrWhiteSpace(WhiteImagePath)
+    public string WhiteImageLabel => string.IsNullOrWhiteSpace(Settings.WhiteImagePath)
         ? "Choose a white reference to use FFC"
-        : Path.GetFileName(WhiteImagePath);
+        : Path.GetFileName(Settings.WhiteImagePath);
 
-    public bool ShowFfcDegree => SelectedFfcFitMethod.Value != "linear";
+    public bool ShowFfcDegree => Settings.SelectedFfcFitMethod.Value != "linear";
 
     private bool StageFileExists(string file) =>
-        ResolvePreviewFile(LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
+        ResolvePreviewFile(Stage.LastPreviewDir, Path.GetFileNameWithoutExtension(file)) is not null;
 
     internal static string? ResolvePreviewFile(string? dir, string stem)
     {
@@ -196,8 +166,8 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void ClearWhite()
     {
-        WhiteImagePath = "";
-        HasWhiteRef = false;
+        Settings.WhiteImagePath = "";
+        Workspace.HasWhiteRef = false;
         OnPropertyChanged(nameof(WhiteImageLabel));
         ScheduleSave();
     }
@@ -218,15 +188,15 @@ public partial class MainWindowViewModel
 
         if (CatalogFolders.Any(item => PathIdentity.Equal(item.Path, folder)))
         {
-            Status = "That folder is already in the catalog.";
+            Job.Status = "That folder is already in the catalog.";
             return;
         }
 
         CatalogFolders.Add(new CatalogFolderViewModel(folder));
-        HasCatalogFolders = CatalogFolders.Count > 0;
+        Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
-        Status = $"Catalog + {Path.GetFileName(folder)}";
+        Job.Status = $"Catalog + {Path.GetFileName(folder)}";
         Log("Catalog", $"Added folder {folder}.", LogLevel.Success);
     }
 
@@ -239,11 +209,11 @@ public partial class MainWindowViewModel
         }
 
         CatalogFolders.Remove(folder);
-        HasCatalogFolders = CatalogFolders.Count > 0;
+        Workspace.HasCatalogFolders = CatalogFolders.Count > 0;
         LoadCatalog();
         ScheduleSave();
-        Status = $"Removed catalog folder {folder.Name}";
-        Log("Catalog", Status);
+        Job.Status = $"Removed catalog folder {folder.Name}";
+        Log("Catalog", Job.Status);
     }
 
     public void UseWhitePath(string path)
@@ -254,109 +224,101 @@ public partial class MainWindowViewModel
         {
             if (!string.IsNullOrWhiteSpace(path) && File.Exists(path) && !IsImage(path))
             {
-                Status = "FFC white must be a still image.";
-                Log("FFC", Status, LogLevel.Warning);
+                Job.Status = "FFC white must be a still image.";
+                Log("FFC", Job.Status, LogLevel.Warning);
             }
 
             return;
         }
 
-        WhiteImagePath = Path.GetFullPath(path);
-        DoFfc = true;
-        HasWhiteRef = true;
+        Settings.WhiteImagePath = Path.GetFullPath(path);
+        Settings.DoFfc = true;
+        Workspace.HasWhiteRef = true;
         OnPropertyChanged(nameof(WhiteImageLabel));
-        Status = $"FFC white · {Path.GetFileName(WhiteImagePath)}";
-        Log("FFC", Status, LogLevel.Info, [WhiteImagePath]);
+        Job.Status = $"FFC white · {Path.GetFileName(Settings.WhiteImagePath)}";
+        Log("FFC", Job.Status, LogLevel.Info, [Settings.WhiteImagePath]);
         EnsureWhiteInSession(activate: false);
         RefreshOverlay();
         ScheduleSave();
-    }
-
-    [RelayCommand]
-    private void UseCatalogWhite(CatalogItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            UseWhitePath(item.Path);
-        }
-    }
-
-    [RelayCommand]
-    private void UseSessionWhite(SessionItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            UseWhitePath(item.Path);
-        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
     private async Task ForceCpuRestartAsync()
     {
         var cancellation = BeginJob();
-        _worker.Policy = SelectedAccelPolicy.Value;
+        _worker.Policy = Compute.SelectedAccelPolicy.Value;
         _detectionFailures.Clear();
         _engineGeneration++;
         _usedDetect = _usedPlane = _usedApply = "";
         await OnUi(() =>
         {
-            Busy = true;
-            WorkerReady = false;
-            WorkerStartupComplete = false;
-            WorkerStartupError = "";
-            Status = "Restarting worker…";
+            Job.Busy = true;
+            Compute.WorkerReady = false;
+            Compute.WorkerStartupComplete = false;
+            Compute.WorkerStartupError = "";
+            Job.Status = "Restarting worker…";
         }).ConfigureAwait(false);
         try
         {
             await _worker.RestartAsync(cancellation).ConfigureAwait(false);
-            var warmed = _worker.Warmed;
-            var warmupError = _worker.LastError;
+            var readiness = WorkerReadiness.Of(_worker);
             await RefreshAccelAsync().ConfigureAwait(false);
             await OnUi(() =>
             {
-                if (ReportWorkerWarmupFailure(warmed, warmupError)) return;
-                WorkerReady = true;
-                WorkerStartupComplete = true;
-                WorkerStartupError = "";
-                WorkerLine = string.IsNullOrWhiteSpace(_worker.Title)
-                    ? $"Warmed · {_worker.Device}"
-                    : _worker.Title;
-                Status = WorkerLine;
+                if (MarkWorkerReady(readiness)) Job.Status = Compute.WorkerLine;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
         {
-            await OnUi(() =>
-            {
-                WorkerStartupComplete = true;
-                WorkerStartupError = ex.Message;
-                Status = ex.Message;
-                WorkerLine = "Worker failed";
-            }).ConfigureAwait(false);
+            await OnUi(() => MarkWorkerFailed(ex.Message)).ConfigureAwait(false);
         }
         finally
         {
             await OnUi(() =>
             {
-                Busy = false;
+                Job.Busy = false;
                 EndPipeline();
             }).ConfigureAwait(false);
         }
     }
 
-    private bool ReportWorkerWarmupFailure(bool warmed, string error)
+    /// <summary>What a started worker reported, read once on the worker's thread.</summary>
+    private readonly record struct WorkerReadiness(bool Warmed, string Device, string Title, string Error)
     {
-        if (warmed) return false;
-        WorkerReady = false;
-        WorkerStartupComplete = true;
-        var reason = string.IsNullOrWhiteSpace(error)
-            ? "The selected detection engine did not initialize."
-            : ConciseProcessingError(error);
-        WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
-        WorkerLine = "Detection unavailable";
-        Status = WorkerStartupError;
-        Log("Engine", WorkerStartupError, LogLevel.Error);
+        public static WorkerReadiness Of(SpeedyWorker worker) => new(worker.Warmed, worker.Device, worker.Title, worker.LastError);
+    }
+
+    /// <summary>Show a started worker as ready, or its warmup failure. Returns whether it is ready.</summary>
+    private bool MarkWorkerReady(WorkerReadiness readiness)
+    {
+        if (!readiness.Warmed)
+        {
+            Compute.WorkerReady = false;
+            Compute.WorkerStartupComplete = true;
+            var reason = string.IsNullOrWhiteSpace(readiness.Error)
+                ? "The selected detection engine did not initialize."
+                : ConciseProcessingError(readiness.Error);
+            Compute.WorkerStartupError = $"{reason} Choose Auto or CPU, or use Check setup.";
+            Compute.WorkerLine = "Detection unavailable";
+            Job.Status = Compute.WorkerStartupError;
+            Log("Engine", Compute.WorkerStartupError, LogLevel.Error);
+            return false;
+        }
+
+        Compute.WorkerReady = true;
+        Compute.WorkerStartupComplete = true;
+        Compute.WorkerStartupError = "";
+        Compute.WorkerLine = string.IsNullOrWhiteSpace(readiness.Title) ? $"Warmed · {readiness.Device}" : readiness.Title;
         return true;
+    }
+
+    private void MarkWorkerFailed(string error)
+    {
+        Compute.WorkerReady = false;
+        Compute.WorkerStartupComplete = true;
+        Compute.WorkerStartupError = error;
+        Compute.WorkerLine = "Worker failed";
+        Job.Status = error;
     }
 
     [RelayCommand]
@@ -370,19 +332,19 @@ public partial class MainWindowViewModel
             var hint = AccelHintFrom(report);
             await OnUi(() =>
             {
-                AccelJson = raw;
+                Compute.AccelJson = raw;
                 AccelRows.Clear();
                 foreach (var row in rows)
                 {
                     AccelRows.Add(row);
                 }
 
-                AccelHint = hint;
+                Compute.AccelHint = hint;
             }).ConfigureAwait(false);
         }
         catch (System.Exception ex)
         {
-            await OnUi(() => AccelJson = ex.Message).ConfigureAwait(false);
+            await OnUi(() => Compute.AccelJson = ex.Message).ConfigureAwait(false);
         }
     }
 
@@ -400,34 +362,22 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var result = await _worker.SendAsync(new Dictionary<string, object?>
-        {
-            ["cmd"] = "export_cube",
-            ["model"] = LoadedModelPath,
-            ["path"] = dest,
-            ["size"] = 33,
-        }).ConfigureAwait(false);
-        var ok = result.TryGetProperty("ok", out var okEl) && okEl.GetBoolean();
-        await OnUi(() =>
-        {
-            Status = ok
-                ? "Exported .cube (LUT does not include flat-field)."
-                : result.TryGetProperty("error", out var err) ? err.GetString() ?? "export failed" : "export failed";
-        }).ConfigureAwait(false);
+        var (ok, error) = await _client.ExportCubeAsync(Output.LoadedModelPath, dest).ConfigureAwait(false);
+        await OnUi(() => Job.Status = ok ? "Exported .cube (LUT does not include flat-field)." : error).ConfigureAwait(false);
     }
 
-    partial void OnStageNameChanged(string value)
+    private void OnStageNameChanged(string value)
     {
         if (value == "Corrected")
         {
-            if (!ShowCorrected)
+            if (!Stage.ShowCorrected)
             {
-                ShowCorrected = true;
+                Stage.ShowCorrected = true;
             }
         }
-        else if (ShowCorrected)
+        else if (Stage.ShowCorrected)
         {
-            ShowCorrected = false;
+            Stage.ShowCorrected = false;
         }
 
         NotifyStageRadios();
@@ -437,104 +387,104 @@ public partial class MainWindowViewModel
         _ = EnsureStagePreviewAsync(value);
     }
 
-    partial void OnDoFfcChanged(bool value)
+    private void OnDoFfcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoGcChanged(bool value)
+    private void OnDoGcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoWbChanged(bool value)
+    private void OnDoWbChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnDoCcChanged(bool value)
+    private void OnDoCcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnSelectedFfcFitMethodChanged(NamedValue value)
+    private void OnSelectedFfcFitMethodChanged(NamedValue value)
     {
         OnPropertyChanged(nameof(ShowFfcDegree));
-        ShowFfcNn = value.Value == "nn";
-        ShowFfcIter = value.Value is "nn" or "pls";
+        Settings.ShowFfcNn = value.Value == "nn";
+        Settings.ShowFfcIter = value.Value is "nn" or "pls";
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcTolChanged(decimal value)
+    private void OnFfcTolChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcCutOffChanged(decimal value)
+    private void OnFfcCutOffChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcMaxValChanged(decimal value)
+    private void OnFfcMaxValChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnClipLoChanged(decimal value)
+    private void OnClipLoChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnClipHiChanged(decimal value)
+    private void OnClipHiChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcNnMaxIterChanged(decimal value)
+    private void OnFfcNnMaxIterChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcBinsChanged(decimal value)
+    private void OnFfcBinsChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnFfcSmoothWindowChanged(decimal value) { if (!_restoring) ScheduleSave(); }
-    partial void OnFfcDegreeChanged(decimal value)
+    private void OnFfcSmoothWindowChanged(decimal value) { if (!_restoring) ScheduleSave(); }
+    private void OnFfcDegreeChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
-    partial void OnForceCpuChanged(bool value)
+    private void OnForceCpuChanged(bool value)
     {
-        if (value) SelectedProcessingDevice = ProcessingDevices[1];
-        else if (SelectedProcessingDevice.Value == "cpu") SelectedProcessingDevice = ProcessingDevices[0];
+        if (value) Compute.SelectedProcessingDevice = ProcessingDevices[1];
+        else if (Compute.SelectedProcessingDevice.Value == "cpu") Compute.SelectedProcessingDevice = ProcessingDevices[0];
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnSelectedProcessingDeviceChanged(NamedValue value)
+    private void OnSelectedProcessingDeviceChanged(NamedValue value)
     {
-        ForceCpu = value.Value == "cpu";
+        Compute.ForceCpu = value.Value == "cpu";
         RefreshDeviceSummary();
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnFastModeChanged(bool value)
+    private void OnFastModeChanged(bool value)
     {
         if (!_restoring) ScheduleSave();
     }
 
-    partial void OnSelectedAccelPolicyChanged(NamedValue value)
+    private void OnSelectedAccelPolicyChanged(NamedValue value)
     {
         if (_restoring || _accelSync)
         {
@@ -558,15 +508,15 @@ public partial class MainWindowViewModel
             _accelSync = false;
         }
     }
-    partial void OnPhase2TeacherChanged(bool value) { if (!_restoring) ScheduleSave(); }
-    partial void OnLastPreviewDirChanged(string value)
+    private void OnPhase2TeacherChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnLastPreviewDirChanged(string value)
     {
         ClearStageBitmaps();
         NotifyStageRadios();
     }
-    partial void OnWhiteImagePathChanged(string value)
+    private void OnWhiteImagePathChanged(string value)
     {
-        HasWhiteRef = !string.IsNullOrWhiteSpace(value) && File.Exists(value);
+        Workspace.HasWhiteRef = !string.IsNullOrWhiteSpace(value) && File.Exists(value);
         OnPropertyChanged(nameof(WhiteImageLabel));
         RefreshWhiteBadges();
         RefreshOverlay();
@@ -592,24 +542,24 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsWbPreviewLoading));
     }
 
-    partial void OnIsStagePreviewLoadingChanged(bool value) => NotifyStageRadios();
+    private void OnIsStagePreviewLoadingChanged(bool value) => NotifyStageRadios();
 
     private static bool IsDeferredStage(string stage) =>
         stage is "FFC" or "GC" or "WB";
 
     private bool HasReadyStageBitmap(string stage)
     {
-        var stem = StagePreviewStem(stage, ResolvePreviewFile(LastPreviewDir, "cc") is not null);
+        var stem = StagePreviewStem(stage, ResolvePreviewFile(Stage.LastPreviewDir, "cc") is not null);
         return _stageBitmaps.ContainsKey(stem);
     }
 
     private void SyncStagePreviewLoading()
     {
-        var loading = IsDeferredStage(StageName)
-            && Active?.IsCorrected == true
-            && !HasReadyStageBitmap(StageName);
-        IsStagePreviewLoading = loading;
-        StagePreviewLoadingLabel = loading ? $"Loading {StageName}" : "";
+        var loading = IsDeferredStage(Stage.StageName)
+            && Workspace.Active?.IsCorrected == true
+            && !HasReadyStageBitmap(Stage.StageName);
+        Stage.IsStagePreviewLoading = loading;
+        Stage.StagePreviewLoadingLabel = loading ? $"Loading {Stage.StageName}" : "";
     }
 
     private static string StagePreviewStem(string stage, bool preferCc)
@@ -636,8 +586,8 @@ public partial class MainWindowViewModel
 
     private void ShowStageBitmap(Bitmap next)
     {
-        var old = Preview;
-        Preview = next;
+        var old = Stage.Preview;
+        Stage.Preview = next;
         DisposeIfUnused(old);
 
         SyncStagePreviewLoading();
@@ -645,47 +595,47 @@ public partial class MainWindowViewModel
 
     private void ApplyStagePreview()
     {
-        if (Active?.PreviewSuppressed == true && StageName != "Original") return;
-        if (StageName == "Original")
+        if (Workspace.Active?.PreviewSuppressed == true && Stage.StageName != "Original") return;
+        if (Stage.StageName == "Original")
         {
-            if (OriginalPreview is not null)
+            if (Stage.OriginalPreview is not null)
             {
-                ShowStageBitmap(OriginalPreview);
+                ShowStageBitmap(Stage.OriginalPreview);
             }
 
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(LastPreviewDir))
+        if (string.IsNullOrWhiteSpace(Stage.LastPreviewDir))
         {
-            if (StageName == "Corrected" && CorrectedPreview is not null)
+            if (Stage.StageName == "Corrected" && Stage.CorrectedPreview is not null)
             {
-                Preview = CorrectedPreview;
+                Stage.Preview = Stage.CorrectedPreview;
             }
-            else if (OriginalPreview is not null)
+            else if (Stage.OriginalPreview is not null)
             {
-                Preview = OriginalPreview;
+                Stage.Preview = Stage.OriginalPreview;
             }
 
             return;
         }
 
-        var name = StagePreviewStem(StageName, ResolvePreviewFile(LastPreviewDir, "cc") is not null);
+        var name = StagePreviewStem(Stage.StageName, ResolvePreviewFile(Stage.LastPreviewDir, "cc") is not null);
         if (_stageBitmaps.TryGetValue(name, out var cached))
         {
             ShowStageBitmap(cached);
             return;
         }
 
-        var path = ResolvePreviewFile(LastPreviewDir, name);
+        var path = ResolvePreviewFile(Stage.LastPreviewDir, name);
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
 
         var gen = ++_stageLoadGen;
-        var stage = StageName;
-        var dir = LastPreviewDir;
+        var stage = Stage.StageName;
+        var dir = Stage.LastPreviewDir;
         _ = Task.Run(async () =>
         {
             Bitmap? next = null;
@@ -700,7 +650,7 @@ public partial class MainWindowViewModel
 
             await OnUi(() =>
             {
-                if (gen != _stageLoadGen || next is null || LastPreviewDir != dir)
+                if (gen != _stageLoadGen || next is null || Stage.LastPreviewDir != dir)
                 {
                     next?.Dispose();
                     return;
@@ -709,7 +659,7 @@ public partial class MainWindowViewModel
                 if (_stageBitmaps.TryGetValue(name, out var existing))
                 {
                     next.Dispose();
-                    if (StageName == stage)
+                    if (Stage.StageName == stage)
                     {
                         ShowStageBitmap(existing);
                     }
@@ -718,7 +668,7 @@ public partial class MainWindowViewModel
                 }
 
                 _stageBitmaps[name] = next;
-                if (StageName == stage)
+                if (Stage.StageName == stage)
                 {
                     ShowStageBitmap(next);
                 }
@@ -728,7 +678,7 @@ public partial class MainWindowViewModel
 
     private async Task EnsureStagePreviewAsync(string stage)
     {
-        if (Active?.PreviewSuppressed == true) return;
+        if (Workspace.Active?.PreviewSuppressed == true) return;
         var key = stage.ToLowerInvariant() switch
         {
             "ffc" => "ffc",
@@ -753,14 +703,14 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var item = Active;
+        var item = Workspace.Active;
         if (item is null || !item.IsCorrected)
         {
             return;
         }
 
         var model = item.CompletedContext?.Model.Path ?? "";
-        var previewDir = !string.IsNullOrWhiteSpace(item.PreviewDir) ? item.PreviewDir : LastPreviewDir;
+        var previewDir = !string.IsNullOrWhiteSpace(item.PreviewDir) ? item.PreviewDir : Stage.LastPreviewDir;
         if (!File.Exists(model) || string.IsNullOrWhiteSpace(previewDir))
         {
             FailStagePreview(stage);
@@ -800,8 +750,8 @@ public partial class MainWindowViewModel
 
     internal void FailStagePreview(string stage)
     {
-        StageName = HasStageCorrected ? "Corrected" : "Original";
-        IsStagePreviewLoading = false;
+        Stage.StageName = HasStageCorrected ? "Corrected" : "Original";
+        Stage.IsStagePreviewLoading = false;
         Log("Preview", $"Could not load {stage} preview. Check that the saved model and its assets are available.", LogLevel.Warning);
     }
 
@@ -823,7 +773,7 @@ public partial class MainWindowViewModel
             _usedApply = apply.Trim();
         }
 
-        if (string.IsNullOrWhiteSpace(AccelJson))
+        if (string.IsNullOrWhiteSpace(Compute.AccelJson))
         {
             RefreshDeviceSummary();
             return;
@@ -831,14 +781,14 @@ public partial class MainWindowViewModel
 
         try
         {
-            using var doc = JsonDocument.Parse(AccelJson);
+            using var doc = JsonDocument.Parse(Compute.AccelJson);
             AccelRows.Clear();
             foreach (var row in ParseAccel(doc.RootElement))
             {
                 AccelRows.Add(row);
             }
 
-            AccelHint = AccelHintFrom(doc.RootElement);
+            Compute.AccelHint = AccelHintFrom(doc.RootElement);
         }
         catch
         {
@@ -851,18 +801,18 @@ public partial class MainWindowViewModel
         var lines = new List<string> { DetectionStatus };
         if (!string.IsNullOrWhiteSpace(_detectFallback)) lines.Add($"Fallback: {_detectFallback}");
         if (!string.IsNullOrWhiteSpace(_usedPlane)) lines.Add($"White-plane detection: {LabelStage(_usedPlane)}");
-        lines.Add($"Correction: {SelectedProcessingDevice.Label}" + (string.IsNullOrWhiteSpace(_usedApply) ? " — not run" : $" · last used {LabelStage(_usedApply)}"));
+        lines.Add($"Correction: {Compute.SelectedProcessingDevice.Label}" + (string.IsNullOrWhiteSpace(_usedApply) ? " — not run" : $" · last used {LabelStage(_usedApply)}"));
         return string.Join("\n", lines);
     }
 
     public string DetectionStatus => string.IsNullOrWhiteSpace(_usedDetect)
-        ? $"Detection: {SelectedAccelPolicy.Label} — not checked"
+        ? $"Detection: {Compute.SelectedAccelPolicy.Label} — not checked"
         : $"Detection: {LabelStage(_usedDetect)}";
 
     private void RefreshDeviceSummary()
     {
         OnPropertyChanged(nameof(DetectionStatus));
-        AccelHint = AccelHintFrom(default);
+        Compute.AccelHint = AccelHintFrom(default);
     }
 
     private static string LabelStage(string value) => value.Trim().ToLowerInvariant() switch
@@ -996,10 +946,6 @@ public partial class MainWindowViewModel
         if (s.Equals("planned", StringComparison.OrdinalIgnoreCase)) return "Planned";
         return char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
     }
-
-    private static bool ActiveIs(JsonElement report, string kind) =>
-        report.TryGetProperty("active", out var active) &&
-        string.Equals(active.ToString(), kind, StringComparison.OrdinalIgnoreCase);
 
     private static string Str(JsonElement el, string name) =>
         el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";

@@ -21,8 +21,7 @@ public sealed class DocumentationRenderingTests
         var corpus = Path.Combine(root.FullName, "testdata", "acceptance");
         var vm = new MainWindowViewModel(persistenceEnabled: false)
         {
-            Busy = false, IsLightTheme = true, ProcessExpanded = true,
-            ModelExpanded = false, LibraryExpanded = false,
+            Job = { Busy = false }, Layout = { IsLightTheme = true, ProcessExpanded = true, ModelExpanded = false, LibraryExpanded = false },
         };
         PublicFixtureCatalog.Install(vm);
         var window = new MainWindow { Width = 1002, Height = 900, DataContext = vm };
@@ -34,12 +33,12 @@ public sealed class DocumentationRenderingTests
             vm.UseWhitePath(Path.Combine(corpus, "blank.jpg"));
             vm.AddPaths([Path.Combine(corpus, "chart.jpg"), Path.Combine(corpus, "sample.jpg")]);
             var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (vm.OriginalPreview is null && DateTime.UtcNow < deadline)
+            while (vm.Stage.OriginalPreview is null && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(20);
                 Dispatcher.UIThread.RunJobs();
             }
-            Assert.NotNull(vm.OriginalPreview);
+            Assert.NotNull(vm.Stage.OriginalPreview);
             Dispatcher.UIThread.RunJobs();
             var processTop = window.ProcessToggle.TranslatePoint(default, window.SidebarScroll);
             Assert.NotNull(processTop);
@@ -48,12 +47,12 @@ public sealed class DocumentationRenderingTests
             Assert.True(window.FfcSettingsButton.IsEffectivelyVisible);
             Assert.True(window.GcSettingsButton.IsEffectivelyVisible);
             Assert.True(window.CcSettingsButton.IsEffectivelyVisible);
-            Assert.True(vm.DoFfc);
-            Assert.True(vm.HasWhiteRef);
+            Assert.True(vm.Settings.DoFfc);
+            Assert.True(vm.Workspace.HasWhiteRef);
             // Documentation must not expose build-machine paths from the normal
             // operational log. This is a UI illustration, not a completed fit.
             vm.LogEntries.Clear();
-            vm.Status = "Public samples · Blank.JPG is the FFC reference.";
+            vm.Job.Status = "Public samples · Blank.JPG is the FFC reference.";
             Dispatcher.UIThread.RunJobs();
             using var frame = window.CaptureRenderedFrame();
             Assert.NotNull(frame);

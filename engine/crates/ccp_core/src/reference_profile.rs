@@ -5,8 +5,8 @@ use crate::color::{
     adapt_xyz_white, encoded_to_linear_rgb, lab_to_xyz, linear_rgb_to_xyz, parse_rgb_color_space,
     parse_white_point, xyz_to_lab, Lab,
 };
-use crate::refs::{chart_spec, ChartKind, ChartPatch, ChartSpec};
-use crate::{Error, Result};
+use crate::error::{Error, Result};
+use crate::refs::{chart_spec, ChartKind, ChartPatch, ChartSpec, PatchProvenance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -29,17 +29,6 @@ pub struct ReferenceProfile {
 #[serde(deny_unknown_fields)]
 pub struct ChartReferenceAssignment {
     pub chart_id: String,
-    pub profile_id: String,
-    pub profile_revision: u32,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PatchProvenance {
-    #[serde(default)]
-    pub custom_reference: bool,
-    pub chart_id: String,
-    pub template_id: String,
-    pub cell_id: String,
     pub profile_id: String,
     pub profile_revision: u32,
 }
@@ -156,7 +145,7 @@ impl ReferenceProfile {
         spec.reference_srgb = labs
             .iter()
             .copied()
-            .map(crate::lab_d50_to_srgb)
+            .map(crate::color::lab_d50_to_srgb)
             .collect::<Result<_>>()?;
         spec.reference_lab_d50 = labs;
         Ok(spec)

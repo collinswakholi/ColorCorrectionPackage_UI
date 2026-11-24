@@ -41,6 +41,22 @@ def rust_component_test_command(root: Path, rid: str, target_directory: Path | N
     return command
 
 
+def rust_lint_commands(root: Path, rid: str, target_directory: Path | None = None) -> dict[str, list]:
+    """Formatting and clippy gates for the crates and features that ship on this target.
+
+    They run on Linux only: formatting is platform independent and the Linux build covers
+    every shipping crate, including the Rust inference fallback.
+    """
+    if TARGETS[rid][0] != "Linux":
+        return {}
+    test = rust_component_test_command(root, rid, target_directory)
+    clippy = ["cargo", "clippy", *test[2:], "--all-targets", "--", "-D", "warnings"]
+    return {
+        "rust_format": ["cargo", "fmt", "--all", "--check", "--manifest-path", root / "engine/Cargo.toml"],
+        "rust_clippy": clippy,
+    }
+
+
 def rust_build_outputs(work: Path, rid: str) -> dict[str, Path]:
     """Paths shared by Cargo invocation, packaging and component examples."""
     target = work / ("source-build/.build/rust-target" if rid == "osx-arm64" else "rust-target")
@@ -155,7 +171,7 @@ def verify_macos_runtime(payload: Path, work: Path, evidence: Path, env: dict) -
 
 def clean_environment(package: Path, rid: str, runtime: Path | None = None) -> dict[str, str]:
     prefixes = ("CCP_", "ORT_", "DYLD_", "WGPU_", "VK_", "CUBECL_", "D3D12_", "MESA_", "DOTNET_", "COMPLUS_")
-    remove = {"COLORCORRECT_EXE", "PYTHONPATH", "PYTHONHOME", "LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT", "LIBTORCH", "LIBTORCH_USE_PYTORCH", "PATH", "PSMODULEPATH"}
+    remove = {"PYTHONPATH", "PYTHONHOME", "LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT", "LIBTORCH", "LIBTORCH_USE_PYTORCH", "PATH", "PSMODULEPATH"}
     env = {key: value for key, value in os.environ.items() if key.upper() not in remove and not key.upper().startswith(prefixes)}
     system = TARGETS[rid][0]
     runtime = runtime or package
@@ -331,6 +347,7 @@ def main():
         rust_tests = rust_component_test_command(root, args.rid, rust_target)
         report["rust_component_packages"] = [rust_tests[index + 1] for index, value in enumerate(rust_tests) if value == "-p"]
         component_commands = {
+            **rust_lint_commands(root, args.rid, rust_target),
             "rust_workspace": rust_tests,
             "dotnet_engine": ["dotnet", "test", root / "app/ColorCorrect.Engine.Tests/ColorCorrect.Engine.Tests.csproj", "-c", "Release",
                 "-p:RestoreLockedMode=true", "--logger", "trx;LogFileName=engine.trx", "--results-directory", evidence],

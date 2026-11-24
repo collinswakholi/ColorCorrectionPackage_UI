@@ -1,0 +1,38 @@
+<!--
+  Design tokens shared by every view. Colors live in ThemeColors.axaml (per theme);
+  these sizes are theme independent.
+  Type scale: caption 11 · small body 12 · body 13 · subheading 15 · heading 18 · title 22 · display 24.
+  Radius scale: sm 4 · md 6 · lg 8 · xl 12.
+  Spacing scale (use for new layout work): 2 · 4 · 8 · 12 · 16 · 24.
+  Elevation: flat (inline surfaces) · card (resting panels) · float (popups, flyouts, hover cards).
+  Shadows stay soft and neutral so they never tint the photograph.
+  Motion (Resources/Motion.axaml, merged only when animations are enabled):
+    fast 120 ms hover and press · base 180 ms selection and state · slow 240 ms reveals.
+    Every curve eases out; nothing loops except the busy indicators.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <x:Double x:Key="FontSizeCaption">11</x:Double>
+    <x:Double x:Key="FontSizeBodySm">12</x:Double>
+    <x:Double x:Key="FontSizeBody">13</x:Double>
+    <x:Double x:Key="FontSizeSubheading">15</x:Double>
+    <x:Double x:Key="FontSizeHeading">18</x:Double>
+    <x:Double x:Key="FontSizeTitle">22</x:Double>
+    <x:Double x:Key="FontSizeDisplay">24</x:Double>
+
+    <CornerRadius x:Key="RadiusSm">4</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">8</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">12</CornerRadius>
+
+    <x:Double x:Key="Space2xs">2</x:Double>
+    <x:Double x:Key="SpaceXs">4</x:Double>
+    <x:Double x:Key="SpaceSm">8</x:Double>
+    <x:Double x:Key="SpaceMd">12</x:Double>
+    <x:Double x:Key="SpaceLg">16</x:Double>
+    <x:Double x:Key="SpaceXl">24</x:Double>
+    <Thickness x:Key="PadCard">16</Thickness>
+    <Thickness x:Key="PadDialog">20</Thickness>
+
+    <BoxShadows x:Key="ElevationCard">0 1 2 0 #14000000</BoxShadows>
+    <BoxShadows x:Key="ElevationFloat">0 12 32 0 #3D000000, 0 2 6 0 #1F000000</BoxShadows>
+</ResourceDictionary>

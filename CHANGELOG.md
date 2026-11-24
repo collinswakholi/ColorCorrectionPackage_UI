@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.4.0 — 2026-11-24
+
+- Show an error notice instead of closing the app when a settings, help, reference-editor or plot-save dialog fails to open.
+- Confirmation prompts: Escape and Cancel dismiss, Enter confirms only non-destructive prompts, and screen readers announce the question.
+- Engine protocol 3: every failed worker reply now includes a stable `code` (for example `invalid_model`, `image_too_large`, `no_chart_detected`) next to the unchanged `error` message. The ready event reports `protocol_version` 3; requests and successful replies are unchanged.
+- Reject corrupt or crafted saved models with a clear error instead of crashing the engine, and keep the engine running if an unexpected internal error occurs during a request.
+- Fix a crash when fitting linear, PLS or NN corrections with polynomial degree 7.
+- Reject out-of-range flat-field settings (bins 2–1000, odd smoothing window 1–255, degree 1–10, NN iterations 1–100000) instead of running unbounded fits. Every value the app offers stays valid.
+- Refuse images above 200 megapixels (configurable with `CCP_MAX_IMAGE_MEGAPIXELS`) before decoding them, reject empty images, and report 16-bit PNG input as PNG rather than TIFF. Embedded-profile conversion no longer needs a second full-size copy of the image.
+- Chart detection reports an oversized image with code `image_too_large` (it previously used `image_decode_failed`), using the same `CCP_MAX_IMAGE_MEGAPIXELS` limit as the other commands.
+- Leave chart samples with non-finite values out of correction fits, and fail fits that would produce non-finite coefficients.
+- The engine keeps serving after a request line with invalid UTF-8, rejects non-path entries in apply image lists, reports unwritable output and preview folders, bounds its detection cache and removes its temporary detection files on exit.
+- Preview PNGs are complete before a request returns, failed preview writes are reported, and at most four preview encodes run at once.
+- Python SDK: read and check the worker protocol version (2 and 3 are supported), classify errors by `code` when the worker sends one (exposed as `ColorCorrectError.code`), stop the worker of an Engine that is garbage-collected without `close()`, treat `Shutdown`/`QUIT` like `shutdown`, and accept `setup_probe` in the command-line tool.
+- Python SDK: the NDJSON transport (`Engine`, `EngineError`, `Calibration`) moves to its own `colorcorrect_engine` module below the typed workflows, which removes an import cycle; import every public name from `colorcorrect` as before. `Engine.start()` starts the worker eagerly.
+- Update the API protocol reference for protocol 3: every command and request field, the ready event, detection snapshot and chart IDs, error codes, and the `auto` default policy.
+- Text and status colors meet WCAG AA contrast in both themes (muted text, light focus ring, error/warning/success, ΔE quality ramp), and the "fair" and "warning" ΔE bands are distinct in the dark theme.
+- New design tokens for type sizes, corner radii and spacing; views use them instead of fixed values.
+- The ΔE, Color Analysis and Chart rendition panels say whether the session is empty, a fit is running, or the last fit failed and why.
+- The status bar turns red while the last message is an error.
+- Thumbnails and previews decode about 2.5 times faster, at most a few at a time, and unreadable files show "No preview" with the reason instead of a blank tile.
+- Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
+- Checking that a loaded model and its white reference are unchanged no longer hashes files on the UI thread while you edit settings; the check runs in the background and again, authoritatively, when Apply or a batch starts.
+- Fix the Original preview showing red and blue swapped (for example a blue note as yellow) when an image was reopened from the preview cache. The cache wrote decoded pixels in the wrong channel order; old cache entries are ignored.
+- Design pass: elevation shadows on cards and popups, focus rings on every control, a neutral frame around the photo, a drop-target empty state, a spinner and outlined Cancel while a run is busy, and quality-coloured ΔE in the status bar. Short transitions (120–240 ms) on hover, press, selection, results and toasts are turned off when Windows animations are off or `CCP_REDUCED_MOTION=1`. The Color and Chart rendition tabs now scroll at the minimum window size instead of overlapping.
+
+### Removed (app/engine)
+
+- Saved models from before ColorCorrect Studio 0.1 no longer load: bare correction-model JSON, polynomial gamma (`gc_coeffs` without a `gc_model` curve) and single-hidden-layer neural networks without `layer_weights`. The engine reports `invalid_model` with a message to fit a new calibration. Models saved by 0.1.0 and later are unaffected.
+- The engine no longer reads undocumented request aliases that no client sends: `chart_all`, `white_image`/`white_image_path`, `do_sat_extrapolate`, `fit_samples_degree`, `poly_degree`, `nn_tol`, `(nn_)batch_normalization`, `drop_rate`, `rgb_clip_lo`/`rgb_clip_hi`, `ffc.fit_method`, and top-level `ffc_method`/`ffc_tol`/`ffc_cut_off`/`ffc_max_val`. All aliases documented in the protocol reference remain.
+- Models and references are only searched for in the shipped layout (`models/opt2`, `models/plane`, `refs/`); the older `deploy_exports`, `chart_detection/` and flat `models/` locations are gone.
+- The app no longer honours `COLORCORRECT_EXE` or searches `dist/` folders for the engine; use `CCP_ENGINE_EXE`. The missing-resources error names `CCP_NEW_UI_ROOT`.
+- Settings written by 0.1.x are no longer migrated: the pre-layers `HiddenSize`, the duplicate `CpuLut`/`ForceCpu` flags (`LutDevice` carries the choice), and the 0.1.x `cpu` acceleration policy, which now restores as Auto. The app falls back only to `settings.json`, not the pre-release `session.json`, and restored sessions skip unsupported files by format rather than by a retired video flag.
+- Removed dead code, unused XAML styles and resources, and the engine's benchmark and diagnostic examples.
+
+### Removed (SDK, scripts, docs)
+
+- Python SDK 3.0.0 (was 2.3.0) needs a Studio 0.2.0 or later worker. A worker whose ready event has no `protocol_version` (Studio 0.1.x) is refused at startup with an error naming Studio 0.2.0; protocol 2 (Studio 0.2.0–0.3.0) and protocol 3 stay supported. `Engine.protocol_version` is `None` until the worker starts.
+- SDK: `COLORCORRECT_EXE` is no longer read; set `CCP_ENGINE_EXE` instead.
+- SDK: worker discovery looks only in the app folder and `engine/target/release` (plus `ccp-engine-launch` on Linux), no longer in `dist/win-cpu`, `dist/<rid>/payload` or `dist/<rid>`. A macOS `.app` root resolves `Contents/Resources/runtime` only, not `Contents/MacOS`.
+- SDK: `load_calibration` accepts saved pipelines only; bare correction-model files (top-level `feature_count` with `coefficients`/`w1`), which no Studio release wrote, are rejected. Detection requires the `snapshot_id` and per-chart `chart_id` that every 0.2.0+ worker sends, and no longer reads a `faces` key or a single-chart handshake without `charts`. `BackendInfo.diagnostics` no longer copies `frames_processed`.
+- SDK: custom references and fast mode no longer pre-check `custom_references_v1`, `chart_identity_v1` and `combined_lut65_v1`, which every supported worker declares. The `cpu_inference_v1` and exact-sampling checks remain.
+- Remove unused developer scripts (`benchmark_warm_pipeline.py`, `compare_workflow_images.py`, `compute_inventory.py`, `sanitize_model_metadata.py`, `summarize_compute.py`, `ui_inventory.py`, `validate_gpu_corpus.py`, `fetch_onnxruntime.ps1`, `link_samples.ps1`), the one-off public 0.3.0 download check (`verify-public-030.yml`, `verify_public_download.py`) and the 0.2.1 demo capture tooling (`create_demo.py`, its storyboard and manifest). The README demo media stay.
+- Remove historical validation records (`docs/readiness.md`, `docs/ui-validation.md`, `docs/validation-windows.md`, `docs/api/VERIFICATION.md`, `docs/development/demo.md`) and trim `docs/native-validation.md` to current procedures. The SDK check instructions moved to the developer guide.
+
 ## 0.3.0
 
 - Support reproducible chart fits with an exact random sample count per patch and a seed. Grid sampling remains available for existing recipes.

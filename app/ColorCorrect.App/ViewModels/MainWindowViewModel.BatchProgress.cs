@@ -12,16 +12,13 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    [ObservableProperty] private bool _batchPreviewResults = true;
-    [ObservableProperty] private string _batchCurrentImageLabel = "";
-    [ObservableProperty] private string _batchProgressSummary = "";
     private SessionItemViewModel? _batchCurrentItem;
     private int _batchProgressGeneration;
     private int _batchImageIndex;
     private int _batchImageCount;
     private string[] _combinedProgressKeys = [];
 
-    public bool IsResultPreviewSuppressed => Active?.PreviewSuppressed == true;
+    public bool IsResultPreviewSuppressed => Workspace.Active?.PreviewSuppressed == true;
 
     internal static CorrectionOptions CaptureBatchOptions(CorrectionOptions options, bool previews, string? appliedModel = null)
     {
@@ -36,8 +33,8 @@ public partial class MainWindowViewModel
             using var document = JsonDocument.Parse(File.ReadAllText(appliedModel));
             var model = document.RootElement;
             static bool Present(JsonElement model, string name) => model.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null;
-            captured.DoGc &= Present(model, "gc_model") || (model.TryGetProperty("gc_coeffs", out var coefficients)
-                && coefficients.ValueKind == JsonValueKind.Array && coefficients.GetArrayLength() > 0);
+            // gc_coeffs is always null in Studio models; only the gc_model curve is applied.
+            captured.DoGc &= Present(model, "gc_model");
             captured.DoWb &= Present(model, "wb_diag");
             if (model.TryGetProperty("correction", out var correction)) captured.DoCc &= correction.ValueKind != JsonValueKind.Null;
         }
@@ -84,10 +81,10 @@ public partial class MainWindowViewModel
         _batchImageCount = count;
         _combinedProgressKeys = [];
         BeginCapturedPipeline(applyModel ? "apply" : "fit", options);
-        BatchCurrentImageLabel = $"{index + 1} / {count} · {item.Name}";
-        BatchLabel = BatchCurrentImageLabel;
-        JobProgress = 0;
-        BatchProgress = 100.0 * index / Math.Max(1, count);
+        Job.BatchCurrentImageLabel = $"{index + 1} / {count} · {item.Name}";
+        Job.BatchLabel = Job.BatchCurrentImageLabel;
+        Job.JobProgress = 0;
+        Job.BatchProgress = 100.0 * index / Math.Max(1, count);
         item.HasProcessingProgress = true;
         item.IsProcessing = true;
         item.ProcessingProgress = 0;
@@ -106,27 +103,27 @@ public partial class MainWindowViewModel
             foreach (var step in PipelineSteps) step.IsActive = false;
             _batchProgressGeneration++;
             _batchCurrentItem = null;
-            if (success) JobProgress = 100;
+            if (success) Job.JobProgress = 100;
         }
     }
 
     private void UpdateBatchStageProgress()
     {
         if (_batchCurrentItem is not { } item) return;
-        item.ProcessingStage = CurrentStage;
-        item.ProcessingProgress = JobProgress;
-        BatchProgress = 100.0 * (_batchImageIndex + JobProgress / 100) / Math.Max(1, _batchImageCount);
+        item.ProcessingStage = Job.CurrentStage;
+        item.ProcessingProgress = Job.JobProgress;
+        Job.BatchProgress = 100.0 * (_batchImageIndex + Job.JobProgress / 100) / Math.Max(1, _batchImageCount);
     }
 
-    partial void OnBatchPreviewResultsChanged(bool value) { if (!_restoring) ScheduleSave(); }
+    private void OnBatchPreviewResultsChanged(bool value) { if (!_restoring) ScheduleSave(); }
 
     [RelayCommand]
     private async Task ShowResultPreviewAsync()
     {
-        if (Busy || IsSaving || Active is not { PreviewSuppressed: true } item) return;
+        if (Job.Busy || Output.IsSaving || Workspace.Active is not { PreviewSuppressed: true } item) return;
         if (!File.Exists(ResolveCorrectedViewPath(item)))
         {
-            Status = "The corrected image is unavailable. Process the image again to create a preview.";
+            Job.Status = "The corrected image is unavailable. Process the image again to create a preview.";
             return;
         }
         // This explicit request may decode the existing corrected artifact; it
@@ -134,7 +131,7 @@ public partial class MainWindowViewModel
         item.PreviewSuppressed = false;
         OnPropertyChanged(nameof(IsResultPreviewSuppressed));
         await LoadCorrectedPreviewAsync(item);
-        StageName = "Corrected";
+        Stage.StageName = "Corrected";
         ApplyStagePreview();
         NotifyStageRadios();
         ScheduleSave();

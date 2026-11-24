@@ -25,7 +25,7 @@ public static class EnginePaths
         return false;
     }
 
-    public static bool LooksLikeRepo(string path) =>
+    internal static bool LooksLikeRepo(string path) =>
         Directory.Exists(Path.Combine(path, "models", "opt2")) &&
         File.Exists(Path.Combine(path, "refs", "neutrals.json"));
 
@@ -36,13 +36,13 @@ public static class EnginePaths
             return root;
         }
 
-        throw new DirectoryNotFoundException("Could not find CCP_New_UI (models/opt2 + refs/neutrals.json).");
+        throw new DirectoryNotFoundException(
+            "Could not find the ColorCorrect Studio resource folder (models/opt2 + refs/neutrals.json). Set CCP_NEW_UI_ROOT to it.");
     }
 
     public static bool TryFindExecutable(out string exePath)
     {
-        var env = Environment.GetEnvironmentVariable("CCP_ENGINE_EXE")
-                  ?? Environment.GetEnvironmentVariable("COLORCORRECT_EXE");
+        var env = Environment.GetEnvironmentVariable("CCP_ENGINE_EXE");
         if (!string.IsNullOrWhiteSpace(env) && File.Exists(env))
         {
             exePath = Path.GetFullPath(env);
@@ -72,10 +72,6 @@ public static class EnginePaths
                     name,
                     Path.Combine("engine", "target", "release", name),
                     Path.Combine("engine", "target", "debug", name),
-                    Path.Combine("dist", name),
-                    Path.Combine("dist", "win-cpu", name),
-                    Path.Combine("dist", "macos-arm64", "payload", name),
-                    Path.Combine("dist", "linux-x64", "payload", name),
                 })
                 {
                     var candidate = Path.GetFullPath(Path.Combine(start, relative));

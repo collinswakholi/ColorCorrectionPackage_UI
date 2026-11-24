@@ -28,7 +28,7 @@ public sealed class BatchSnapshotTests
         File.WriteAllText(Path.Combine(root, "refs", "neutrals.json"), "{}");
         var model = Path.Combine(root, "source-model.json");
         var white = Path.Combine(root, "white.jpg");
-        File.WriteAllText(model, "{\"gc_model\":null,\"gc_coeffs\":[],\"wb_diag\":[1,1,1],\"correction\":null}");
+        File.WriteAllText(model, "{\"gc_model\":null,\"gc_coeffs\":null,\"wb_diag\":[1,1,1],\"correction\":null}");
         File.WriteAllText(white, "original white bytes");
         var options = new CorrectionOptions { DoFfc = true, DoGc = true, DoCc = true, WhiteImagePath = white, BatchPreviewResults = false };
         try
@@ -79,7 +79,7 @@ public sealed class BatchSnapshotTests
     [AvaloniaFact]
     public void RemovedItemCannotInstallAnArrivingModelOrOutput()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }};
         using var removed = new SessionItemViewModel("removed-image.png");
         var model = Path.GetTempFileName();
         try
@@ -88,7 +88,7 @@ public sealed class BatchSnapshotTests
                 .Invoke(vm, [removed, new CorrectionOutcome { Ok = true, ModelPath = model, OutputPath = "stale-output.jpg" }, true, true]);
             Assert.False(removed.IsCorrected);
             Assert.Equal("", removed.CorrectedPath);
-            Assert.NotEqual(model, vm.LoadedModelPath);
+            Assert.NotEqual(model, vm.Output.LoadedModelPath);
         }
         finally { File.Delete(model); }
     }

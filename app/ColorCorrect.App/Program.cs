@@ -1,5 +1,5 @@
 ﻿using Avalonia;
-using ColorCorrect.App.Services;
+using ColorCorrect.App.Views;
 using System;
 
 namespace ColorCorrect.App;

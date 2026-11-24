@@ -13,8 +13,8 @@ public sealed class PortableComputeTests
     public void CpuInferenceSelectionDoesNotForceCpuCorrectionAndBatchReasonsAreVisible()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
-        Assert.False(vm.ForceCpu);
+        vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
+        Assert.False(vm.Compute.ForceCpu);
         Assert.Contains("CPU", vm.DetectionStatus);
         Assert.Contains("not checked", vm.DetectionStatus);
         Assert.Contains("Load or fit a model", vm.BatchApplyHint);
@@ -27,12 +27,12 @@ public sealed class PortableComputeTests
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
         var configure = typeof(MainWindowViewModel).GetMethod("AddSetupSelection", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        vm.Compute.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
         var cpu = new System.Diagnostics.ProcessStartInfo();
         configure.Invoke(vm, [cpu]);
         Assert.Equal(OperatingSystem.IsWindows() ? new[] { "-Mode", "cpu" } : new[] { "--mode", "cpu" }, cpu.ArgumentList);
-        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
-        vm.SetupWebGpu = true; vm.SetupDirectMl = false;
+        vm.Compute.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
+        vm.Compute.SetupWebGpu = true; vm.Compute.SetupDirectMl = false;
         var custom = new System.Diagnostics.ProcessStartInfo();
         configure.Invoke(vm, [custom]);
         Assert.Equal(OperatingSystem.IsWindows() ? new[] { "-Mode", "custom", "-Components", "webgpu" }
@@ -43,9 +43,9 @@ public sealed class PortableComputeTests
     public void MacSupportSelectionUsesCapturedSetupWithoutAnInteractiveTerminal()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
-        vm.SetupWebGpu = true;
-        vm.SetupDirectMl = true; // This Windows-only component must not reach the Mac helper.
+        vm.Compute.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "custom");
+        vm.Compute.SetupWebGpu = true;
+        vm.Compute.SetupDirectMl = true; // This Windows-only component must not reach the Mac helper.
         const string helper = "/Applications/ColorCorrect Studio.app/Contents/MacOS/setup";
         var install = vm.CreateSetupCheckStartInfo(helper, install: true, windows: false, macos: true);
         Assert.Equal(helper, install.FileName);
@@ -67,7 +67,7 @@ public sealed class PortableComputeTests
     public void LinuxSetupCheckRetainsItsShellHelperInvocation()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        vm.Compute.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
         const string helper = "/opt/colorcorrect-studio/setup";
         var check = vm.CreateSetupCheckStartInfo(helper, install: false, windows: false);
         Assert.Equal("/bin/sh", check.FileName);
@@ -78,7 +78,7 @@ public sealed class PortableComputeTests
     public void WindowsSetupCheckRetainsItsNoninteractivePowerShellArguments()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        vm.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
+        vm.Compute.SelectedSetupMode = vm.SetupModes.Single(mode => mode.Value == "cpu");
         const string helper = @"C:\ColorCorrect Studio\setup.ps1";
         var check = vm.CreateSetupCheckStartInfo(helper, install: false, windows: true);
         Assert.Equal("powershell.exe", check.FileName);
@@ -100,27 +100,27 @@ public sealed class PortableComputeTests
             var loadSelection = typeof(MainWindowViewModel).GetMethod("LoadSetupSelection", BindingFlags.NonPublic | BindingFlags.Instance)!;
             applyDefaults.Invoke(vm, [path, false]);
             loadSelection.Invoke(vm, [path]);
-            Assert.Equal("cpu-inference", vm.SelectedAccelPolicy.Value);
-            Assert.Equal("cpu", vm.SelectedProcessingDevice.Value);
-            Assert.True(vm.ForceCpu);
-            Assert.Equal("cpu", vm.SelectedSetupMode.Value);
-            Assert.False(vm.SetupWebGpu);
-            Assert.False(vm.SetupDirectMl);
+            Assert.Equal("cpu-inference", vm.Compute.SelectedAccelPolicy.Value);
+            Assert.Equal("cpu", vm.Compute.SelectedProcessingDevice.Value);
+            Assert.True(vm.Compute.ForceCpu);
+            Assert.Equal("cpu", vm.Compute.SelectedSetupMode.Value);
+            Assert.False(vm.Compute.SetupWebGpu);
+            Assert.False(vm.Compute.SetupDirectMl);
 
             File.WriteAllText(path, """{"mode":"recommended","components":["cpu","webgpu"],"detection_policy":"auto","correction_policy":"auto"}""");
             applyDefaults.Invoke(vm, [path, false]);
-            Assert.Equal("cpu-inference", vm.SelectedAccelPolicy.Value);
-            Assert.Equal("cpu", vm.SelectedProcessingDevice.Value);
+            Assert.Equal("cpu-inference", vm.Compute.SelectedAccelPolicy.Value);
+            Assert.Equal("cpu", vm.Compute.SelectedProcessingDevice.Value);
 
             // Only an explicit Mac setup action applies Auto; existing startup defaults stay unchanged.
             applyDefaults.Invoke(vm, [path, true]);
             loadSelection.Invoke(vm, [path]);
-            Assert.Equal("auto", vm.SelectedAccelPolicy.Value);
-            Assert.Equal("auto", vm.SelectedProcessingDevice.Value);
-            Assert.False(vm.ForceCpu);
-            Assert.Equal("recommended", vm.SelectedSetupMode.Value);
-            Assert.True(vm.SetupWebGpu);
-            Assert.False(vm.SetupDirectMl);
+            Assert.Equal("auto", vm.Compute.SelectedAccelPolicy.Value);
+            Assert.Equal("auto", vm.Compute.SelectedProcessingDevice.Value);
+            Assert.False(vm.Compute.ForceCpu);
+            Assert.Equal("recommended", vm.Compute.SelectedSetupMode.Value);
+            Assert.True(vm.Compute.SetupWebGpu);
+            Assert.False(vm.Compute.SetupDirectMl);
         }
         finally { File.Delete(path); }
     }
@@ -143,10 +143,10 @@ public sealed class PortableComputeTests
             File.WriteAllText(file, "bbbb"); File.SetLastWriteTimeUtc(file, stamp);
             var replaced = key.Invoke(vm, [item]);
             Assert.NotEqual(first, replaced);
-            vm.Crop = .5;
+            vm.Stage.Crop = .5;
             var cropped = key.Invoke(vm, [item]);
             Assert.NotEqual(replaced, cropped);
-            vm.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
+            vm.Compute.SelectedAccelPolicy = vm.AccelPolicies.Single(mode => mode.Value == "cpu-inference");
             Assert.NotEqual(cropped, key.Invoke(vm, [item]));
         }
         finally { File.Delete(file); }
@@ -221,11 +221,11 @@ public sealed class PortableComputeTests
         {
             IsCorrected = true, ModelPath = "missing-model.json", PreviewDir = "missing-previews",
         };
-        vm.Session.Add(item); vm.Active = item; vm.StageName = "GC";
+        vm.Session.Add(item); vm.Workspace.Active = item; vm.Stage.StageName = "GC";
         var method = typeof(MainWindowViewModel).GetMethod("EnsureStagePreviewAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
         await Assert.IsAssignableFrom<Task>(method.Invoke(vm, ["GC"]));
-        Assert.False(vm.IsStagePreviewLoading);
-        Assert.NotEqual("GC", vm.StageName);
+        Assert.False(vm.Stage.IsStagePreviewLoading);
+        Assert.NotEqual("GC", vm.Stage.StageName);
         Assert.Contains(vm.LogEntries, row => row.Message.Contains("Could not load GC preview"));
     }
 
@@ -233,7 +233,7 @@ public sealed class PortableComputeTests
     public void RepeatedInferenceAndLutChangesRemainIndependentAndPersist()
     {
         var vm = new MainWindowViewModel(persistenceEnabled: false);
-        Assert.True(vm.FastMode);
+        Assert.True(vm.Compute.FastMode);
         Assert.True(new CorrectionOptions().FastMode);
         Assert.Equal(OperatingSystem.IsWindows() ? new[] { "Auto (recommended)", "CPU", "WebGPU", "DirectML", "Vulkan" }
             : new[] { "Auto (recommended)", "CPU", "WebGPU", "Vulkan" }, vm.AccelPolicies.Select(x => x.Label));
@@ -242,27 +242,27 @@ public sealed class PortableComputeTests
         {
             foreach (var mode in vm.AccelPolicies)
             {
-                vm.SelectedAccelPolicy = mode;
-                vm.ForceCpu = true;
-                vm.FastMode = cycle % 2 == 0;
-                Assert.Equal(mode, vm.SelectedAccelPolicy);
+                vm.Compute.SelectedAccelPolicy = mode;
+                vm.Compute.ForceCpu = true;
+                vm.Compute.FastMode = cycle % 2 == 0;
+                Assert.Equal(mode, vm.Compute.SelectedAccelPolicy);
                 var options = Assert.IsType<CorrectionOptions>(build.Invoke(vm, null));
-                Assert.True(options.CpuLut);
+                Assert.Equal("cpu", options.LutDevice);
                 Assert.Equal(cycle % 2 == 0, options.FastMode);
-                vm.ForceCpu = false;
-                Assert.False(Assert.IsType<CorrectionOptions>(build.Invoke(vm, null)).CpuLut);
-                Assert.Equal(mode, vm.SelectedAccelPolicy);
+                vm.Compute.ForceCpu = false;
+                Assert.NotEqual("cpu", Assert.IsType<CorrectionOptions>(build.Invoke(vm, null)).LutDevice);
+                Assert.Equal(mode, vm.Compute.SelectedAccelPolicy);
             }
         }
-        vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { CpuLut = true, FastMode = true } });
-        Assert.True(vm.ForceCpu);
-        Assert.True(vm.FastMode);
+        vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { LutDevice = "cpu", FastMode = true } });
+        Assert.True(vm.Compute.ForceCpu);
+        Assert.True(vm.Compute.FastMode);
         vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { FastMode = false } });
-        Assert.False(vm.FastMode); // An explicit saved preference remains respected.
+        Assert.False(vm.Compute.FastMode); // An explicit saved preference remains respected.
         vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { LutDevice = "gpu" } });
-        Assert.Equal("gpu", vm.SelectedProcessingDevice.Value);
-        Assert.False(vm.ForceCpu);
-        Assert.True(vm.FastMode);
+        Assert.Equal("gpu", vm.Compute.SelectedProcessingDevice.Value);
+        Assert.False(vm.Compute.ForceCpu);
+        Assert.True(vm.Compute.FastMode);
     }
 
     [Theory]

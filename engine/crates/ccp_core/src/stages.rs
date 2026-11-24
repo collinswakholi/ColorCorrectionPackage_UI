@@ -8,11 +8,15 @@ use crate::color::{
     srgb_d65_space, srgb_to_lab_d65, srgb_to_linear, xyz_to_linear_rgb, Lab, RgbColorSpace, Vec3,
     WhitePoint,
 };
+use crate::error::{Error, Result};
 #[cfg(test)]
-use crate::maps::fit_least_squares;
+use crate::linalg::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
+use crate::maps::{RGB_CLIP_HI, RGB_CLIP_LO};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};
-use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, SATURATION_THRESHOLD, WB_DIAG_SCALE};
+
+/// CCP `compute_diag` scale applied to the median per-channel ratio.
+const WB_DIAG_SCALE: f64 = 0.95;
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -27,7 +31,7 @@ pub struct SaturationReport {
     pub names: Vec<String>,
 }
 
-pub fn is_saturated(rgb: Vec3, threshold: f64) -> bool {
+pub(crate) fn is_saturated(rgb: Vec3, threshold: f64) -> bool {
     rgb[0] >= threshold || rgb[1] >= threshold || rgb[2] >= threshold
 }
 
@@ -109,7 +113,7 @@ fn median(mut values: Vec<f64>) -> f64 {
 }
 
 /// Keep a usable working range. Invalid pairs fall back to CCP_rs `[-0.2, 1.3]`.
-pub fn sanitize_clip_range(lo: f64, hi: f64) -> (f64, f64) {
+pub(crate) fn sanitize_clip_range(lo: f64, hi: f64) -> (f64, f64) {
     let lo = if lo.is_finite() {
         lo.clamp(-2.0, 0.99)
     } else {
@@ -185,11 +189,11 @@ pub fn extrapolate_saturated(
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GammaModel {
-    /// Legacy descending polynomial coefficients `[a_n, …, a_0]` for L*.
-    /// Kept so version-1 model files apply identically.
+    /// Always empty. Pre-0.1 polynomial GC is no longer applied (models that
+    /// relied on it are rejected at load); the field keeps saved JSON unchanged.
     #[serde(default)]
     pub coeffs: Vec<f64>,
-    /// Monotonic Hermite knots for version-2 models.
+    /// Monotonic Hermite knots.
     #[serde(default)]
     pub knots: Vec<f64>,
     #[serde(default)]
@@ -199,12 +203,14 @@ pub struct GammaModel {
 }
 
 impl GammaModel {
-    pub fn legacy(coeffs: Vec<f64>) -> Self {
+    /// Monotonic Hermite curve through `(knots, values)`.
+    pub fn curve(knots: Vec<f64>, values: Vec<f64>) -> Self {
+        let slopes = monotone_slopes(&knots, &values);
         Self {
-            coeffs,
-            knots: Vec::new(),
-            values: Vec::new(),
-            slopes: Vec::new(),
+            coeffs: Vec::new(),
+            knots,
+            values,
+            slopes,
         }
     }
 
@@ -214,12 +220,12 @@ impl GammaModel {
             && self.knots.len() == self.slopes.len()
     }
 
-    /// Evaluate the fitted lightness mapping. New models use a shape-preserving
-    /// cubic Hermite curve; legacy models retain their polynomial behavior.
-    pub fn map_lstar(&self, input: f64) -> f64 {
+    /// Evaluate the fitted shape-preserving cubic Hermite lightness curve.
+    /// A model without a valid curve (rejected at load) maps L* unchanged.
+    pub(crate) fn map_lstar(&self, input: f64) -> f64 {
         let x = input.clamp(0.0, 100.0);
         if !self.is_monotonic_curve() {
-            return poly_eval(x, &self.coeffs);
+            return x;
         }
         let last = self.knots.len() - 1;
         if x <= self.knots[0] {
@@ -247,7 +253,8 @@ impl GammaModel {
     }
 }
 
-pub fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
+#[cfg(test)]
+fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
     let mut result = 0.0;
     for &c in coeffs {
         result = result * x + c;
@@ -460,13 +467,7 @@ fn fit_monotonic_gamma_profile(ref_l: &[f64], measured_l: &[f64]) -> Result<Gamm
     isotonic_non_decreasing(&mut values, &weights);
     values[0] = 0.0;
     values[last] = 100.0;
-    let slopes = monotone_slopes(&knots, &values);
-    Ok(GammaModel {
-        coeffs: Vec::new(),
-        knots,
-        values,
-        slopes,
-    })
+    Ok(GammaModel::curve(knots, values))
 }
 
 /// Fit GC from **named** neutrals only (that chart’s table).
@@ -544,14 +545,8 @@ pub fn apply_gc_inplace(img: &mut Array3<f32>, model: &GammaModel) -> Result<()>
     Ok(())
 }
 
-pub fn apply_gc_image(img: &Array3<f32>, model: &GammaModel) -> Result<Array3<f32>> {
-    let mut out = img.clone();
-    apply_gc_inplace(&mut out, model)?;
-    Ok(out)
-}
-
 /// CCP `compute_diag`: per-channel median(ref/det) × 0.95. No grey-world.
-pub fn compute_diag(mat_ref: &[Vec3], mat_det: &[Vec3], rf: f64) -> Result<[f64; 3]> {
+pub(crate) fn compute_diag(mat_ref: &[Vec3], mat_det: &[Vec3], rf: f64) -> Result<[f64; 3]> {
     if mat_ref.len() != mat_det.len() {
         return Err(Error::InvalidArgument(
             "WB ref and detected neutrals must have the same count".into(),
@@ -711,12 +706,6 @@ pub fn apply_wb_inplace(img: &mut Array3<f32>, wb: &WhiteBalance) {
     });
 }
 
-pub fn apply_wb_image(img: &Array3<f32>, wb: &WhiteBalance) -> Array3<f32> {
-    let mut out = img.clone();
-    apply_wb_inplace(&mut out, wb);
-    out
-}
-
 pub fn apply_encoded_lut_inplace(img: &mut Array3<f32>, lut: &[f32], gs: usize) {
     map_rgb_inplace(img, |rgb| {
         let c = crate::maps::sample_encoded_lut(lut, gs, rgb);
@@ -740,16 +729,6 @@ pub fn apply_cc_inplace(
         crate::maps::apply_correction_pixel(model, rgb, settings)
             .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32])
     })
-}
-
-pub fn apply_cc_image(
-    img: &Array3<f32>,
-    model: &CorrectionModel,
-    settings: &CorrectionSettings,
-) -> Result<Array3<f32>> {
-    let mut out = img.clone();
-    apply_cc_inplace(&mut out, model, settings)?;
-    Ok(out)
 }
 
 fn ensure_contiguous(img: &mut Array3<f32>) {
@@ -782,32 +761,10 @@ fn try_map_rgb_inplace(
     })
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct StageConfig {
-    pub do_sat_extrapolate: bool,
-    pub do_gc: bool,
-    pub do_wb: bool,
-    pub do_cc: bool,
-}
-
-impl StageConfig {
-    pub fn default_on() -> Self {
-        Self {
-            do_sat_extrapolate: true,
-            do_gc: true,
-            do_wb: true,
-            do_cc: true,
-        }
-    }
-}
-
-pub fn default_sat_threshold() -> f64 {
-    SATURATION_THRESHOLD
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sample::SATURATION_THRESHOLD;
 
     #[test]
     fn gamma_max_degree_nine_does_not_exceed_sample_rank() {
@@ -850,9 +807,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_gamma_still_uses_polynomial() {
-        let model = GammaModel::legacy(vec![1.05, -2.0]);
-        assert!((model.map_lstar(50.0) - 50.5).abs() < 1e-12);
+    fn curve_without_knots_is_identity() {
+        let model = GammaModel {
+            coeffs: vec![1.05, -2.0],
+            knots: Vec::new(),
+            values: Vec::new(),
+            slopes: Vec::new(),
+        };
+        assert!(!model.is_monotonic_curve());
+        assert_eq!(model.map_lstar(50.0), 50.0);
     }
 
     fn test_patch(spec: &ChartSpec, name: &str, rgb: Vec3) -> ChartPatch {

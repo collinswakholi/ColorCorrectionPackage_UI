@@ -38,7 +38,7 @@ def main() -> None:
     out = Path(tempfile.mkdtemp(prefix="notebook-qa-", dir=args.output_dir.resolve()))
     cwd = out / "neutral-working-directory"
     cwd.mkdir()
-    native_modules = ("colorcorrect", "colorcorrect_sdk", "colorcorrect_pipeline")
+    native_modules = ("colorcorrect", "colorcorrect_engine", "colorcorrect_sdk", "colorcorrect_pipeline")
     module_paths = {}
     for name in native_modules:
         module = __import__(name)

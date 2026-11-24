@@ -70,7 +70,7 @@ settings. FFC neural settings are separate.
 With the 0.2.2 engine, Auto chart and white-plane detection try an
 eligible GPU and recover to CPU when needed. `backend="cpu-inference"` selects
 CPU detection explicitly and requires the `cpu_inference_v1` worker capability.
-The legacy `backend="cpu"` selects CPU image correction while detection follows
+`backend="cpu"` selects CPU image correction while detection follows
 Auto. Older 0.2.1 packages still require GPU inference; a newer Python wheel
 does not replace their native engine. On macOS, set `COLORCORRECT_APP_ROOT` to
 `/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
@@ -100,8 +100,8 @@ The example includes custom references, partial-batch outcomes, saved-model FFC
 reuse, an application-stage override, and LUT export. Edit its configuration
 function to use different FFC or CC settings.
 
-Contributor instructions for automated notebook execution and the versioned
-execution record are in [developer validation](../docs/api/VERIFICATION.md).
+Contributor instructions for automated notebook execution are in the
+[Python SDK checks](../docs/development/README.md#python-sdk-checks).
 
 [API guide](../api/README.md) · [Configuration reference](../docs/api/README.md#configuration-reference)
 · [Original study](https://doi.org/10.1002/ppj2.70067)

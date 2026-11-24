@@ -7,7 +7,7 @@
 // NIPALS updates several row-major matrices together; indices make those layouts explicit.
 #![allow(clippy::needless_range_loop)]
 
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 
 pub const PLS_TOL: f64 = 1e-6;
 
@@ -236,14 +236,14 @@ pub fn fit_pls(
     let mut b_scaled = vec![0.0; p * q];
     for channel in 0..q {
         let rhs: Vec<f64> = (0..k).map(|h| q_mat[channel * ncomp + h]).collect();
-        let z = match crate::maps::solve_linear_system(ptw.clone(), rhs.clone(), k) {
+        let z = match crate::linalg::solve_linear_system(ptw.clone(), rhs.clone(), k) {
             Ok(z) => z,
             Err(_) => {
                 let mut ridge = ptw.clone();
                 for i in 0..k {
                     ridge[i * k + i] += 1e-12;
                 }
-                crate::maps::solve_linear_system(ridge, rhs, k)?
+                crate::linalg::solve_linear_system(ridge, rhs, k)?
             }
         };
         for j in 0..p {

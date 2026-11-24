@@ -17,7 +17,7 @@ public sealed class KeyboardWorkflowTests
     public void RoutedOpenAndSaveShortcutsChooseDistinctOperationsAndConsumeTheKeys()
     {
         var dialogs = new RecordingDialogs();
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, Dialogs = dialogs };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }, Dialogs = dialogs };
         // A completed row enables Save; no worker or output-file processing is needed.
         vm.Session.Add(new SessionItemViewModel("keyboard-menu-fixture.jpg") { IsCorrected = true });
         vm.PrepareSaveMenu();

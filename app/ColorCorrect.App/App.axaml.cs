@@ -20,6 +20,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Controls.Motion.Initialize(this);
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var vm = new MainWindowViewModel();
@@ -77,12 +78,12 @@ public partial class App : Application
             var finished = false;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                finished = vm.WorkerReady || vm.WorkerStartupComplete;
-                splash.SetStatus(vm.WorkerReady
+                finished = vm.Compute.WorkerReady || vm.Compute.WorkerStartupComplete;
+                splash.SetStatus(vm.Compute.WorkerReady
                     ? "Engine ready"
-                    : vm.WorkerStartupComplete
+                    : vm.Compute.WorkerStartupComplete
                         ? "Engine unavailable — opening recovery controls"
-                        : string.IsNullOrWhiteSpace(vm.CurrentStage) ? "Starting color engine…" : vm.CurrentStage);
+                        : string.IsNullOrWhiteSpace(vm.Job.CurrentStage) ? "Starting color engine…" : vm.Job.CurrentStage);
             });
             if (finished)
             {

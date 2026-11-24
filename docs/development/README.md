@@ -11,9 +11,9 @@ the downloaded runtime beside the corresponding worker. The
 [engine architecture](../implementation.md) describes reference snapshots and
 model/session compatibility; [release procedures](../releasing.md) cover packaging.
 
-The desktop interface uses native Avalonia controls. Its control-tree, keyboard,
-layout and rendering coverage is recorded in the [UI matrix](../ui-validation.md).
-Native display and hardware coverage is separate from headless checks.
+The desktop interface uses native Avalonia controls. Headless tests cover its
+control tree, keyboard, layout and rendering; native display and hardware coverage
+is separate from headless checks.
 
 ## Run the checks
 
@@ -34,6 +34,49 @@ python scripts/export_source.py --check
 On Linux, add `-p ccp_wgpu_infer` to the Cargo command for the Linux inference
 implementation. CI selects the crates shipped on each platform. GPU-dependent
 cases require an available hardware adapter; an unavailable device is not a pass.
+
+## Python SDK checks
+
+The `api/tests/test_*.py` component tests use isolated fake workers for transport
+and API contracts. The photograph integrations use the real worker and the public
+images in `test_images/` (`--samples` selects another directory):
+
+```text
+python api/tests/integration_sdk.py --root .
+python api/tests/integration_workflow.py --root .
+python api/tests/integration_reference_layouts.py --samples path/to/private-fixtures
+```
+
+They cover built-in and custom references, stage previews, batch outcomes,
+reload, LUT export and FFC reuse. `integration_reference_layouts.py` needs a
+directory with the undistributed generated fixtures `synth_cast.png`,
+`synth_spyder.png` and `synth_sg.png`; without them it records a skipped result
+and exits 2. It uses known geometry, so it does not measure detector accuracy.
+`integration_simple.py --root .` is a short real-image smoke test.
+
+Installed-package suites run in a clean guest (Windows Sandbox or WSL) against the
+wheel, never a source checkout: `acceptance_installed.py` (also run by native CI),
+`acceptance_edge_cases.py`, `acceptance_inference.py` (copy
+`scripts/validate_detector_corpus.py` beside it) and `stress_installed.py`. Each
+docstring lists the fixture bundle it needs.
+
+To execute the tutorials, install the application's SDK wheel and
+`notebooks/requirements-qa.txt` into a clean environment, copy
+`api/tests/execute_notebooks.py`, the notebooks, `api/examples/configured_pipeline.py`
+and the public photographs into a separate working directory, then run:
+
+```sh
+python execute_notebooks.py --notebooks-dir ./notebooks \
+  --root /path/to/installed-app --samples /path/to/public-test_images \
+  --output-dir /path/to/execution-records --reference-csv /path/to/classic-lab-d50.csv
+python configured_pipeline.py --root /path/to/installed-app \
+  --samples /path/to/public-test_images --output-dir /path/to/example-results \
+  --reference-csv /path/to/classic-lab-d50.csv
+```
+
+The runner starts fresh kernels on its own interpreter, checks that the SDK
+modules come from the installed wheel, and writes executed copies outside the
+source notebooks. Keep the public notebook outputs cleared.
 
 ## Automated builds and documentation edits
 
@@ -56,15 +99,12 @@ GPU and interactive Mac desktop acceptance remain separate.
 
 ## Validation records
 
-- [Platform record](../native-validation.md): operating systems, architecture,
-  installed-package workflows and hardware limits.
-- [UI matrix](../ui-validation.md): individual controls and observed interactions.
-- [Readiness history](../readiness.md): versioned results and earlier corrections.
+- [Native acceptance](../native-validation.md): where checks run and what final
+  acceptance must record.
 - [Color-science record](../color-science-validation.md): formulas, reference
   sources, numerical comparisons and interpretation limits.
 - [Model provenance](../model-provenance.md): model hashes, declared terms and
   unresolved training-data provenance.
-- [Demo production](demo.md): capture sources, encoding and media reproduction.
 
 Counts belong to their recorded source/package identities. Hosted build and
 installation checks do not establish interactive UI, hardware GPU or high-DPI

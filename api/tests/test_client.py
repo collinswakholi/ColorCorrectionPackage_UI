@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from colorcorrect import Engine, EngineError, Client, MissingRuntimeError
+from colorcorrect import COMMANDS, Engine, EngineError, Client, MissingRuntimeError
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE = Path(__file__).with_name("fake_worker.py")
@@ -27,7 +27,7 @@ class DiscoveryTests(unittest.TestCase):
             missing = root / runtime_name
             ambient = root / "developer-runtime"
             ambient.touch()
-            with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect.subprocess.Popen") as launch:
+            with patch.dict(os.environ, {"ORT_DYLIB_PATH": str(ambient)}), patch("colorcorrect_engine.subprocess.Popen") as launch:
                 with self.assertRaisesRegex(FileNotFoundError, "Required ONNX Runtime library is missing") as error:
                     Engine(root=root).devices()
                 # Worker discovery canonicalizes Windows short-name/temp aliases.
@@ -47,7 +47,7 @@ class DiscoveryTests(unittest.TestCase):
             (root / runtime_name).touch()
             def launch(args, **options):
                 return POPEN([sys.executable, str(FAKE)], **options)
-            with patch("colorcorrect.subprocess.Popen", side_effect=launch):
+            with patch("colorcorrect_engine.subprocess.Popen", side_effect=launch):
                 with Client(root=root) as client:
                     self.assertTrue(client.engine.devices()["ok"])
             self.assertFalse(any(root.glob("*providers_webgpu*")))
@@ -80,7 +80,7 @@ class DiscoveryTests(unittest.TestCase):
             (root / "refs/neutrals.json").write_text("{}")
             for name in ("ccp-engine", "ccp-engine-launch"):
                 (root / name).touch()
-            with patch("colorcorrect.sys.platform", "linux"):
+            with patch("colorcorrect_engine.sys.platform", "linux"):
                 self.assertEqual(Engine(root=root).executable, (root / "ccp-engine-launch").resolve())
                 self.assertEqual(Engine(root / "ccp-engine", root=root).executable, (root / "ccp-engine").resolve())
 
@@ -89,13 +89,55 @@ class ClientTests(unittest.TestCase):
     def setUp(self):
         def launch(args, **options):
             return POPEN([sys.executable, str(FAKE)], **options)
-        self.mock = patch("colorcorrect.subprocess.Popen", side_effect=launch)
+        self.mock = patch("colorcorrect_engine.subprocess.Popen", side_effect=launch)
         self.launch = self.mock.start()
         self.engine = Engine(sys.executable, root=ROOT, timeout=5)
 
     def tearDown(self):
         self.engine.close()
         self.mock.stop()
+
+    def test_ready_protocol_version_is_read_and_checked(self):
+        for marker in (2, 3):
+            with self.subTest(marker=marker), patch.dict(os.environ,
+                    {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}):
+                try:
+                    self.assertTrue(self.engine.devices()["ok"])
+                    self.assertEqual(self.engine.protocol_version, marker)
+                finally:
+                    self.engine.close()
+        for marker in (1, 4, "3", True):
+            with self.subTest(marker=marker), patch.dict(os.environ,
+                    {"FAKE_WORKER_PROTOCOL": json.dumps(marker)}):
+                with self.assertRaisesRegex(EngineError, "protocol"):
+                    self.engine.devices()
+                self.assertIsNone(self.engine._process)
+        # 0.1.x workers sent no protocol_version; name the minimum Studio release.
+        with patch.dict(os.environ, {"FAKE_WORKER_PROTOCOL": "null"}):
+            with self.assertRaisesRegex(EngineError, r"ColorCorrect Studio 0\.2\.0 or later"):
+                self.engine.devices()
+            self.assertIsNone(self.engine._process)
+
+    def test_shutdown_acknowledgement_is_case_insensitive(self):
+        self.engine.devices()
+        process = self.engine._process
+        reply = self.engine.request("Shutdown")
+        self.assertTrue(reply["ok"])
+        self.assertIsNone(self.engine._process)
+        self.assertIsNotNone(process.poll())
+
+    def test_cli_lists_setup_probe(self):
+        self.assertIn("setup_probe", COMMANDS)
+
+    def test_unclosed_engine_stops_its_worker_when_collected(self):
+        import gc
+        engine = Engine(sys.executable, root=ROOT, timeout=5)
+        engine.devices()
+        process = engine._process
+        del engine
+        gc.collect()
+        process.wait(timeout=10)
+        self.assertIsNotNone(process.returncode)
 
     def test_explicit_cpu_override_reaches_worker(self):
         with Engine(sys.executable, root=ROOT, policy="cpu") as cpu:
@@ -246,13 +288,6 @@ class ClientTests(unittest.TestCase):
                    {"dropout": "0.1"}, {"batch_norm": "false"}):
             with self.subTest(nn=nn), self.assertRaises(ValueError):
                 self.engine.request("run", nn=nn)
-
-    def test_old_worker_cannot_silently_ignore_custom_references(self):
-        with self.assertRaises(EngineError) as caught:
-            self.engine.request("run", reference_profiles=[{"id": "new-profile"}])
-        self.assertEqual(caught.exception.reply["code"], "unsupported_capability")
-        self.assertFalse(self.engine.request("run", check=False, reference_assignments=[{}])["ok"])
-        self.assertTrue(self.engine.devices()["ok"])
 
     def test_all_convenience_operations(self):
         operations = [(lambda: self.engine.warmup(), "warmup"),

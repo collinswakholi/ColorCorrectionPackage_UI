@@ -16,7 +16,7 @@ from unittest.mock import patch
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from package_support import check_runtime_manifest, check_model_manifest, pe_details, dependency_audit, digest
-from native_ci_acceptance import clean_environment, rust_component_test_command, rust_build_outputs
+from native_ci_acceptance import clean_environment, rust_component_test_command, rust_build_outputs, rust_lint_commands
 from package_wsl_addon import validate_addon
 from collect_dependency_notices import collect, validate_notices
 import test_package_native as fixtures
@@ -79,6 +79,20 @@ class ReleaseContracts(unittest.TestCase):
                 self.assertIn("--no-default-features", command)
                 self.assertEqual(set(command[command.index("--features") + 1].split(",")),
                                  {"ccp_bridge/ort-plane", "ccp_bridge/wgpu-lut", "ccp_bridge/rust-inference"})
+
+    def test_rust_format_and_clippy_gates_run_once_on_linux_for_shipping_crates(self):
+        root = SCRIPTS.parent
+        for rid in ("win-x64", "win-arm64", "osx-arm64"):
+            with self.subTest(rid=rid):
+                self.assertEqual(rust_lint_commands(root, rid), {})
+        for rid in ("linux-x64", "linux-arm64"):
+            with self.subTest(rid=rid):
+                lint = rust_lint_commands(root, rid, root / "target")
+                self.assertEqual(lint["rust_format"], ["cargo", "fmt", "--all", "--check", "--manifest-path", root / "engine/Cargo.toml"])
+                clippy, test = lint["rust_clippy"], rust_component_test_command(root, rid, root / "target")
+                self.assertEqual(clippy[:2], ["cargo", "clippy"])
+                self.assertEqual(clippy[2:len(test)], test[2:])  # same crates, features and target dir
+                self.assertEqual(clippy[len(test):], ["--all-targets", "--", "-D", "warnings"])
 
     def test_native_rust_paths_ignore_ambient_target_and_stale_workspace_worker(self):
         with tempfile.TemporaryDirectory() as directory:

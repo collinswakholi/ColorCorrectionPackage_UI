@@ -5,13 +5,14 @@ under the same conditions. The SDK requires Python 3.10+ and has no Python ML or
 GUI runtime dependencies. Install the wheel from the `python/` folder in your Studio runtime.
 
 ```sh
-python -m pip install "/path/to/runtime/python/colorcorrect_studio-2.3.0-py3-none-any.whl"
+python -m pip install "/path/to/runtime/python/colorcorrect_studio-3.0.0-py3-none-any.whl"
 ```
 
 For a source checkout, run `python -m pip install ./api`.
 The wheel does **not** contain the native worker, models, or inference libraries.
 Keep the installed/extracted application intact and set `root` to that folder.
-The native application and SDK are versioned independently; this SDK is 2.3.0.
+The native application and SDK are versioned independently; this SDK is 3.0.0.
+It requires a Studio 0.2.0 or later worker and refuses older ones at startup.
 
 Use **Studio 0.3.0** for exact seeded patch sampling. The SDK checks the worker capability before fitting. Studio 0.2.2 introduced CPU inference recovery and
 `backend="cpu-inference"`. Older 0.2.1 engines require GPU inference; installing
@@ -140,7 +141,7 @@ GPU; it requires a worker advertising `cpu_inference_v1`. Explicit `directml`
 (Windows), `webgpu`, and `vulkan` selections report an error if that inference
 engine cannot execute. GPU image correction retains CPU recovery independently.
 
-The legacy `backend="cpu"` selects CPU **image correction** and Auto detection.
+`backend="cpu"` selects CPU **image correction** and Auto detection.
 Fitting, image decoding/encoding, and spatial FFC may also use CPU. Inspect
 `result.backends.actual` and `result.backends.diagnostics["inference"]` when
 present; a requested setting is not evidence of actual GPU execution. Setup's
@@ -157,9 +158,6 @@ provides the original Python workflow. Use Studio's saved JSON models and
 configuration objects when working with this API.
 
 [Tutorial notebooks](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/notebooks/README.md) demonstrate editable stage options
-and method comparisons. Legacy `Engine`, scripts, CLI entry points, and raw
-replies remain available through the [advanced protocol guide](../docs/api/protocol.md).
+and method comparisons. The low-level `Engine`, scripts, CLI entry points, and raw
+replies are documented in the [advanced protocol guide](../docs/api/protocol.md).
 This SDK processes still images only.
-
-For contributors, [developer validation](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md) describes
-the checks and recorded compatibility evidence behind these guides.

@@ -5,16 +5,23 @@ from pathlib import Path
 import sys
 import time
 
-ready = {"ok": True, "event": "ready"}
+ready = {"ok": True, "event": "ready", "protocol_version": 3}
 if "FAKE_WORKER_PATCH_SAMPLING" in os.environ:
     ready["patch_sampling"] = json.loads(os.environ["FAKE_WORKER_PATCH_SAMPLING"])
+if "FAKE_WORKER_PROTOCOL" in os.environ:
+    marker = json.loads(os.environ["FAKE_WORKER_PROTOCOL"])
+    if marker is None:
+        del ready["protocol_version"]  # a 0.1.x worker
+    else:
+        ready["protocol_version"] = marker
 print(json.dumps(ready), flush=True)
 pending = None
 cleanup_delay = 0
 cleanup_exit = 0
 for line in sys.stdin:
     request = json.loads(line)
-    command = request["cmd"]
+    # The native worker matches commands case-insensitively.
+    command = request["cmd"].lower()
     if command == "deferred":
         pending = request["path"]
     if command == "deferred_after_ack":

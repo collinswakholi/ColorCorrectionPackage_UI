@@ -18,7 +18,7 @@ public sealed class ThemeRefreshTests
     [AvaloniaFact]
     public void ExistingLogRowsChangeThemeWithoutReplacingTheirEntriesOrControls()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { IsLightTheme = true };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Layout = { IsLightTheme = true }};
         vm.LogEntries.Clear();
         foreach (var level in Enum.GetValues<LogLevel>())
         {
@@ -38,7 +38,7 @@ public sealed class ThemeRefreshTests
             var initial = labels.Select(text => BrushColor(text.Foreground)).ToArray();
             foreach (var light in new[] { false, true, false })
             {
-                vm.IsLightTheme = light;
+                vm.Layout.IsLightTheme = light;
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(entries, vm.LogEntries.Take(entries.Length));
                 foreach (var label in labels)
@@ -66,14 +66,14 @@ public sealed class ThemeRefreshTests
     [AvaloniaFact]
     public void ExistingDeltaECardsRefreshBothForegroundAndBackgroundOnThemeChange()
     {
-        var vm = new MainWindowViewModel(persistenceEnabled: false)
-        {
-            IsLightTheme = true, HasMetrics = true,
-            MeanAfterValue = 0.5, MedianAfterValue = 2.5, MaxAfterValue = 6,
-        };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Layout = { IsLightTheme = true }};
+        vm.Analysis.HasMetrics = true;
+        vm.Analysis.MeanAfterValue = 0.5;
+        vm.Analysis.MedianAfterValue = 2.5;
+        vm.Analysis.MaxAfterValue = 6;
         foreach (var (value, percent) in new[] { (0.5, 50.0), (1.5, -20.0), (2.5, 0.0), (4.0, 50.0), (6.0, -20.0) })
-            vm.StageDeltaERows.Add(new StageDeltaERow(new StageDeltaE("CC", 10, value, 10, value, 10, value, percent, 1), "quality"));
-        var rows = vm.StageDeltaERows.ToArray();
+            vm.Analysis.StageDeltaERows.Add(new StageDeltaERow(new StageDeltaE("CC", 10, value, 10, value, 10, value, percent, 1), "quality"));
+        var rows = vm.Analysis.StageDeltaERows.ToArray();
         var window = new MainWindow { Width = 1440, Height = 1000, DataContext = vm };
         window.Show();
         window.TabDeltaE.IsSelected = true;
@@ -87,9 +87,9 @@ public sealed class ThemeRefreshTests
             Assert.Equal(3, summaries.Length);
             foreach (var light in new[] { false, true, false })
             {
-                vm.IsLightTheme = light;
+                vm.Layout.IsLightTheme = light;
                 Dispatcher.UIThread.RunJobs();
-                Assert.Equal(rows, vm.StageDeltaERows);
+                Assert.Equal(rows, vm.Analysis.StageDeltaERows);
                 foreach (var card in cards)
                 {
                     var row = Assert.IsType<StageDeltaERow>(card.DataContext);

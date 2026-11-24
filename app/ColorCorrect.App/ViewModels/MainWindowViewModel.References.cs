@@ -8,15 +8,15 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    public string ReferenceSummary => Active is { ReferencesNeedAssignment: true }
+    public string ReferenceSummary => Workspace.Active is { ReferencesNeedAssignment: true }
         ? "Custom references need reassignment after detection."
-        : Active is { ReferenceAssignments.Count: > 0 } item
+        : Workspace.Active is { ReferenceAssignments.Count: > 0 } item
             ? $"Custom references · {item.ReferenceAssignments.Count} chart(s)"
             : "Built-in chart references";
 
     public void AssignReference(SessionItemViewModel item, string chartId, ReferenceProfile? profile)
     {
-        if (Busy || IsSaving) throw new InvalidOperationException("Wait for the current job before editing chart references.");
+        if (Job.Busy || Output.IsSaving) throw new InvalidOperationException("Wait for the current job before editing chart references.");
         var faces = item.Handshake?.Faces().Where(f => f.TryGetProperty("chart_id", out var id) && id.GetString() == chartId).ToArray();
         if (faces is not { Length: 1 })
             throw new InvalidOperationException("The detection changed. Reopen the reference editor and select the chart again.");
@@ -42,14 +42,14 @@ public partial class MainWindowViewModel
         // Explicit built-in assignments for remaining faces keep multi-chart custom requests complete.
         item.ReferencesNeedAssignment = false;
         InvalidateCalibration(item);
-        if (item == Active)
+        if (item == Workspace.Active)
         {
-            UseLoadedModel = false;
+            Output.UseLoadedModel = false;
             ApplyReport(null);
             OnPropertyChanged(nameof(ReferenceSummary));
         }
         item.DetectLabel = "Reference changed · refit required";
-        Status = "Chart reference updated. Fit again to use it; the previous saved model is unchanged.";
+        Job.Status = "Chart reference updated. Fit again to use it; the previous saved model is unchanged.";
         ScheduleSave();
         NotifyRunCommands();
     }
@@ -57,20 +57,20 @@ public partial class MainWindowViewModel
     private void InvalidateCalibration(SessionItemViewModel item)
     {
         item.InvalidateCalibration();
-        if (item == Active)
+        if (item == Workspace.Active)
         {
             // A bitmap decode scheduled before the edit must never reattach the
             // old result after the current result associations have been cleared.
             _previewGeneration++;
-            LastPreviewDir = "";
-            HasCorrected = false;
-            ShowCorrected = false;
-            StageName = "Original";
-            SetPreview(OriginalPreview, null);
+            Stage.LastPreviewDir = "";
+            Workspace.HasCorrected = false;
+            Stage.ShowCorrected = false;
+            Stage.StageName = "Original";
+            SetPreview(Stage.OriginalPreview, null);
             ApplyReport(null);
             NotifyStageRadios();
             RefreshOverlay();
-            if (OriginalPreview is null && System.IO.File.Exists(item.Path))
+            if (Stage.OriginalPreview is null && System.IO.File.Exists(item.Path))
                 _ = LoadPreviewsAsync(item, _previewGeneration);
         }
         RefreshSessionUi();

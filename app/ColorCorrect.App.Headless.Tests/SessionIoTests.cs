@@ -14,29 +14,29 @@ public sealed class SessionIoTests
         var root = Path.Combine(Path.GetTempPath(), "ccp-session-io-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var path = Path.Combine(root, "saved.json");
-        var vm = new MainWindowViewModel(persistenceEnabled: false) { Busy = false, DoGc = true, Dialogs = new SessionDialogs(path) };
+        var vm = new MainWindowViewModel(persistenceEnabled: false) { Job = { Busy = false }, Settings = { DoGc = true }, Dialogs = new SessionDialogs(path) };
         try
         {
             var pending = vm.SaveSessionAsCommand.ExecuteAsync(null);
-            vm.DoGc = false;
+            vm.Settings.DoGc = false;
             await pending;
             Assert.True(File.Exists(path));
             var (saved, error) = SessionStore.TryLoadFrom(path);
             Assert.Null(error);
             Assert.True(saved.Options.DoGc);
-            Assert.False(vm.DoGc);
-            Assert.False(vm.IsSaving);
-            Assert.StartsWith("Session saved", vm.Status);
+            Assert.False(vm.Settings.DoGc);
+            Assert.False(vm.Output.IsSaving);
+            Assert.StartsWith("Session saved", vm.Job.Status);
             Assert.True(vm.LoadSessionCommand.CanExecute(null));
 
-            vm.Busy = true;
+            vm.Job.Busy = true;
             Assert.False(vm.SaveSessionAsCommand.CanExecute(null));
             Assert.False(vm.LoadSessionCommand.CanExecute(null));
-            vm.Busy = false;
-            vm.IsSaving = true;
+            vm.Job.Busy = false;
+            vm.Output.IsSaving = true;
             Assert.False(vm.SaveSessionAsCommand.CanExecute(null));
             Assert.False(vm.LoadSessionCommand.CanExecute(null));
-            vm.IsSaving = false;
+            vm.Output.IsSaving = false;
             Assert.True(vm.SaveSessionAsCommand.CanExecute(null));
         }
         finally { await vm.DisposeAsync(); Directory.Delete(root, true); }

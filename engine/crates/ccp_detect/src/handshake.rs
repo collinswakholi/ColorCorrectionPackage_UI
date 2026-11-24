@@ -4,8 +4,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::detection::DetectResult;
 use crate::geom::{cli_chart_from_detector, format_quad, format_xy, ChartDetection};
-use crate::DetectResult;
 
 #[derive(Serialize)]
 struct CornersJson {

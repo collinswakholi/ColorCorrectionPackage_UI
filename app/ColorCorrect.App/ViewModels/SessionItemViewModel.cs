@@ -20,6 +20,11 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _includeInBatch = true;
     [ObservableProperty] private string _detectLabel = "";
     [ObservableProperty] private Bitmap? _thumb;
+    /// <summary>Why the thumbnail could not be decoded; empty while loading or after success.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThumbFailed))]
+    private string _thumbError = "";
+    public bool ThumbFailed => ThumbError.Length > 0;
     [ObservableProperty] private bool _previewSuppressed;
     [ObservableProperty] private bool _hasProcessingProgress;
     [ObservableProperty] private bool _isProcessing;
@@ -115,6 +120,21 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SessionTip));
     }
 
+    /// <summary>Adopt a successful fit or apply: its outputs, model and the context that produced them.</summary>
+    public void RecordCompletion(CorrectionOutcome outcome)
+    {
+        CorrectedPath = outcome.OutputPath;
+        ReportPath = outcome.ReportPath;
+        if (Directory.Exists(outcome.PreviewDir)) PreviewDir = outcome.PreviewDir;
+        IsCorrected = true;
+        ModelPath = outcome.ModelPath;
+        CompletedContext = outcome.CompletedContext;
+        PreviewSuppressed = outcome.CompletedContext?.Options().PreviewMode == "none";
+        SourceIdentity = outcome.CompletedContext?.Source ?? SourceIdentity;
+        IncludeInSave = true;
+        NotifyOutputs();
+    }
+
     /// <summary>Detach stale results while preserving their saved files on disk.</summary>
     public void InvalidateCalibration()
     {
@@ -147,17 +167,35 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         var gen = ++_loadGen;
         var path = Path;
         AssetIdentity? identity = null;
-        Bitmap? bmp;
+        Bitmap? bmp = null;
+        string? failure = null;
+        var gate = ColorCorrect.App.Services.StillImageDecoder.ThumbnailGate;
+        await gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (gen != _loadGen) return; // replaced or relinked while queued
             bmp = await Task.Run(() =>
             {
                 if (SourceIdentity is null && File.Exists(path)) identity = AssetIdentity.Capture(path);
                 return ColorCorrect.App.Services.StillImageDecoder.Decode(path, 96);
             }).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
+            failure = ex is FileNotFoundException or DirectoryNotFoundException
+                ? "File not found."
+                : ex is InvalidDataException ? "Unsupported or damaged image." : ex.Message;
+        }
+        finally
+        {
+            // Release before any UI-thread wait: a slot held across a dispatcher hop
+            // stalls every other thumbnail while the UI thread is busy.
+            gate.Release();
+        }
+
+        if (failure is not null)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { if (gen == _loadGen) ThumbError = failure; });
             return;
         }
 
@@ -176,6 +214,7 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
             }
 
             SourceIdentity ??= identity;
+            ThumbError = "";
             var old = Thumb;
             Thumb = bmp;
             old?.Dispose();

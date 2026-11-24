@@ -27,12 +27,20 @@ public partial class CcSettingsDialog : Window
 
     private async void References_Click(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not ViewModels.MainWindowViewModel { Active.Handshake: { Ok: true } } vm || vm.Busy || vm.IsSaving)
+        if (DataContext is not ViewModels.MainWindowViewModel { Workspace.Active.Handshake: { Ok: true } } vm || vm.Job.Busy || vm.Output.IsSaving)
         {
-            if (DataContext is ViewModels.MainWindowViewModel current) current.Status = "Detect a chart image before editing its references.";
+            if (DataContext is ViewModels.MainWindowViewModel current) current.Job.Status = "Detect a chart image before editing its references.";
             return;
         }
-        await new ReferenceEditorDialog(vm).ShowDialog(this);
+        try
+        {
+            // The editor reads chart image sizes from disk in its constructor.
+            await new ReferenceEditorDialog(vm).ShowDialog(this);
+        }
+        catch (Exception ex)
+        {
+            Services.ToastService.ShowError($"Could not open the reference editor: {ex.Message}");
+        }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

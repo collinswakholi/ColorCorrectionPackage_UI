@@ -38,6 +38,10 @@ public partial class ConfirmDialog : Window
         }
 
         AutomationProperties.SetName(ConfirmBtn, ConfirmBtn.Content?.ToString() ?? "Continue");
+        // Screen readers announce the question, not only the title.
+        AutomationProperties.SetHelpText(this, message);
+        // Enter confirms only non-destructive prompts; destructive ones need an explicit click or Tab+Space.
+        ConfirmBtn.IsDefault = !danger;
     }
 
     private void OnOk(object? sender, RoutedEventArgs e) => Close(true);

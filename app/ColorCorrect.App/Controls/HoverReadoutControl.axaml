@@ -5,7 +5,7 @@
              IsHitTestVisible="False">
     <Grid x:DataType="vm:ColorHoverState">
         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" IsVisible="{Binding !IsCompare}">
-            <Border Width="32" Height="32" CornerRadius="6"
+            <Border Width="32" Height="32" CornerRadius="{DynamicResource RadiusMd}"
                     BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                     Background="{Binding Swatch}" VerticalAlignment="Top"/>
             <StackPanel Grid.Column="1" Spacing="4">
@@ -57,13 +57,13 @@
             <Grid ColumnDefinitions="28,92,92,52" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   ColumnSpacing="8" RowSpacing="2">
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                    <Border Width="18" Height="18" CornerRadius="4"
+                    <Border Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
                             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                             Background="{Binding Swatch}" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding SampleLabel}" Classes="hoverLabel" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                    <Border Width="18" Height="18" CornerRadius="4"
+                    <Border Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
                             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
                             Background="{Binding Swatch2}" VerticalAlignment="Center"/>
                     <TextBlock Text="Reference" Classes="hoverLabel" VerticalAlignment="Center"/>
