@@ -123,9 +123,7 @@
                     </Button>
                     <Popup x:Name="AccelMenu" Placement="BottomEdgeAlignedLeft" IsLightDismissEnabled="True"
                            PlacementConstraintAdjustment="SlideX,SlideY">
-                        <Border x:Name="ProcessingSettingsPanel" Background="{DynamicResource PopupBrush}"
-                                BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}" Padding="20" Width="392"
+                        <Border x:Name="ProcessingSettingsPanel" Classes="floatPanel" Padding="20" Width="392"
                                 AutomationProperties.Name="Processing settings panel">
                             <DockPanel>
                                 <TextBlock DockPanel.Dock="Top" Text="Processing settings" FontSize="{DynamicResource FontSizeSubheading}" FontWeight="SemiBold"
@@ -218,10 +216,13 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Spacing="2">
                     <Button x:Name="HelpButton" Theme="{StaticResource ToolbarIconButton}"
-                            Click="OpenHelp_Click" Content="?" FontSize="20" FontWeight="SemiBold"
+                            Click="OpenHelp_Click"
                             ToolTip.Tip="Guide, color science, and API examples (F1)"
                             AutomationProperties.AcceleratorKey="F1"
-                            AutomationProperties.Name="Open help and guidance"/>
+                            AutomationProperties.Name="Open help and guidance">
+                        <Path Classes="toolbarGlyph" Data="{StaticResource HelpIconGeometry}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
                     <Button x:Name="ThemeToggle" Theme="{StaticResource ToolbarIconButton}"
                             Command="{Binding ToggleThemeCommand}"
                             ToolTip.Tip="{Binding Layout.ThemeHint}"
@@ -246,9 +247,7 @@
                     </Button>
                     <Popup x:Name="SaveMenu" PlacementTarget="SaveLink" Placement="BottomEdgeAlignedRight"
                            PlacementConstraintAdjustment="SlideX,SlideY" IsLightDismissEnabled="True">
-                        <Border Background="{DynamicResource PopupBrush}"
-                                BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                BorderThickness="1" CornerRadius="{DynamicResource RadiusLg}" Padding="16" MinWidth="380">
+                        <Border Classes="floatPanel" Padding="16" MinWidth="380">
                             <StackPanel>
                                 <TextBlock Text="SAVE" Classes="subheading" Margin="0,0,0,10"/>
                                 <ScrollViewer MaxHeight="168" HorizontalScrollBarVisibility="Disabled">
@@ -548,7 +547,7 @@
                                     </Border>
                                 </StackPanel>
                     </Border>
-                    <StackPanel x:Name="ProcessModelHost" Margin="14,8,12,12">
+                    <StackPanel x:Name="ProcessModelHost" Classes="sidebarBody">
                             <Expander x:Name="AvailableToggle" Header="Catalog" Classes="section"
                                       Theme="{StaticResource SectionExpander}"
                                       IsExpanded="{Binding Layout.LibraryExpanded, Mode=TwoWay}"
@@ -654,7 +653,8 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
                                     <TextBlock x:Name="ChartTypeLabel" Text="{Binding Compute.DetectSummary}" Classes="caption"
-                                               Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                               Margin="0,0,0,6" TextWrapping="Wrap"
+                                               IsVisible="{Binding Compute.DetectSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock x:Name="DetectStatus" Text="{Binding Job.CurrentStage}" Classes="caption"
                                                Margin="0,0,0,6" IsVisible="{Binding Job.Busy}"/>
                                     <TextBlock Text="Chart face" Classes="caption" Margin="0,0,0,4"
@@ -892,6 +892,7 @@
                                          AutomationProperties.Name="Current image progress"/>
                             <Grid x:Name="ApplyRow" ColumnDefinitions="*,8,Auto">
                                 <Button x:Name="RunButton" Theme="{StaticResource RunButton}"
+                                        Classes.busy="{Binding Job.Busy}"
                                         Command="{Binding ApplyCommand}" MinWidth="0"
                                         ToolTip.Tip="{Binding RunActionHint}"
                                         AutomationProperties.AcceleratorKey="F5"
@@ -899,8 +900,14 @@
                                     <Grid>
                                         <TextBlock Text="{Binding ApplyLabel}" IsVisible="{Binding !Job.Busy}"
                                                    HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Job.CurrentStage}" IsVisible="{Binding Job.Busy}"
-                                                   HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center"
+                                                    IsVisible="{Binding Job.Busy}">
+                                            <Path Classes="spinner" Width="16" Height="16" VerticalAlignment="Center"
+                                                  Data="{StaticResource SpinnerGeometry}"
+                                                  Stroke="{DynamicResource PrimaryBrush}" StrokeThickness="2.5"/>
+                                            <TextBlock Text="{Binding Job.CurrentStage}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
                                     </Grid>
                                 </Button>
                                 <Button x:Name="BatchButton" Grid.Column="2" Theme="{StaticResource SecondaryButton}"
@@ -914,7 +921,7 @@
                                        TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding ValidationMessage}" IsVisible="{Binding HasValidationError}" Foreground="{DynamicResource ErrorBrush}"
                                        TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
-                            <Button Content="Cancel" Theme="{StaticResource DangerButton}"
+                            <Button Content="Cancel" Theme="{StaticResource DangerOutlineButton}"
                                     Command="{Binding CancelBatchCommand}" Margin="0,8,0,0"
                                     HorizontalAlignment="Stretch" IsVisible="{Binding Job.Busy}"
                                     AutomationProperties.Name="Cancel processing"/>
@@ -1048,11 +1055,35 @@
                             <Border x:Name="StageFrame" Classes="stageFrame"
                                     ToolTip.Tip="Hover for RGB / Lab. Right-click a point to copy. Esc clears.">
                                 <Grid>
-                                    <StackPanel x:Name="InputEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                IsVisible="{Binding !Workspace.HasImage}">
-                                        <TextBlock Text="Drop a still to begin" Classes="caption"
-                                                   HorizontalAlignment="Center"/>
-                                    </StackPanel>
+                                    <Grid x:Name="InputEmpty" Classes="dropTarget"
+                                          IsVisible="{Binding !Workspace.HasImage}">
+                                        <Border Classes="stageEmpty" AutomationProperties.Name="Drop stills to begin">
+                                            <Panel>
+                                                <Rectangle Classes="stageEmptyDash" Margin="-16,-14"/>
+                                                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                                    <Border Classes="stageEmptyIcon" Margin="0,0,0,8">
+                                                        <Path Data="{StaticResource ImageIconGeometry}"/>
+                                                    </Border>
+                                                    <TextBlock Text="Drop stills to begin" Classes="heading"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock Classes="caption" TextAlignment="Center" TextWrapping="Wrap"
+                                                               HorizontalAlignment="Center" LineHeight="18"
+                                                               Text="JPEG, PNG or TIFF photos of a color chart"/>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center"
+                                                                Margin="0,10,0,0">
+                                                        <Button x:Name="StageOpenFiles" Content="Choose files"
+                                                                Theme="{StaticResource PrimaryButton}"
+                                                                Command="{Binding OpenImagesCommand}"
+                                                                AutomationProperties.Name="Choose image files"/>
+                                                        <Button x:Name="StageOpenFolder" Content="Open folder"
+                                                                Theme="{StaticResource SecondaryButton}"
+                                                                Command="{Binding OpenFolderCommand}"
+                                                                AutomationProperties.Name="Choose an image folder"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Panel>
+                                        </Border>
+                                    </Grid>
 
                                     <controls:ZoomPanView x:Name="OriginalStage" IsVisible="{Binding ShowStillPreview}">
                                         <Grid Width="{Binding Stage.NaturalWidth}" Height="{Binding Stage.NaturalHeight}"
@@ -1256,7 +1287,8 @@
                             <TextBlock Classes="caption" IsVisible="{Binding !Analysis.HasMetrics}"
                                        Text="{Binding Analysis.DeltaEPlaceholder}"
                                        TextWrapping="Wrap"/>
-                            <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding Analysis.HasMetrics}">
+                            <UniformGrid x:Name="MetricGrid" Columns="4" IsVisible="{Binding Analysis.HasMetrics}"
+                                         Classes="reveal" Classes.shown="{Binding Analysis.HasMetrics}">
                                 <Border Classes="metricTile" Margin="0,0,8,8">
                                     <Border.Background>
                                         <MultiBinding Converter="{StaticResource DEQualityBgBrush}">
@@ -1342,11 +1374,11 @@
                                 </Border>
                             </UniformGrid>
                             <Grid x:Name="DeltaEPlots" Grid.Row="1" ColumnDefinitions="*,12,1.15*"
-                                  IsVisible="{Binding Analysis.HasMetrics}">
+                                  IsVisible="{Binding Analysis.HasMetrics}"
+                                  Classes="reveal" Classes.shown="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
-                                        <TextBlock Text="Per stage" Classes="caption"
-                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Per stage" Classes="cardTitle" Margin="0,0,0,8"/>
                                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Disabled">
                                             <ItemsControl ItemsSource="{Binding Analysis.StageDeltaERows}">
@@ -1361,7 +1393,7 @@
                                                             </Border.Background>
                                                             <Grid ColumnDefinitions="48,*,Auto">
                                                                 <TextBlock Text="{Binding Name}"
-                                                                           FontWeight="Bold" FontSize="14"
+                                                                           FontWeight="Bold" FontSize="{DynamicResource FontSizeBody}"
                                                                            Foreground="{DynamicResource PrimaryBrush}"
                                                                            VerticalAlignment="Center"/>
                                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
@@ -1377,7 +1409,7 @@
                                                                             </Ellipse.Fill>
                                                                         </Ellipse>
                                                                         <TextBlock Text="{Binding MeanAfter, Converter={StaticResource DEQualityText}}"
-                                                                                   FontSize="10" FontWeight="SemiBold">
+                                                                                   FontSize="{DynamicResource FontSizeCaption}" FontWeight="SemiBold">
                                                                             <TextBlock.Foreground>
                                                                                 <MultiBinding Converter="{StaticResource DEQualityBrush}">
                                                                                     <Binding Path="MeanAfter"/>
@@ -1423,9 +1455,7 @@
                                                 <TextBlock Text="Export" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
-                                            <TextBlock Text="CIEDE2000 by stage" Classes="caption"
-                                                       FontWeight="SemiBold" VerticalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="CIEDE2000 by stage" Classes="cardTitle"/>
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
                                             <controls:PatchPlotControl x:Name="PlotDeltaE" MinHeight="180"
@@ -1440,12 +1470,15 @@
 
                     <TabItem x:Name="TabColor" Header="Color Analysis" Theme="{StaticResource DarkTabItem}"
                              AutomationProperties.Name="Color Analysis">
+                        <ScrollViewer x:Name="ColorPlotScroll" HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
                         <Grid x:Name="PanelColor" Margin="14">
                             <TextBlock Classes="caption" IsVisible="{Binding !Analysis.HasMetrics}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
                                        Text="{Binding Analysis.ColorPlaceholder}"
                                        TextWrapping="Wrap"/>
-                            <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding Analysis.HasMetrics}">
+                            <Grid x:Name="ColorPlots" ColumnDefinitions="1.2*,12,*" IsVisible="{Binding Analysis.HasMetrics}"
+                                  Classes="reveal" Classes.shown="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
                                         <DockPanel Margin="0,0,0,8">
@@ -1460,30 +1493,30 @@
                                                     <TextBlock Text="Export" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock Text="Color scatter — reference vs measured"
-                                                       Classes="caption" FontWeight="SemiBold" VerticalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="Color scatter — reference vs measured" Classes="cardTitle"/>
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" Report="{Binding Analysis.Report}"/>
+                                            <controls:PatchPlotControl x:Name="PlotRgb" Kind="Scatter" MinHeight="160" Report="{Binding Analysis.Report}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
                                 <Border x:Name="ColorResidualCard" Grid.Column="2" Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
-                                        <TextBlock Text="Residual" Classes="caption"
-                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Residual" Classes="cardTitle" Margin="0,0,0,8"/>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" Report="{Binding Analysis.Report}"/>
+                                            <controls:PatchPlotControl x:Name="PlotResidual" Kind="Residual" MinHeight="160" Report="{Binding Analysis.Report}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
                             </Grid>
                         </Grid>
+                        </ScrollViewer>
                     </TabItem>
 
                     <TabItem x:Name="TabPatches" Header="Chart rendition" Theme="{StaticResource DarkTabItem}"
                              AutomationProperties.Name="Chart rendition">
+                        <ScrollViewer x:Name="RenditionScroll" HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Stretch">
                         <Grid x:Name="PanelPatches" RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="8">
                             <TextBlock x:Name="PatchSummary" Text="{Binding Analysis.PatchSummary}" Classes="caption"
                                        HorizontalAlignment="Right" IsVisible="{Binding Analysis.HasMetrics}"/>
@@ -1492,7 +1525,8 @@
                                        Text="{Binding Analysis.RenditionPlaceholder}"
                                        TextWrapping="Wrap"/>
                             <Grid x:Name="PlotHoverHost" Grid.Row="1" ColumnDefinitions="*,12,*"
-                                  MinHeight="160" ClipToBounds="True" IsVisible="{Binding Analysis.HasMetrics}">
+                                  MinHeight="160" ClipToBounds="True" IsVisible="{Binding Analysis.HasMetrics}"
+                                  Classes="reveal" Classes.shown="{Binding Analysis.HasMetrics}">
                                 <Border Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
                                         <DockPanel Margin="0,0,0,8">
@@ -1507,12 +1541,10 @@
                                                     <TextBlock Text="Export" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock Text="Original vs reference" Classes="caption"
-                                                       FontWeight="SemiBold" VerticalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="Original vs reference" Classes="cardTitle"/>
                                         </DockPanel>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotRenditionOriginal" Kind="RenditionOriginal"
+                                            <controls:PatchPlotControl x:Name="PlotRenditionOriginal" Kind="RenditionOriginal" MinHeight="120"
                                                                        Report="{Binding Analysis.Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
                                         </Border>
@@ -1520,10 +1552,9 @@
                                 </Border>
                                 <Border x:Name="RenditionCorrectedCard" Grid.Column="2" Classes="plotCard">
                                     <Grid RowDefinitions="Auto,*">
-                                        <TextBlock Text="Corrected vs reference" Classes="caption"
-                                                   FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Corrected vs reference" Classes="cardTitle" Margin="0,0,0,8"/>
                                         <Border Grid.Row="1" ClipToBounds="True" CornerRadius="{DynamicResource RadiusSm}">
-                                            <controls:PatchPlotControl x:Name="PlotRenditionCorrected" Kind="RenditionCorrected"
+                                            <controls:PatchPlotControl x:Name="PlotRenditionCorrected" Kind="RenditionCorrected" MinHeight="120"
                                                                        Report="{Binding Analysis.Report}"
                                                                        PlotHoverChanged="OnRenditionHover"/>
                                         </Border>
@@ -1546,34 +1577,37 @@
                                     <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                                   VerticalScrollBarVisibility="Disabled">
                                     <Grid RowDefinitions="Auto,*" MinWidth="420">
-                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Background="{DynamicResource CardElevatedBrush}" Margin="10,8,10,8">
-                                            <TextBlock Text="Patch" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="1" Text="Before ΔE₀₀" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="2" Text="After ΔE₀₀" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="3" Text="Sat" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="4" Text="Meas" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="5" Text="Ref" Classes="caption" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="6" Text="Corr" Classes="caption" FontWeight="SemiBold"/>
+                                        <Border Background="{DynamicResource CardElevatedBrush}"
+                                                BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
+                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="14,8">
+                                            <TextBlock Text="Patch" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="1" Text="Before ΔE₀₀" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="2" Text="After ΔE₀₀" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="3" Text="Sat" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="4" Text="Meas" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="5" Text="Ref" Classes="columnHead"/>
+                                            <TextBlock Grid.Column="6" Text="Corr" Classes="columnHead"/>
                                         </Grid>
+                                        </Border>
                                         <ScrollViewer Grid.Row="1" MaxHeight="220">
                                             <ItemsControl x:Name="PatchTable" ItemsSource="{Binding Analysis.Patches}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:PatchRowViewModel">
-                                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="10,6">
-                                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBodySm}"/>
-                                                            <TextBlock Grid.Column="1" Text="{Binding Before}" FontSize="{DynamicResource FontSizeBodySm}"/>
-                                                            <TextBlock Grid.Column="2" Text="{Binding After}" FontSize="{DynamicResource FontSizeBodySm}"/>
-                                                            <TextBlock Grid.Column="3" Text="{Binding Sat}" FontSize="{DynamicResource FontSizeBodySm}"/>
-                                                            <Border Grid.Column="4" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
-                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                                                    Background="{Binding Measured}"/>
-                                                            <Border Grid.Column="5" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
-                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                                                    Background="{Binding Reference}"/>
-                                                            <Border Grid.Column="6" Width="18" Height="18" CornerRadius="{DynamicResource RadiusSm}"
-                                                                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                                                    Background="{Binding Corrected}"/>
+                                                        <Border Classes="patchRowHost">
+                                                        <Grid ColumnDefinitions="*,90,90,50,36,36,36" Margin="10,5">
+                                                            <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBodySm}"
+                                                                       VerticalAlignment="Center"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Before}" Classes="tabular"
+                                                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                            <TextBlock Grid.Column="2" Text="{Binding After}" Classes="tabular"
+                                                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Sat}" FontSize="{DynamicResource FontSizeBodySm}"
+                                                                       VerticalAlignment="Center"/>
+                                                            <Border Grid.Column="4" Classes="swatch" Background="{Binding Measured}"/>
+                                                            <Border Grid.Column="5" Classes="swatch" Background="{Binding Reference}"/>
+                                                            <Border Grid.Column="6" Classes="swatch" Background="{Binding Corrected}"/>
                                                         </Grid>
+                                                        </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -1583,6 +1617,7 @@
                                 </Border>
                             </Expander>
                         </Grid>
+                        </ScrollViewer>
                     </TabItem>
                 </TabControl>
                 </Border>
@@ -1668,12 +1703,20 @@
                     <TextBlock Text="{Binding Job.CurrentStage}" Classes="caption" Foreground="{DynamicResource PrimaryBrush}"
                                FontWeight="SemiBold"/>
                     <TextBlock x:Name="StatusDeltaE" Text="{Binding Analysis.StatusDeltaE}" Classes="caption" Margin="12,0,0,0"
-                               Foreground="{DynamicResource SuccessBrush}" IsVisible="{Binding Analysis.HasMetrics}"/>
+                               FontWeight="SemiBold" IsVisible="{Binding Analysis.HasMetrics}">
+                        <!-- Coloured by the same quality bands as the ΔE tiles, not always "success". -->
+                        <TextBlock.Foreground>
+                            <MultiBinding Converter="{StaticResource DEQualityBrush}">
+                                <Binding Path="Analysis.MeanAfterValue"/>
+                                <Binding Path="ActualThemeVariant" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                            </MultiBinding>
+                        </TextBlock.Foreground>
+                    </TextBlock>
                 </StackPanel>
                 <Panel x:Name="StatusDot" Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                        DockPanel.Dock="Left" IsHitTestVisible="False">
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" IsVisible="{Binding !Job.Busy}"/>
-                    <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Job.Busy}"/>
+                    <Ellipse Classes="busyPulse" Width="8" Height="8" Fill="{DynamicResource WarningBrush}" IsVisible="{Binding Job.Busy}"/>
                     <!-- Drawn last so the last error stays visible over the busy/ready dot. -->
                     <Ellipse Width="8" Height="8" Fill="{DynamicResource ErrorBrush}"
                              IsVisible="{Binding Job.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
@@ -1712,13 +1755,21 @@
 
         <Grid x:Name="DragOverlay" Grid.RowSpan="3" IsVisible="False" IsHitTestVisible="False">
             <Border Background="{DynamicResource DragOverlayBrush}">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="Drop stills" FontSize="{DynamicResource FontSizeDisplay}" Foreground="White"
-                               FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="They join the working session" FontSize="{DynamicResource FontSizeSubheading}"
-                               Foreground="{DynamicResource DragSubtitleBrush}"
-                               HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                </StackPanel>
+                <Border Classes="dropPrompt">
+                    <Panel>
+                        <Rectangle Classes="stageEmptyDash" Margin="-24,-18" Stroke="{DynamicResource PrimaryBrush}"
+                                   StrokeThickness="2"/>
+                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                            <Border Classes="stageEmptyIcon" Background="{DynamicResource PrimaryBrush}" Margin="0,0,0,12">
+                                <Path Data="{StaticResource DropIconGeometry}" Fill="White"/>
+                            </Border>
+                            <TextBlock Text="Drop stills" FontSize="{DynamicResource FontSizeTitle}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="They join the working session" Classes="caption"
+                                       FontSize="{DynamicResource FontSizeBody}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Panel>
+                </Border>
             </Border>
         </Grid>
 

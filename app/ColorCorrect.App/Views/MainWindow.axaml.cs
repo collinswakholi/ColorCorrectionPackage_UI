@@ -119,17 +119,18 @@ public partial class MainWindow : Window
 
     private static double HorizontalSidebarPad(double width)
     {
+        // Both horizontal insets of a sidebar block (see .sidebarBlock / .sidebarBody in Theme.axaml).
         if (width < 300)
-        {
-            return 16;
-        }
-
-        if (width < 348)
         {
             return 20;
         }
 
-        return 28;
+        if (width < 348)
+        {
+            return 28;
+        }
+
+        return 32;
     }
 
     private void SetClass(string name, bool on)
@@ -340,7 +341,9 @@ public partial class MainWindow : Window
 
         if (ProcessModelHost is not null)
         {
-            ProcessModelHost.MaxWidth = Math.Max(160, width - 36);
+            // Exactly the inner width (minus the 1 px sidebar rule), so a stretched host is
+            // never centred a few pixels off the shared left edge.
+            ProcessModelHost.MaxWidth = Math.Max(160, width - HorizontalSidebarPad(width) - 1);
         }
 
         if (ModelSourceGrid is not null)
@@ -858,15 +861,11 @@ public partial class MainWindow : Window
 
     private void SetDropActive(bool on)
     {
+        // The overlay is shown first and then given .on, so Motion.axaml can fade it in.
         DragOverlay.IsVisible = on;
-        if (on)
-        {
-            DropZone.Classes.Add("is-dragging");
-        }
-        else
-        {
-            DropZone.Classes.Remove("is-dragging");
-        }
+        SetClassOn(DragOverlay, "on", on);
+        SetClassOn(DropZone, "is-dragging", on);
+        SetClassOn(InputEmpty, "is-dragging", on);
     }
 
     private void OnWhiteDragOver(object? sender, DragEventArgs e)

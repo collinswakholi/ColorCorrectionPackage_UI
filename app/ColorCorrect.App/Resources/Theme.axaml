@@ -9,7 +9,7 @@
 
     <Style Selector="TextBlock.heading">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"   Value="16" />
+        <Setter Property="FontSize"   Value="{DynamicResource FontSizeSubheading}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="LetterSpacing" Value="-0.3" />
@@ -17,7 +17,7 @@
 
     <Style Selector="TextBlock.subheading">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"   Value="11" />
+        <Setter Property="FontSize"   Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
         <Setter Property="LetterSpacing" Value="1.4" />
@@ -25,7 +25,7 @@
 
     <Style Selector="TextBlock.sectionLabel">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"   Value="11" />
+        <Setter Property="FontSize"   Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
         <Setter Property="LetterSpacing" Value="1.2" />
@@ -33,7 +33,7 @@
 
     <Style Selector="TextBlock.body">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"   Value="13" />
+        <Setter Property="FontSize"   Value="{DynamicResource FontSizeBody}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
 
@@ -43,7 +43,7 @@
     </Style>
     <Style Selector="TextBlock.caption">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"   Value="12" />
+        <Setter Property="FontSize"   Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
     </Style>
 
@@ -71,6 +71,8 @@
         <Setter Property="Padding"          Value="16,8" />
         <Setter Property="BorderThickness"  Value="0" />
         <Setter Property="Cursor"           Value="Hand" />
+        <Setter Property="FocusAdorner"     Value="{x:Null}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="PART_Border"
@@ -90,7 +92,7 @@
             <Setter Property="Background" Value="{DynamicResource PrimaryHoverBrush}" />
         </Style>
         <Style Selector="^:pressed /template/ Border#PART_Border">
-            <Setter Property="Background" Value="{DynamicResource PrimaryHoverBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PrimaryPressedBrush}" />
         </Style>
         <Style Selector="^:focus-visible /template/ Border#PART_Border">
             <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
@@ -114,6 +116,8 @@
         <Setter Property="BorderBrush"      Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness"  Value="1" />
         <Setter Property="Cursor"           Value="Hand" />
+        <Setter Property="FocusAdorner"     Value="{x:Null}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="PART_Border"
@@ -130,10 +134,11 @@
             </ControlTemplate>
         </Setter>
         <Style Selector="^:pointerover /template/ Border#PART_Border">
-            <Setter Property="Background" Value="{DynamicResource SidebarBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
         </Style>
         <Style Selector="^:pressed /template/ Border#PART_Border">
-            <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
+            <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
         </Style>
         <Style Selector="^:focus-visible /template/ Border#PART_Border">
             <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
@@ -158,6 +163,22 @@
         <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
     </ControlTheme>
 
+    <!-- A quiet stop action: present while work runs, but never louder than the result. -->
+    <ControlTheme x:Key="DangerOutlineButton" TargetType="Button"
+                  BasedOn="{StaticResource SecondaryButton}">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+        <Style Selector="^:pointerover /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource DangerLightBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource DangerLightBrush}" />
+        </Style>
+    </ControlTheme>
+
     <!-- ================================================================== -->
     <!-- Small Icon Button (remove / close)                              -->
     <!-- ================================================================== -->
@@ -171,13 +192,14 @@
         <Setter Property="MinWidth"         Value="32" />
         <Setter Property="MinHeight"        Value="32" />
         <Setter Property="Cursor"           Value="Hand" />
+        <Setter Property="FocusAdorner"     Value="{x:Null}" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="PART_Border"
                         Background="{TemplateBinding Background}"
                         BorderBrush="Transparent"
                         BorderThickness="2"
-                        CornerRadius="{DynamicResource RadiusSm}"
+                        CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
@@ -208,9 +230,9 @@
         <Setter Property="Background"      Value="{DynamicResource CardBrush}" />
         <Setter Property="BorderBrush"      Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness"  Value="1" />
-        <Setter Property="CornerRadius"     Value="6" />
+        <Setter Property="CornerRadius"     Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding"          Value="12" />
-        <Setter Property="BoxShadow"        Value="0 0 0 0 #00000000" />
+        <Setter Property="BoxShadow"        Value="{StaticResource ElevationCard}" />
     </Style>
 
     <!-- ================================================================== -->
@@ -247,7 +269,7 @@
         <Setter Property="Background"       Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="Foreground"       Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="CaretBrush"       Value="{DynamicResource TextPrimaryBrush}" />
-        <Setter Property="CornerRadius"     Value="6" />
+        <Setter Property="CornerRadius"     Value="{DynamicResource RadiusMd}" />
     </Style>
     <Style Selector="TextBox.config:focus">
         <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
@@ -267,12 +289,30 @@
         <Setter Property="Background"        Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="BorderBrush"       Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness"   Value="1" />
-        <Setter Property="CornerRadius"      Value="6" />
+        <Setter Property="CornerRadius"      Value="{DynamicResource RadiusMd}" />
         <Setter Property="MaxDropDownHeight" Value="200" />
         <Setter Property="MinHeight" Value="32" />
     </Style>
     <Style Selector="ComboBox.config:focus">
         <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
+    </Style>
+    <!-- Fluent fills a focused ComboBox with solid accent and white text, which reads as
+         "selected". Keep the field neutral with a faint tint and show focus as the ring. -->
+    <Style Selector="ComboBox:focus-visible /template/ Border#HighlightBackground">
+        <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
+    </Style>
+    <Style Selector="ComboBox:focus-visible /template/ ContentControl#ContentPresenter">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <!-- Fluent turns a focused TextBox pure black (dark) with an accent underline. -->
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBox.config:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     </Style>
     <Style Selector="Slider">
         <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
@@ -297,7 +337,19 @@
                     <Border x:Name="PART_Indicator"
                             HorizontalAlignment="Left"
                             Background="{TemplateBinding Foreground}"
-                            CornerRadius="2" />
+                            CornerRadius="2" ClipToBounds="True">
+                        <!-- Travelling highlight; only animated (and shown) when motion is on. -->
+                        <Border x:Name="Sheen" Width="48" HorizontalAlignment="Left" IsVisible="False"
+                                IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                    <GradientStop Color="#00FFFFFF" Offset="0" />
+                                    <GradientStop Color="#59FFFFFF" Offset="0.5" />
+                                    <GradientStop Color="#00FFFFFF" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Border>
                 </Panel>
             </ControlTemplate>
         </Setter>
@@ -308,7 +360,8 @@
     <!-- ================================================================== -->
 
     <ControlTheme x:Key="StageRadioButton" TargetType="RadioButton">
-        <Setter Property="Padding"    Value="12,5" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Padding"    Value="11,4" />
         <Setter Property="FontSize"   Value="12" />
         <Setter Property="MinHeight"  Value="28" />
         <Setter Property="MinWidth"   Value="0" />
@@ -317,7 +370,7 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="Bd" Background="Transparent" CornerRadius="{DynamicResource RadiusMd}"
-                        Padding="{TemplateBinding Padding}" BorderThickness="0">
+                        Padding="{TemplateBinding Padding}" BorderThickness="1" BorderBrush="Transparent">
                     <ContentPresenter HorizontalAlignment="Center"
                                       VerticalAlignment="Center"
                                       Content="{TemplateBinding Content}"
@@ -325,8 +378,11 @@
                 </Border>
             </ControlTemplate>
         </Setter>
+        <!-- The chosen segment is a raised pill; focus is a ring, never a second "selected". -->
         <Style Selector="^:checked /template/ Border#Bd">
             <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+            <Setter Property="BoxShadow" Value="{StaticResource ElevationCard}" />
         </Style>
         <Style Selector="^:checked">
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -335,15 +391,19 @@
         <Style Selector="^:disabled /template/ Border#Bd">
             <Setter Property="Opacity" Value="0.4" />
         </Style>
+        <Style Selector="^:pointerover:not(:checked)">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
         <Style Selector="^:pointerover:not(:checked) /template/ Border#Bd">
             <Setter Property="Background" Value="{DynamicResource CardBrush}" />
         </Style>
         <Style Selector="^:focus-visible /template/ Border#Bd">
-            <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
         </Style>
     </ControlTheme>
 
     <ControlTheme x:Key="OverlayToggleButton" TargetType="ToggleButton">
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
         <Setter Property="Padding"    Value="8,4" />
         <Setter Property="FontSize"   Value="11" />
         <Setter Property="MinHeight"  Value="26" />
@@ -403,8 +463,9 @@
         <Setter Property="BorderBrush"      Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness"  Value="1" />
         <Setter Property="Padding"          Value="10,6" />
+        <Setter Property="CornerRadius"     Value="{DynamicResource RadiusMd}" />
         <Setter Property="FontFamily"       Value="{StaticResource DefaultFont}" />
-        <Setter Property="FontSize"         Value="12" />
+        <Setter Property="FontSize"         Value="{DynamicResource FontSizeBodySm}" />
     </Style>
 
     <Styles>
@@ -463,6 +524,7 @@
         <Setter Property="FontSize"    Value="13" />
         <Setter Property="FontWeight"  Value="Medium" />
         <Setter Property="Cursor"      Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="AccentBd" Background="Transparent"
@@ -483,12 +545,19 @@
         </Style>
         <Style Selector="^:pointerover:not(:selected) /template/ Border#AccentBd">
             <Setter Property="Background" Value="{DynamicResource DropZoneBgBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         </Style>
         <Style Selector="^:pointerover:not(:selected)">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         </Style>
         <Style Selector="^:focus-visible /template/ Border#AccentBd">
             <Setter Property="Background" Value="{DynamicResource DropZoneBgBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible:not(:selected) /template/ Border#AccentBd">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
         </Style>
     </ControlTheme>
 
@@ -555,6 +624,17 @@
         <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
+    <!-- Fluent's selected template paints a mid accent tint; keep selection the same quiet
+         PrimaryLight as everywhere else and mark it with weight, not a heavy block. -->
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
 
     <!-- Separator: BorderBrush color, thin line -->
     <Style Selector="Separator">
@@ -602,7 +682,7 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,1,0,0" />
-        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="Padding" Value="16,12" />
     </Style>
 
     <Style Selector="GridSplitter.sidebarSplitter">
@@ -685,9 +765,9 @@
         <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="12,10" />
-        <Setter Property="BoxShadow" Value="0 6 16 0 #33000000" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationFloat}" />
         <Setter Property="MinWidth" Value="248" />
         <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
@@ -795,6 +875,10 @@
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
+    <!-- Hover previews the frame a click would give; Selected/Active below take precedence. -->
+    <Style Selector="StackPanel.sessionCell:pointerover Border.thumbTile">
+        <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
+    </Style>
     <Style Selector="Border.thumbTile.Selected">
         <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
     </Style>
@@ -822,9 +906,11 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="LetterSpacing" Value="1.2"/>
         <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="FocusAdorner" Value="{x:Null}"/>
         <Setter Property="Template">
             <ControlTemplate>
-                <Border Background="{TemplateBinding Background}"
+                <Border x:Name="HeaderBd" Background="{TemplateBinding Background}"
+                        BorderBrush="Transparent" BorderThickness="1"
                         Padding="{TemplateBinding Padding}" CornerRadius="{DynamicResource RadiusSm}">
                     <Grid ColumnDefinitions="12,*">
                         <Path x:Name="ClosedSectionChevron"
@@ -854,6 +940,9 @@
         </Setter>
         <Style Selector="^:pointerover">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#HeaderBd">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}"/>
         </Style>
     </ControlTheme>
     <ControlTheme x:Key="SectionExpander" TargetType="Expander">
@@ -900,6 +989,14 @@
             <Setter Property="Background" Value="{DynamicResource SidebarBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
         </Style>
+        <Style Selector="^.busy:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="Cursor" Value="Wait"/>
+        </Style>
+        <Style Selector="^.busy:disabled /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+        </Style>
     </ControlTheme>
     <ControlTheme x:Key="TinyButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
         <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
@@ -925,14 +1022,23 @@
         <Setter Property="MinWidth" Value="48" />
         <Setter Property="MinHeight" Value="48" />
         <Setter Property="Padding" Value="12" />
-        <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource StageGateBrush}" />
+        <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Opacity" Value="0.86" />
+        <Setter Property="Opacity" Value="0.72" />
         <Setter Property="ToolTip.Placement" Value="Top" />
         <Style Selector="^:pointerover">
             <Setter Property="Opacity" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
     <ControlTheme x:Key="ToolbarIconButton" TargetType="Button" BasedOn="{StaticResource GhostLink}">
@@ -969,10 +1075,12 @@
         <Setter Property="MinHeight" Value="32" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border x:Name="PART_Border"
                         Background="{TemplateBinding Background}"
+                        BorderBrush="Transparent" BorderThickness="1"
                         CornerRadius="{DynamicResource RadiusMd}"
                         Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center"
@@ -988,6 +1096,12 @@
         <Style Selector="^:pointerover">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         </Style>
+        <Style Selector="^:pressed /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#PART_Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderFocusBrush}" />
+        </Style>
         <Style Selector="^:disabled">
             <Setter Property="Opacity" Value="0.45" />
         </Style>
@@ -999,7 +1113,8 @@
         <Setter Property="Background" Value="{DynamicResource CardBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationCard}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
@@ -1026,7 +1141,7 @@
         <Setter Property="Opacity" Value="1" />
     </Style>
     <Style Selector="Border.pipelineChip TextBlock">
-        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
@@ -1070,8 +1185,23 @@
         <Setter Property="MaxHeight" Value="126" />
         <Setter Property="Margin" Value="0,2,0,0" />
     </Style>
+    <!-- Sidebar blocks share one inset: 16 wide · 14 default (narrow) · 10 tight. -->
+    <Style Selector="Border.sidebarAdd">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="16,10" />
+    </Style>
+    <Style Selector="StackPanel.sidebarBody">
+        <Setter Property="Margin" Value="16,8,16,12" />
+    </Style>
+    <Style Selector="Border#Sidebar.narrow StackPanel.sidebarBody">
+        <Setter Property="Margin" Value="14,8,14,12" />
+    </Style>
+    <Style Selector="Border#Sidebar.tight StackPanel.sidebarBody">
+        <Setter Property="Margin" Value="10,8,10,12" />
+    </Style>
     <Style Selector="Border.sidebarBlock">
-        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Padding" Value="16,8" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
     </Style>
@@ -1102,13 +1232,13 @@
         <Setter Property="Margin" Value="0,0,0,6" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
     </Style>
 
     <Style Selector="Border.metricTile">
         <Setter Property="MinHeight" Value="56" />
-        <Setter Property="Padding" Value="6,10" />
+        <Setter Property="Padding" Value="10,10" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
@@ -1159,11 +1289,12 @@
         <Setter Property="Padding" Value="3" />
     </Style>
 
+    <!-- Neutral surround: a warm frame next to the photograph biases colour judgement. -->
     <Style Selector="Border.stageFrame">
         <Setter Property="Background" Value="{DynamicResource StageBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource StageGateBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
@@ -1187,6 +1318,9 @@
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="StackPanel.thumbCell:pointerover Border.catalogTile">
+        <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
     </Style>
     <Style Selector="Border.catalogTile.Selected">
         <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
@@ -1246,16 +1380,16 @@
         <Setter Property="MinWidth" Value="0" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Border.sidebarAdd">
-        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Padding" Value="14,10" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Border.sidebarBlock">
-        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Padding" Value="14,8" />
     </Style>
     <Style Selector="Border#Sidebar.narrow ScrollViewer#SidebarScroll">
         <Setter Property="Padding" Value="0,0,0,8" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Border.sidebarDock">
-        <Setter Property="Padding" Value="10,10" />
+        <Setter Property="Padding" Value="14,12" />
     </Style>
     <Style Selector="Border#Sidebar.narrow Border.controlSection">
         <Setter Property="Padding" Value="0,8,0,8" />
@@ -1293,16 +1427,16 @@
         <Setter Property="MinWidth" Value="0" />
     </Style>
     <Style Selector="Border#Sidebar.tight Border.sidebarAdd">
-        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Padding" Value="10,8" />
     </Style>
     <Style Selector="Border#Sidebar.tight Border.sidebarBlock">
-        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Padding" Value="10,6" />
     </Style>
     <Style Selector="Border#Sidebar.tight ScrollViewer#SidebarScroll">
         <Setter Property="Padding" Value="0,0,0,8" />
     </Style>
     <Style Selector="Border#Sidebar.tight Border.sidebarDock">
-        <Setter Property="Padding" Value="8,8" />
+        <Setter Property="Padding" Value="10,10" />
     </Style>
     <Style Selector="Border#Sidebar.tight Button.sourceAction">
         <Setter Property="MinHeight" Value="32" />
@@ -1363,7 +1497,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource DropZoneBorderBrush}" />
         <Setter Property="Background" Value="{DynamicResource DropZoneBgBrush}" />
     </Style>
-    <Style Selector="Border.controlSection.is-dragging">
+    <Style Selector="Border.controlSection.is-dragging, Border.sidebarBlock.is-dragging">
         <Setter Property="Background" Value="{DynamicResource DropZoneBgBrush}" />
     </Style>
 
@@ -1379,20 +1513,20 @@
         <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="14" />
         <Setter Property="MinWidth" Value="260" />
         <Setter Property="Width" Value="300" />
         <Setter Property="MaxWidth" Value="320" />
         <Setter Property="MaxHeight" Value="520" />
-        <Setter Property="BoxShadow" Value="0 8 24 0 #44000000" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationFloat}" />
     </Style>
 
     <Style Selector="Border.folderChip">
         <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}" />
         <Setter Property="Padding" Value="8,2,4,2" />
         <Setter Property="Margin" Value="0,0,6,6" />
     </Style>
@@ -1408,7 +1542,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="0,4" />
         <Setter Property="Margin" Value="0,4,2,8" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -1447,18 +1581,8 @@
         </Setter>
     </Style>
 
-    <Style Selector="Border.sidebarAdd">
-        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
-        <Setter Property="BorderThickness" Value="0,0,0,1" />
-        <Setter Property="Padding" Value="14,10,14,10" />
-    </Style>
-
     <Style Selector="Window.compact Border#TopBar">
         <Setter Property="Padding" Value="14,8" />
-    </Style>
-
-    <Style Selector="Window.short Border.sidebarAdd">
-        <Setter Property="Padding" Value="14,8,14,8" />
     </Style>
 
     <Style Selector="Window.short Border.controlSection">
@@ -1493,6 +1617,142 @@
         <Setter Property="Padding" Value="10,0" />
         <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="MinHeight" Value="36" />
+    </Style>
+
+    <!-- ================================================================== -->
+    <!-- Empty stage: an inviting drop target instead of a lone caption    -->
+    <!-- ================================================================== -->
+
+    <Style Selector="Border.stageEmpty">
+        <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}" />
+        <Setter Property="Padding" Value="32,28" />
+        <Setter Property="MaxWidth" Value="420" />
+        <Setter Property="Margin" Value="24" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationCard}" />
+    </Style>
+    <Style Selector="Rectangle.stageEmptyDash">
+        <Setter Property="Stroke" Value="{DynamicResource DropZoneBorderBrush}" />
+        <Setter Property="StrokeThickness" Value="1.5" />
+        <Setter Property="StrokeDashArray" Value="6,4" />
+        <Setter Property="RadiusX" Value="12" />
+        <Setter Property="RadiusY" Value="12" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.stageEmptyIcon">
+        <Setter Property="Width" Value="56" />
+        <Setter Property="Height" Value="56" />
+        <Setter Property="CornerRadius" Value="28" />
+        <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.stageEmptyIcon Path">
+        <Setter Property="Fill" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Grid.dropTarget.is-dragging Border.stageEmpty">
+        <Setter Property="Background" Value="{DynamicResource DropZoneBgBrush}" />
+    </Style>
+    <Style Selector="Grid.dropTarget.is-dragging Rectangle.stageEmptyDash">
+        <Setter Property="Stroke" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="StrokeThickness" Value="2" />
+    </Style>
+    <Style Selector="Grid.dropTarget.is-dragging Border.stageEmptyIcon">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+    <Style Selector="Grid.dropTarget.is-dragging Border.stageEmptyIcon Path">
+        <Setter Property="Fill" Value="White" />
+    </Style>
+    <Style Selector="Border#Sidebar Border.dropZone.is-dragging Rectangle.dropDash">
+        <Setter Property="Stroke" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="StrokeThickness" Value="1.5" />
+    </Style>
+
+    <!-- Window-wide drop prompt. Opacity is 0 until .on so it can fade in. -->
+    <Style Selector="Grid#DragOverlay">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Grid#DragOverlay.on">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.dropPrompt">
+        <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}" />
+        <Setter Property="Padding" Value="40,32" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationFloat}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+    </Style>
+
+    <!-- ================================================================== -->
+    <!-- Results reveal: final state here; Motion.axaml animates the change -->
+    <!-- ================================================================== -->
+
+    <Style Selector=":is(Control).reveal">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="RenderTransform" Value="translateY(6px)" />
+    </Style>
+    <Style Selector=":is(Control).reveal.shown">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+
+    <!-- ================================================================== -->
+    <!-- Analysis rows                                                     -->
+    <!-- ================================================================== -->
+
+    <Style Selector="Grid.patchRow">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.patchRowHost:pointerover">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+    </Style>
+    <Style Selector="Border.patchRowHost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Margin" Value="4,0" />
+    </Style>
+    <Style Selector="Border.swatch">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="TextBlock.tabular">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
+    </Style>
+    <Style Selector="TextBlock.columnHead">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="LetterSpacing" Value="0.3" />
+    </Style>
+    <Style Selector="TextBlock.cardTitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Floating panels anchored to the toolbar. -->
+    <Style Selector="Border.floatPanel">
+        <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+        <Setter Property="BoxShadow" Value="{StaticResource ElevationFloat}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
 
 </Styles>

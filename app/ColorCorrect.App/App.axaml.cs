@@ -20,6 +20,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Controls.Motion.Initialize(this);
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var vm = new MainWindowViewModel();

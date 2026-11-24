@@ -75,13 +75,16 @@ public sealed class ChartOverlay : Control
         new SolidColorBrush(Color.FromArgb(170, 90, 200, 240)),
         new SolidColorBrush(Color.FromArgb(170, 230, 140, 230)),
     ];
+    // A light wash only: sample cells must never hide the patch colour they measure.
     private static readonly IBrush[] PatchFills =
     [
-        new SolidColorBrush(Color.FromArgb(128, 90, 220, 90)),
-        new SolidColorBrush(Color.FromArgb(128, 240, 210, 90)),
-        new SolidColorBrush(Color.FromArgb(128, 90, 200, 240)),
-        new SolidColorBrush(Color.FromArgb(128, 230, 140, 230)),
+        new SolidColorBrush(Color.FromArgb(24, 90, 220, 90)),
+        new SolidColorBrush(Color.FromArgb(24, 240, 210, 90)),
+        new SolidColorBrush(Color.FromArgb(24, 90, 200, 240)),
+        new SolidColorBrush(Color.FromArgb(24, 230, 140, 230)),
     ];
+    private static readonly IBrush HighlightStroke = new SolidColorBrush(Color.FromArgb(235, 232, 190, 132));
+    private static readonly IBrush HighlightFill = new SolidColorBrush(Color.FromArgb(36, 232, 190, 132));
     private static readonly IBrush DimBrush = new SolidColorBrush(Color.FromArgb(22, 8, 8, 10));
     private static readonly IBrush HaloInk = new SolidColorBrush(Color.FromArgb(70, 8, 10, 14));
     private static readonly IBrush CornerInk = new SolidColorBrush(Color.FromArgb(140, 16, 16, 18));
@@ -199,7 +202,9 @@ public sealed class ChartOverlay : Control
             EnsureGeometries(sx, sy);
             if (HighlightedPatch >= 0 && HighlightedPatch < _latticeGeo.Count)
             {
-                context.DrawGeometry(new SolidColorBrush(Color.FromArgb(80, 255, 170, 30)), new Pen(Brushes.Orange, 4 * unit), _latticeGeo[HighlightedPatch]);
+                // Hovered patch: a soft focus-colour ring with a faint wash, so the patch stays readable.
+                StrokeHalo(context, _latticeGeo[HighlightedPatch], HighlightStroke, 2.6 * unit);
+                context.DrawGeometry(HighlightFill, null, _latticeGeo[HighlightedPatch]);
             }
 
             if (ShowDim && _dimGeo is not null)

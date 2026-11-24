@@ -7,7 +7,9 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Animation.Easings;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using ColorCorrect.App.Services;
 
@@ -103,6 +105,10 @@ public sealed class ToastNotification : UserControl
             MinWidth = 32,
             MinHeight = 32,
             Padding = new Thickness(0),
+            Margin = new Thickness(6, 0, -4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderBrush = Brushes.Transparent,
             Foreground = new SolidColorBrush(theme.Text),
@@ -132,7 +138,7 @@ public sealed class ToastNotification : UserControl
             Background = new SolidColorBrush(theme.Bg),
             BorderBrush = new SolidColorBrush(theme.Accent),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10, 12, 0),
             ClipToBounds = true,
             Child = body,
@@ -148,13 +154,31 @@ public sealed class ToastNotification : UserControl
         _root = host;
         Content = host;
 
+        if (!Motion.IsEnabled)
+        {
+            // Reduced motion: appear in place; the countdown bar would be a moving element.
+            host.Opacity = 1;
+            innerPb.IsVisible = false;
+        }
+        else
+        {
+            host.RenderTransform = TransformOperations.Parse("translateY(8px)");
+        }
+
         DispatcherTimer.RunOnce(() =>
         {
+            if (!Motion.IsEnabled)
+            {
+                return;
+            }
+
             _root.Transitions =
             [
-                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(280) },
+                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(200), Easing = new CubicEaseOut() },
+                new TransformOperationsTransition { Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(220), Easing = new CubicEaseOut() },
             ];
             _root.Opacity = 1;
+            _root.RenderTransform = TransformOperations.Identity;
             if (innerPb.RenderTransform is ScaleTransform scale)
             {
                 scale.Transitions =
@@ -186,12 +210,15 @@ public sealed class ToastNotification : UserControl
         }
 
         _dismissing = true;
-        _root.Transitions =
-        [
-            new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(200) },
-        ];
-        _root.Opacity = 0;
-        await Task.Delay(250);
+        if (Motion.IsEnabled)
+        {
+            _root.Transitions =
+            [
+                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(180), Easing = new CubicEaseIn() },
+            ];
+            _root.Opacity = 0;
+            await Task.Delay(220);
+        }
         Dismissed?.Invoke(this, EventArgs.Empty);
     }
 }
