@@ -119,11 +119,6 @@ impl Default for ComputeAssignment {
     }
 }
 
-pub fn apply_thread_count(cpu: &CpuInfo) -> u32 {
-    let n = cpu.cores_logical.max(1);
-    n.saturating_sub(1).clamp(2, 8)
-}
-
 struct RuntimeAccel {
     policy: String,
     assignment: ComputeAssignment,
@@ -477,7 +472,7 @@ fn nvidia_smi_gpus() -> Vec<GpuInfo> {
 }
 
 /// Per-user setup is shared by the desktop app and installed SDK workers.
-pub fn selected_components() -> String {
+pub(crate) fn selected_components() -> String {
     if let Ok(value) = std::env::var("CCP_INFERENCE_COMPONENTS") {
         return value;
     }
@@ -518,7 +513,7 @@ pub fn gpu_correction_enabled() -> bool {
 }
 
 /// Shared software-renderer rejection. Hardware-backed virtual adapters remain eligible.
-pub fn software_renderer(name: &str, cpu_device: bool, dxgi_software: bool) -> bool {
+pub(crate) fn software_renderer(name: &str, cpu_device: bool, dxgi_software: bool) -> bool {
     let name = name.to_ascii_lowercase();
     cpu_device
         || dxgi_software

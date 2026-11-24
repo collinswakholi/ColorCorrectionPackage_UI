@@ -113,13 +113,9 @@ pub fn provider_order() -> Vec<GpuEp> {
 }
 
 /// Installed selection controls activation, never the mandatory CPU provider.
-pub fn component_policy_identity() -> String {
-    crate::probe::selected_components()
-}
-
 fn component_enabled(ep: GpuEp) -> bool {
     ep == GpuEp::Cpu
-        || component_policy_identity().split(',').any(|item| {
+        || crate::probe::selected_components().split(',').any(|item| {
             item.trim()
                 == match ep {
                     GpuEp::DirectMl => "directml",
@@ -598,10 +594,6 @@ fn plugin_path() -> Result<PathBuf, String> {
         })
 }
 
-pub fn commit_session(path: &Path, ep: GpuEp) -> Result<Session, String> {
-    preflight_model(path).map_err(|failure| failure.reason)?;
-    commit_session_classified(path, ep).map_err(|failure| failure.reason)
-}
 fn commit_session_classified(path: &Path, ep: GpuEp) -> Result<Session, InferenceFailure> {
     #[cfg(windows)]
     if ep == GpuEp::Vulkan {

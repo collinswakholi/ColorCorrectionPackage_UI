@@ -8,11 +8,15 @@ use crate::color::{
     srgb_d65_space, srgb_to_lab_d65, srgb_to_linear, xyz_to_linear_rgb, Lab, RgbColorSpace, Vec3,
     WhitePoint,
 };
+use crate::error::{Error, Result};
 #[cfg(test)]
-use crate::maps::fit_least_squares;
+use crate::linalg::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
+use crate::maps::{RGB_CLIP_HI, RGB_CLIP_LO};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};
-use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, WB_DIAG_SCALE};
+
+/// CCP `compute_diag` scale applied to the median per-channel ratio.
+const WB_DIAG_SCALE: f64 = 0.95;
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -27,7 +31,7 @@ pub struct SaturationReport {
     pub names: Vec<String>,
 }
 
-pub fn is_saturated(rgb: Vec3, threshold: f64) -> bool {
+pub(crate) fn is_saturated(rgb: Vec3, threshold: f64) -> bool {
     rgb[0] >= threshold || rgb[1] >= threshold || rgb[2] >= threshold
 }
 
@@ -109,7 +113,7 @@ fn median(mut values: Vec<f64>) -> f64 {
 }
 
 /// Keep a usable working range. Invalid pairs fall back to CCP_rs `[-0.2, 1.3]`.
-pub fn sanitize_clip_range(lo: f64, hi: f64) -> (f64, f64) {
+pub(crate) fn sanitize_clip_range(lo: f64, hi: f64) -> (f64, f64) {
     let lo = if lo.is_finite() {
         lo.clamp(-2.0, 0.99)
     } else {
@@ -218,7 +222,7 @@ impl GammaModel {
 
     /// Evaluate the fitted shape-preserving cubic Hermite lightness curve.
     /// A model without a valid curve (rejected at load) maps L* unchanged.
-    pub fn map_lstar(&self, input: f64) -> f64 {
+    pub(crate) fn map_lstar(&self, input: f64) -> f64 {
         let x = input.clamp(0.0, 100.0);
         if !self.is_monotonic_curve() {
             return x;
@@ -541,14 +545,8 @@ pub fn apply_gc_inplace(img: &mut Array3<f32>, model: &GammaModel) -> Result<()>
     Ok(())
 }
 
-pub fn apply_gc_image(img: &Array3<f32>, model: &GammaModel) -> Result<Array3<f32>> {
-    let mut out = img.clone();
-    apply_gc_inplace(&mut out, model)?;
-    Ok(out)
-}
-
 /// CCP `compute_diag`: per-channel median(ref/det) × 0.95. No grey-world.
-pub fn compute_diag(mat_ref: &[Vec3], mat_det: &[Vec3], rf: f64) -> Result<[f64; 3]> {
+pub(crate) fn compute_diag(mat_ref: &[Vec3], mat_det: &[Vec3], rf: f64) -> Result<[f64; 3]> {
     if mat_ref.len() != mat_det.len() {
         return Err(Error::InvalidArgument(
             "WB ref and detected neutrals must have the same count".into(),
@@ -763,18 +761,10 @@ fn try_map_rgb_inplace(
     })
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct StageConfig {
-    pub do_sat_extrapolate: bool,
-    pub do_gc: bool,
-    pub do_wb: bool,
-    pub do_cc: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SATURATION_THRESHOLD;
+    use crate::sample::SATURATION_THRESHOLD;
 
     #[test]
     fn gamma_max_degree_nine_does_not_exceed_sample_rank() {

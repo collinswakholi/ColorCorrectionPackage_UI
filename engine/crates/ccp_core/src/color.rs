@@ -1,6 +1,6 @@
 //! Bradford CAT, CIE Lab, sRGB, and CIEDE2000 (Sharma) — Speedy `color.cpp`.
 
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -36,10 +36,6 @@ pub struct Lab {
 impl Lab {
     pub const fn new(l: f64, a: f64, b: f64) -> Self {
         Self { l, a, b }
-    }
-
-    pub fn to_array(self) -> Vec3 {
-        [self.l, self.a, self.b]
     }
 }
 
@@ -265,15 +261,15 @@ fn encode_transfer_channel(mut value: f64, space: &RgbColorSpace) -> f64 {
     }
 }
 
-pub fn clamp01(value: f64) -> f64 {
+pub(crate) fn clamp01(value: f64) -> f64 {
     value.clamp(0.0, 1.0)
 }
 
-pub fn clamp01_vec(value: Vec3) -> Vec3 {
+pub(crate) fn clamp01_vec(value: Vec3) -> Vec3 {
     [clamp01(value[0]), clamp01(value[1]), clamp01(value[2])]
 }
 
-pub fn srgb_channel_to_linear(mut value: f64) -> f64 {
+pub(crate) fn srgb_channel_to_linear(mut value: f64) -> f64 {
     value = clamp01(value);
     if value <= 0.04045 {
         value / 12.92
@@ -282,7 +278,7 @@ pub fn srgb_channel_to_linear(mut value: f64) -> f64 {
     }
 }
 
-pub fn linear_channel_to_srgb(mut value: f64) -> f64 {
+pub(crate) fn linear_channel_to_srgb(mut value: f64) -> f64 {
     value = clamp01(value);
     if value <= 0.0031308 {
         value * 12.92
@@ -291,7 +287,7 @@ pub fn linear_channel_to_srgb(mut value: f64) -> f64 {
     }
 }
 
-pub fn srgb_to_linear(value: Vec3) -> Vec3 {
+pub(crate) fn srgb_to_linear(value: Vec3) -> Vec3 {
     [
         srgb_channel_to_linear(value[0]),
         srgb_channel_to_linear(value[1]),
@@ -299,7 +295,7 @@ pub fn srgb_to_linear(value: Vec3) -> Vec3 {
     ]
 }
 
-pub fn linear_to_srgb(value: Vec3) -> Vec3 {
+pub(crate) fn linear_to_srgb(value: Vec3) -> Vec3 {
     [
         linear_channel_to_srgb(value[0]),
         linear_channel_to_srgb(value[1]),
@@ -492,7 +488,7 @@ pub fn supported_rgb_color_spaces() -> &'static [&'static str] {
     ]
 }
 
-pub fn mat3_mul(matrix: Mat3, vector: Vec3) -> Vec3 {
+pub(crate) fn mat3_mul(matrix: Mat3, vector: Vec3) -> Vec3 {
     [
         matrix[0] * vector[0] + matrix[1] * vector[1] + matrix[2] * vector[2],
         matrix[3] * vector[0] + matrix[4] * vector[1] + matrix[5] * vector[2],
@@ -580,7 +576,7 @@ pub fn lab_d50_to_target_linear(
     Ok(xyz_to_linear_rgb(xyz_target, target_space))
 }
 
-pub fn lab_d50_to_target_lab(lab: Lab, target_white: &WhitePoint) -> Result<Lab> {
+pub(crate) fn lab_d50_to_target_lab(lab: Lab, target_white: &WhitePoint) -> Result<Lab> {
     let d50 = parse_white_point("d50")?;
     let xyz_target = adapt_xyz_white(lab_to_xyz(lab, &d50), &d50, target_white)?;
     Ok(xyz_to_lab(xyz_target, target_white))
@@ -596,7 +592,7 @@ pub fn lab_d50_to_srgb(lab: Lab) -> Result<Vec3> {
 
 /// Reference conversion for fitting. Display swatches use the clipped helper
 /// above; clipping an out-of-gamut reference here would change its target.
-pub fn lab_d50_to_srgb_unclipped(lab: Lab) -> Result<Vec3> {
+pub(crate) fn lab_d50_to_srgb_unclipped(lab: Lab) -> Result<Vec3> {
     let d65 = parse_white_point("d65")?;
     let srgb = parse_rgb_color_space("srgb", &d65)?;
     Ok(lab_d50_to_target_linear(lab, &srgb, &d65)?.map(|v| {
@@ -634,12 +630,13 @@ pub fn srgb_d65_space() -> (&'static WhitePoint, &'static RgbColorSpace) {
     (white, space)
 }
 
-pub fn srgb_to_xyz_d65(srgb: Vec3) -> Result<Vec3> {
+#[cfg(test)]
+pub(crate) fn srgb_to_xyz_d65(srgb: Vec3) -> Result<Vec3> {
     let (_, space) = srgb_d65_space();
     Ok(linear_rgb_to_xyz(srgb_to_linear(srgb), space))
 }
 
-pub fn srgb_to_lab_d65(srgb: Vec3) -> Result<Lab> {
+pub(crate) fn srgb_to_lab_d65(srgb: Vec3) -> Result<Lab> {
     let (d65, space) = srgb_d65_space();
     Ok(xyz_to_lab(
         linear_rgb_to_xyz(srgb_to_linear(srgb), space),
@@ -649,7 +646,7 @@ pub fn srgb_to_lab_d65(srgb: Vec3) -> Result<Lab> {
 
 /// CIE L* for encoded sRGB under D65. This is the exact L* branch of
 /// `srgb_to_lab_d65`, without computing the unused X/Z, a*, or b* values.
-pub fn srgb_lstar_d65(srgb: Vec3) -> f64 {
+pub(crate) fn srgb_lstar_d65(srgb: Vec3) -> f64 {
     let (d65, space) = srgb_d65_space();
     let linear = srgb_to_linear(srgb);
     let y = space.rgb_to_xyz[3] * linear[0]

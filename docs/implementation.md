@@ -51,3 +51,23 @@ equivalence, not physical-chart accuracy. See the
 The [Python guide](api/README.md) documents the public SDK. The
 [developer records](development/README.md#validation-records) cover numerical,
 platform and UI coverage separately.
+
+## Engine crates
+
+The worker is a Cargo workspace under `engine/crates`:
+
+- `ccp_core`: color science, chart references, patch sampling, the
+  correction maps and the FFC, GC and WB stages. Its `mlp`, `pls` and
+  `linalg` modules are private implementation details of the maps and FFC.
+- `ccp_detect`: chart and white-plane inference, chart assembly, the
+  accelerator probe and the wgpu LUT. `ccp_wgpu_infer` is its Linux Rust
+  inference fallback.
+- `ccp_bridge`: the `ccp-engine` binary. Its library exposes only `run()`,
+  the [NDJSON loop](api/protocol.md). Its modules form layers, each using
+  only those listed before it: `error`, `request` (typed request fields),
+  `work` (the f32 working image), `output` (stills, previews and their
+  background PNG encoders), `render` (CPU/GPU LUTs and the record of which
+  backend ran), `ffc` (white-field fits and their cache), `model` (the saved
+  model file), `charts` (handshake faces and patch sampling), `report`
+  (CIEDE2000 metrics), the `fit` and `apply` commands, then `detect_cache`
+  and `serve`.

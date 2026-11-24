@@ -1,9 +1,9 @@
 //! IRIDAS `.cube` — GC + WB + CC only. Flat-field is a separate 2D gain map.
 
 use crate::color::Vec3;
+use crate::error::Result;
 use crate::maps::{apply_correction_pixel, CorrectionModel, CorrectionSettings};
 use crate::stages::{apply_gc_pixel, apply_wb_pixel, GammaModel, WhiteBalance};
-use crate::Result;
 use std::path::Path;
 
 pub const DEFAULT_LUT_SIZE: usize = 33;
@@ -17,7 +17,7 @@ pub struct LutPipeline {
 }
 
 impl LutPipeline {
-    pub fn apply_color(&self, mut rgb: Vec3) -> Result<Vec3> {
+    pub(crate) fn apply_color(&self, mut rgb: Vec3) -> Result<Vec3> {
         if let Some(gc) = &self.gc {
             rgb = apply_gc_pixel(rgb, gc)?;
         }

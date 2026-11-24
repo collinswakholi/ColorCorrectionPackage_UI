@@ -2,13 +2,13 @@
 
 use crate::color::{
     adapt_xyz_white, delta_e_2000, encoded_to_linear_rgb, lab_d50_to_target_lab, linear_rgb_to_xyz,
-    parse_white_point, srgb_to_lab_d65, xyz_to_lab, Lab, RgbColorSpace, Vec3,
+    parse_white_point, xyz_to_lab, Lab, RgbColorSpace, Vec3,
 };
+use crate::error::{Error, Result};
 use crate::maps::{
     apply_correction_pixel, fit_correction_model, CorrectionSettings, MappingOptions, ModelKind,
 };
 use crate::refs::ChartPatch;
-use crate::{Error, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -96,15 +96,6 @@ fn median(mut values: Vec<f64>) -> f64 {
     }
 }
 
-/// Measured encoded sRGB vs that cell's Lab D50, both in D65 Lab.
-/// Compatibility helper; use `delta_e00_in_space` for selected input/output spaces.
-pub fn delta_e00_same_index(measured_srgb: Vec3, reference_lab_d50: Lab) -> Result<f64> {
-    let d65 = parse_white_point("d65")?;
-    let meas = srgb_to_lab_d65(measured_srgb)?;
-    let reference = lab_d50_to_target_lab(reference_lab_d50, &d65)?;
-    Ok(delta_e_2000(meas, reference))
-}
-
 /// Compare RGB in its declared encoding against the same-index reference.
 /// Both colors are Bradford-adapted to a common D65 Lab evaluation white,
 /// so changing output space does not change the comparison illuminant.
@@ -114,17 +105,4 @@ pub fn delta_e00_in_space(rgb: Vec3, reference_lab_d50: Lab, space: &RgbColorSpa
     let measured = xyz_to_lab(adapt_xyz_white(xyz, &space.white, &d65)?, &d65);
     let reference = lab_d50_to_target_lab(reference_lab_d50, &d65)?;
     Ok(delta_e_2000(measured, reference))
-}
-
-pub fn mean_delta_e00(measured_srgb: &[Vec3], reference_lab_d50: &[Lab]) -> Result<f64> {
-    if measured_srgb.len() != reference_lab_d50.len() || measured_srgb.is_empty() {
-        return Err(Error::InvalidArgument(
-            "ΔE00 requires same-length measured and reference arrays".into(),
-        ));
-    }
-    let mut sum = 0.0;
-    for (rgb, lab) in measured_srgb.iter().zip(reference_lab_d50.iter()) {
-        sum += delta_e00_same_index(*rgb, *lab)?;
-    }
-    Ok(sum / measured_srgb.len() as f64)
 }

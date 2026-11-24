@@ -1,7 +1,7 @@
 //! Per-chart CIE Lab D50/2° tables in Opt2 row-major. Same-index law.
 
 use crate::color::{lab_d50_to_srgb, Lab};
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -30,7 +30,7 @@ impl Quad {
         ]
     }
 
-    pub fn bilerp(self, u: f64, v: f64) -> Vec2 {
+    pub(crate) fn bilerp(self, u: f64, v: f64) -> Vec2 {
         let w00 = (1.0 - u) * (1.0 - v);
         let w10 = u * (1.0 - v);
         let w11 = u * v;
@@ -48,10 +48,22 @@ impl Quad {
     }
 }
 
+/// Which chart, cell and reference profile a sampled patch came from.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PatchProvenance {
+    #[serde(default)]
+    pub custom_reference: bool,
+    pub chart_id: String,
+    pub template_id: String,
+    pub cell_id: String,
+    pub profile_id: String,
+    pub profile_revision: u32,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChartPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<crate::reference_profile::PatchProvenance>,
+    pub provenance: Option<PatchProvenance>,
     pub name: String,
     pub index: usize,
     pub reference_lab_d50: Lab,
@@ -96,7 +108,7 @@ pub struct ChartSpec {
 }
 
 impl ChartSpec {
-    pub fn patch_count(&self) -> usize {
+    pub(crate) fn patch_count(&self) -> usize {
         self.columns * self.rows
     }
 
@@ -1189,7 +1201,7 @@ pub fn chart_spec_from_name(value: &str) -> Result<ChartSpec> {
     chart_spec(parse_chart_kind(value)?)
 }
 
-pub fn default_neutral_names(kind: ChartKind) -> Vec<String> {
+pub(crate) fn default_neutral_names(kind: ChartKind) -> Vec<String> {
     match kind {
         ChartKind::Classic | ChartKind::Passport => DEFAULT_CLASSIC_NEUTRALS
             .iter()
@@ -1262,7 +1274,7 @@ pub fn load_neutrals_table(path: Option<&Path>) -> Result<HashMap<String, Vec<St
     Ok(embedded_neutrals_table())
 }
 
-pub fn neutral_names_for(
+pub(crate) fn neutral_names_for(
     kind: ChartKind,
     table: Option<&HashMap<String, Vec<String>>>,
 ) -> Vec<String> {

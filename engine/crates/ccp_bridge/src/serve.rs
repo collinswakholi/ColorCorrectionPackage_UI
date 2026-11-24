@@ -1,44 +1,44 @@
-//! First-class NDJSON serve (stdin/stdout). Host drains stderr.
+//! The NDJSON worker: one JSON request per stdin line, then zero or more
+//! progress events and exactly one reply on stdout. The host drains stderr.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
 use ccp_core::lut::DEFAULT_LUT_SIZE;
-use ccp_detect::plane::last_plane_ep;
+use ccp_detect::plane::{last_plane_ep, last_plane_inference};
+use ccp_detect::probe::{probe_accelerators, set_runtime_from_report, DevicePolicy};
 use ccp_detect::{
-    detect_chart, probe_accelerators, set_runtime_from_report, warmup_detector, DetectSettings,
-    DevicePolicy, DEFAULT_CONF, DEFAULT_CROP,
+    detect_chart, warmup_detector, DetectResult, DetectSettings, DEFAULT_CONF, DEFAULT_CROP,
 };
 use serde_json::{json, Value};
 
-use crate::error_code::ErrorCode;
-use crate::run_pipeline::{
-    apply_saved_to_image_ex_with_progress, export_cube_from_saved, json_bool, json_f64, json_str,
-    last_apply_backend, load_saved, run_from_json_ex, ApplyOptions, FfcGainCache, PreviewMode,
-    SavedPipeline,
-};
+use crate::apply::{apply_to_image, ApplyOptions};
+use crate::detect_cache::DetectCache;
+use crate::error::{Error, ErrorCode};
+use crate::ffc::FfcGainCache;
+use crate::fit;
+use crate::model::SavedPipeline;
+use crate::output::flush_preview_encodes;
+use crate::render;
+use crate::request::{json_bool, json_f64, json_str, IMAGE_KEYS};
 
-/// Detection cache entries (and their private temp copies) kept per worker.
-const DETECT_CACHE_CAPACITY: usize = 64;
-/// Worker-chosen default `detect` handshake files kept before the oldest is
-/// deleted. All remaining worker temp files are removed when the loop exits.
-const TEMP_OUTPUT_CAPACITY: usize = 64;
+/// NDJSON protocol version announced in the ready event. Version 3 adds a
+/// stable `code` to every `ok:false` reply; everything else matches version 2.
+const PROTOCOL_VERSION: u32 = 3;
 
 #[derive(Debug)]
-pub struct ServeState {
-    pub policy: String,
-    pub device: String,
-    pub warmed: bool,
-    pub last: Option<SavedPipeline>,
-    pub detect_cache: HashMap<String, PathBuf>,
-    pub ffc_cache: Arc<FfcGainCache>,
-    /// Least-recently-used order of `detect_cache` keys (front = oldest).
-    pub detect_cache_order: VecDeque<String>,
-    /// Default detect handshakes this worker wrote to the temp directory.
-    pub temp_outputs: VecDeque<PathBuf>,
+struct ServeState {
+    /// Policy of the last `warmup`, `detect` or `run`; requests may override it.
+    policy: String,
+    device: String,
+    warmed: bool,
+    /// The last fitted model, exported by `export_cube` without a `model`.
+    last: Option<SavedPipeline>,
+    detect_cache: DetectCache,
+    ffc_cache: Arc<FfcGainCache>,
 }
 
 impl Default for ServeState {
@@ -48,54 +48,41 @@ impl Default for ServeState {
             device: "pending".into(),
             warmed: false,
             last: None,
-            detect_cache: HashMap::new(),
-            ffc_cache: Arc::new(FfcGainCache::new()),
-            detect_cache_order: VecDeque::new(),
-            temp_outputs: VecDeque::new(),
+            detect_cache: DetectCache::default(),
+            ffc_cache: Arc::default(),
         }
     }
 }
 
+/// Add the correction and white-plane backends that actually ran.
 fn with_accel(mut value: Value) -> Value {
     if let Some(obj) = value.as_object_mut() {
-        obj.insert("apply_backend".into(), json!(last_apply_backend()));
-        if let Some(execution) = crate::run_pipeline::last_apply_execution() {
+        obj.insert("apply_backend".into(), json!(render::last_backend()));
+        if let Some(execution) = render::last_execution() {
             obj.insert("execution".into(), execution);
         }
         if let Some(plane) = last_plane_ep() {
             obj.insert("plane_backend".into(), json!(plane));
-            obj.insert(
-                "inference".into(),
-                json!({"plane":ccp_detect::plane::last_plane_inference()}),
-            );
+            obj.insert("inference".into(), json!({"plane":last_plane_inference()}));
         }
     }
     value
 }
 
-/// NDJSON protocol version announced in the ready event. Version 3 adds a
-/// stable `code` to every `ok:false` reply; everything else matches version 2.
-pub const PROTOCOL_VERSION: u32 = 3;
-
 fn fail(code: ErrorCode, message: impl Into<String>) -> Value {
     json!({"ok": false, "code": code.as_str(), "error": message.into()})
 }
 
-fn fail_with(error: &crate::run_pipeline::Error) -> Value {
+fn fail_with(error: &Error) -> Value {
     fail(error.code(), error.to_string())
 }
 
-fn detect_code(result: &ccp_detect::DetectResult) -> ErrorCode {
+fn detect_code(result: &DetectResult) -> ErrorCode {
     ErrorCode::parse(&result.error_code).unwrap_or(ErrorCode::InferenceFailed)
 }
 
 fn emit_progress(msg: &str) {
-    let _ = writeln!(
-        std::io::stdout(),
-        "{}",
-        json!({"type":"progress","message": msg})
-    );
-    let _ = std::io::stdout().flush();
+    emit_json(&json!({"type":"progress","message": msg}));
 }
 
 fn emit_json(v: &Value) {
@@ -109,42 +96,42 @@ fn policy_from_req(req: &Value, fallback: &str) -> String {
         .to_string()
 }
 
+/// Route inference and correction by the request's policy for this request only.
+fn sync_runtime(state: &ServeState, req: &Value) {
+    set_runtime_from_report(&probe_accelerators(&policy_from_req(req, &state.policy)));
+}
+
+/// Make the request's policy the worker's policy, then route by it.
+fn adopt_policy(state: &mut ServeState, req: &Value) {
+    state.policy = policy_from_req(req, &state.policy);
+    sync_runtime(state, req);
+}
+
 fn detect_settings(state: &ServeState, req: &Value) -> DetectSettings {
-    let mut settings = DetectSettings::default();
-    let policy = DevicePolicy::parse(&policy_from_req(req, &state.policy));
-    settings.device = policy.as_str().into();
-    settings.prefer = json_str(req, &["prefer"]).unwrap_or("").to_string();
-    settings.conf = json_f64(req, &["conf"], f64::from(DEFAULT_CONF)) as f32;
-    settings.crop = json_f64(req, &["crop"], DEFAULT_CROP);
-    settings.allow_recall = json_bool(req, &["allow_recall"], true);
-    settings
+    DetectSettings {
+        device: DevicePolicy::parse(&policy_from_req(req, &state.policy))
+            .as_str()
+            .into(),
+        prefer: json_str(req, &["prefer"]).unwrap_or("").to_string(),
+        conf: json_f64(req, &["conf"], f64::from(DEFAULT_CONF)) as f32,
+        crop: json_f64(req, &["crop"], DEFAULT_CROP),
+        allow_recall: json_bool(req, &["allow_recall"], true),
+        ..DetectSettings::default()
+    }
 }
 
-fn detect_cache_key(path: &Path, settings: &DetectSettings) -> String {
-    use ccp_detect::cache_key::{model_cache_identity, runtime_cache_identity};
-    use ccp_detect::paths::{primary_onnx_path, recall_onnx_path};
-    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let metadata = std::fs::metadata(path).ok();
-    let deploy = if settings.deploy_dir.as_os_str().is_empty() {
-        ccp_detect::default_deploy_dir()
-    } else {
-        settings.deploy_dir.clone()
-    };
-    let models = [primary_onnx_path(&deploy), recall_onnx_path(&deploy)]
-        .iter()
-        .map(|p| model_cache_identity(p))
-        .collect::<Vec<_>>();
-    format!(
-        "{}|{:?}|{:?}|{}|{:?}|{}",
-        canonical.display(),
-        metadata.as_ref().map(|m| m.len()),
-        metadata.and_then(|m| m.modified().ok()),
-        serde_json::to_string(settings).unwrap_or_default(),
-        models,
-        runtime_cache_identity()
-    )
+fn load_model(req: &Value, command: &str) -> Result<SavedPipeline, Value> {
+    let path = json_str(req, &["model", "model_path", "model_in"]).ok_or_else(|| {
+        fail(
+            ErrorCode::InvalidRequest,
+            format!("{command} requires model"),
+        )
+    })?;
+    SavedPipeline::load(path).map_err(|e| fail_with(&e))
 }
 
+/// A new detection snapshot: unique `snapshot_id`, and `chart_id`s
+/// `<snapshot_id>:chart-<index>` that reference assignments name.
 fn identify_detection_handshake(mut handshake: Value) -> Value {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -194,10 +181,6 @@ fn ready_event(state: &ServeState) -> Value {
     })
 }
 
-fn emit_ready(state: &ServeState) {
-    emit_json(&ready_event(state));
-}
-
 fn cmd_devices(state: &ServeState, req: &Value) -> Value {
     let policy = policy_from_req(req, &state.policy);
     let report = probe_accelerators(&policy);
@@ -207,7 +190,7 @@ fn cmd_devices(state: &ServeState, req: &Value) -> Value {
         obj.insert("ok".into(), json!(true));
         #[cfg(feature = "ort-plane")]
         if state.warmed {
-            let inference = ccp_detect::infer_ort::inference_records(false);
+            let inference = ccp_detect::inference_records(false);
             if inference
                 .pointer("/detect/requested_policy")
                 .and_then(Value::as_str)
@@ -222,8 +205,7 @@ fn cmd_devices(state: &ServeState, req: &Value) -> Value {
 
 fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
     emit_progress("Warming Opt2 1280");
-    state.policy = policy_from_req(req, &state.policy);
-    set_runtime_from_report(&probe_accelerators(&state.policy));
+    adopt_policy(state, req);
     let settings = detect_settings(state, req);
     let result = warmup_detector(&settings);
     if result.ok {
@@ -254,6 +236,7 @@ fn cmd_warmup(state: &mut ServeState, req: &Value) -> Value {
 
 fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
     let inference = cmd_warmup(state, req);
+    // An identity 2³ LUT applied to one pixel.
     let mut lut = Vec::new();
     for b in 0..2 {
         for g in 0..2 {
@@ -263,8 +246,7 @@ fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
         }
     }
     let mut pixels = vec![0.25, 0.5, 0.75];
-    let cpu = json_bool(req, &["force_cpu"], false);
-    let correction = if cpu {
+    let correction = if json_bool(req, &["force_cpu"], false) {
         ccp_detect::lut_chunks::apply_chunks(&mut pixels, &lut, 2, 1, |_| {
             Err("CPU requested".into())
         })
@@ -305,7 +287,7 @@ fn cmd_setup_probe(state: &mut ServeState, req: &Value) -> Value {
 }
 
 fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
-    let image = match json_str(req, &["image", "input", "image_path"]) {
+    let image = match json_str(req, &IMAGE_KEYS) {
         Some(p) => PathBuf::from(p),
         None => return fail(ErrorCode::InvalidRequest, "detect requires image"),
     };
@@ -318,54 +300,40 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
     // Fresh SDK clients need no preceding devices/warmup request. Routing in
     // ccp_detect reads the runtime assignment, so synchronize it before both
     // cache identity construction and inference, just as run/apply already do.
-    state.policy = policy_from_req(req, &state.policy);
-    sync_runtime(state, req);
+    adopt_policy(state, req);
     let settings = detect_settings(state, req);
     if json_bool(req, &["retry_inference"], false) {
-        #[cfg(feature = "ort-plane")]
         ccp_detect::reset_inference_sessions();
-        clear_detect_cache(state);
+        state.detect_cache.clear();
     }
-    let key = detect_cache_key(&image, &settings);
+    let key = DetectCache::key(&image, &settings);
     let bypass_cache = json_bool(req, &["bypass_cache"], false);
-    if let Some(cached) = state
-        .detect_cache
-        .get(&key)
-        .cloned()
-        .filter(|_| !bypass_cache)
-    {
-        let cached = &cached;
-        if cached.is_file() {
-            if let Ok(text) = std::fs::read_to_string(cached) {
-                if !text.trim().is_empty() {
-                    if let Ok(hs) = serde_json::from_str::<Value>(&text) {
-                        // Callers may reuse a requested destination for different
-                        // settings. Cache entries point to immutable private copies.
-                        let requested =
-                            json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
-                        let returned = requested.as_ref().unwrap_or(cached);
-                        if returned != cached {
-                            if let Err(error) = write_with_parent(returned, text.as_bytes()) {
-                                return fail(ErrorCode::IoError, error);
-                            }
-                        }
-                        touch_detect_cache(state, &key);
-                        return json!({
-                            "ok": true,
-                            "handshake": returned,
-                            "n_charts": hs.get("n_charts").cloned().unwrap_or(json!(1)),
-                            "chart_type": hs.get("chart_type").cloned().unwrap_or(json!("")),
-                            "device": hs.get("device"),
-                            "detect_backend": hs.get("device"),
-                            "provider": hs.pointer("/inference/detect/provider"),
-                            "fallback": hs.pointer("/inference/detect/fallback"),
-                            "inference": hs.get("inference"),
-                            "cached": true,
-                        });
-                    }
-                }
+    let requested = json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
+    let hit = (!bypass_cache)
+        .then(|| state.detect_cache.read(&key))
+        .flatten();
+    if let Some((cached, text, hs)) = hit {
+        // Callers may reuse a requested destination for different settings.
+        // Cache entries point to immutable private copies.
+        let returned = requested.unwrap_or(cached.clone());
+        if returned != cached {
+            if let Err(error) = write_with_parent(&returned, text.as_bytes()) {
+                return fail(ErrorCode::IoError, error);
             }
         }
+        state.detect_cache.touch(&key);
+        return json!({
+            "ok": true,
+            "handshake": returned,
+            "n_charts": hs.get("n_charts").cloned().unwrap_or(json!(1)),
+            "chart_type": hs.get("chart_type").cloned().unwrap_or(json!("")),
+            "device": hs.get("device"),
+            "detect_backend": hs.get("device"),
+            "provider": hs.pointer("/inference/detect/provider"),
+            "fallback": hs.pointer("/inference/detect/fallback"),
+            "inference": hs.get("inference"),
+            "cached": true,
+        });
     }
 
     emit_progress("Detecting chart");
@@ -400,38 +368,26 @@ fn cmd_detect(state: &mut ServeState, req: &Value) -> Value {
             )
         }
     };
-    let handshake_out = json_str(req, &["handshake_out", "json_out"]).map(PathBuf::from);
-    let worker_owned = handshake_out.is_none();
-    let out = handshake_out.unwrap_or_else(|| {
-        let mut p = std::env::temp_dir();
+    let snapshot = handshake["snapshot_id"].as_str().unwrap_or("snapshot");
+    let bytes = serde_json::to_vec(&handshake).unwrap_or_default();
+    let worker_owned = requested.is_none();
+    let out = requested.unwrap_or_else(|| {
         let stem = image
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("detect");
-        p.push(format!(
-            "ccp-detect-{stem}-{}.json",
-            handshake["snapshot_id"].as_str().unwrap_or("snapshot")
-        ));
-        p
+        std::env::temp_dir().join(format!("ccp-detect-{stem}-{snapshot}.json"))
     });
-    if let Err(e) = write_with_parent(&out, &serde_json::to_vec(&handshake).unwrap_or_default()) {
+    if let Err(e) = write_with_parent(&out, &bytes) {
         return fail(ErrorCode::IoError, e);
     }
     if worker_owned {
-        remember_temp_output(state, out.clone());
+        state.detect_cache.track_temp_output(out.clone());
     }
     if !bypass_cache {
-        let cache_path = std::env::temp_dir().join(format!(
-            "ccp-cache-{}.json",
-            handshake["snapshot_id"].as_str().unwrap_or("snapshot")
-        ));
-        if std::fs::write(
-            &cache_path,
-            serde_json::to_vec(&handshake).unwrap_or_default(),
-        )
-        .is_ok()
-        {
-            remember_detect_cache(state, key, cache_path);
+        let cache_path = std::env::temp_dir().join(format!("ccp-cache-{snapshot}.json"));
+        if std::fs::write(&cache_path, &bytes).is_ok() {
+            state.detect_cache.insert(key, cache_path);
         }
     }
     if !result.device.is_empty() {
@@ -460,37 +416,22 @@ fn write_with_parent(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))
 }
 
-fn sync_runtime(state: &ServeState, req: &Value) {
-    let policy = policy_from_req(req, &state.policy);
-    set_runtime_from_report(&probe_accelerators(&policy));
-}
-
 fn cmd_run(state: &mut ServeState, req: &Value) -> Value {
-    state.policy = policy_from_req(req, &state.policy);
-    sync_runtime(state, req);
-    match run_from_json_ex(
-        req,
-        &mut |m| emit_progress(m),
-        Some(state.ffc_cache.clone()),
-    ) {
-        Ok(out) => {
-            state.last = Some(out.saved.clone());
-            with_accel(json!({
-                "ok": true,
-                "output": out.output,
-                "report": out.report,
-                "model_out": out.model_out,
-                "lut_out": out.lut_out,
-                "preview_dir": out.preview_dir,
-                "chart_type": out.chart_type,
-                "has_delta_e": out.has_delta_e,
-                "report_json": out.report_json,
-            }))
-        }
-        Err(e) => fail_with(&e),
-    }
+    adopt_policy(state, req);
+    let outcome = match fit::run(req, &mut |m| emit_progress(m), &state.ffc_cache) {
+        Ok(outcome) => outcome,
+        Err(e) => return fail_with(&e),
+    };
+    let mut reply = match serde_json::to_value(&outcome) {
+        Ok(reply) => reply,
+        Err(e) => return fail_with(&e.into()),
+    };
+    reply["ok"] = json!(true);
+    state.last = Some(outcome.into_saved());
+    with_accel(reply)
 }
 
+/// Output stems that stay distinct (case-insensitively) within one batch.
 fn unique_artifact_bases(images: &[String]) -> Vec<String> {
     let stems: Vec<String> = images
         .iter()
@@ -535,13 +476,9 @@ fn unique_artifact_bases(images: &[String]) -> Vec<String> {
 
 fn cmd_apply(state: &ServeState, req: &Value) -> Value {
     sync_runtime(state, req);
-    let model_path = match json_str(req, &["model", "model_path", "model_in"]) {
-        Some(p) => PathBuf::from(p),
-        None => return fail(ErrorCode::InvalidRequest, "apply requires model"),
-    };
-    let saved = match load_saved(&model_path) {
-        Ok(s) => s,
-        Err(e) => return fail_with(&e),
+    let saved = match load_model(req, "apply") {
+        Ok(saved) => saved,
+        Err(reply) => return reply,
     };
     let images = req
         .get("images")
@@ -613,11 +550,10 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
         jobs.push((img, dest, preview));
     }
 
-    let mut apply = match ApplyOptions::try_from_req(req, &saved) {
+    let apply = match ApplyOptions::from_request(req, &saved, Arc::clone(&state.ffc_cache)) {
         Ok(apply) => apply,
         Err(e) => return fail_with(&e),
     };
-    apply.ffc_cache = Some(state.ffc_cache.clone());
     let apply_one = |img: &str, out: &Path, preview: Option<&Path>| -> Value {
         emit_progress(&format!(
             "Apply · {}",
@@ -626,7 +562,7 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
                 .and_then(|s| s.to_str())
                 .unwrap_or(img)
         ));
-        match apply_saved_to_image_ex_with_progress(
+        match apply_to_image(
             &saved,
             Path::new(img),
             out,
@@ -634,24 +570,14 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
             &apply,
             &mut emit_progress,
         ) {
-            Ok(report) => {
-                let mut row = json!({
-                    "ok": true,
-                    "image": img,
-                    "output": out,
-                    "preview_dir": preview,
-                    "metrics_hidden": true,
-                    "timings": {
-                        "decode_seconds": report.decode_seconds,
-                        "processing_seconds": report.processing_seconds,
-                        "export_seconds": report.export_seconds,
-                    },
-                });
-                if let Some(skip) = report.ffc_skipped {
-                    row["ffc_skipped"] = json!(skip);
-                }
-                with_accel(row)
-            }
+            Ok(timings) => with_accel(json!({
+                "ok": true,
+                "image": img,
+                "output": out,
+                "preview_dir": preview,
+                "metrics_hidden": true,
+                "timings": timings,
+            })),
             Err(e) => json!({
                 "ok": false,
                 "code": e.code().as_str(),
@@ -693,27 +619,18 @@ fn cmd_apply(state: &ServeState, req: &Value) -> Value {
 
 fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
     sync_runtime(state, req);
-    let model_path = match json_str(req, &["model", "model_path", "model_in"]) {
-        Some(p) => PathBuf::from(p),
-        None => return fail(ErrorCode::InvalidRequest, "preview_stage requires model"),
+    let saved = match load_model(req, "preview_stage") {
+        Ok(saved) => saved,
+        Err(reply) => return reply,
     };
-    let saved = match load_saved(&model_path) {
-        Ok(s) => s,
-        Err(e) => return fail_with(&e),
-    };
-    let image = match json_str(req, &["image", "input", "image_path"]) {
+    let image = match json_str(req, &IMAGE_KEYS).or_else(|| {
+        req.get("images")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .and_then(Value::as_str)
+    }) {
         Some(p) => PathBuf::from(p),
-        None => {
-            let first = req
-                .get("images")
-                .and_then(Value::as_array)
-                .and_then(|a| a.first())
-                .and_then(Value::as_str);
-            match first {
-                Some(p) => PathBuf::from(p),
-                None => return fail(ErrorCode::InvalidRequest, "preview_stage requires image"),
-            }
-        }
+        None => return fail(ErrorCode::InvalidRequest, "preview_stage requires image"),
     };
     let preview_dir = match json_str(req, &["preview_dir"]) {
         Some(p) => PathBuf::from(p),
@@ -727,54 +644,25 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
     let stage = json_str(req, &["stage", "preview_mode"])
         .unwrap_or("corrected")
         .to_ascii_lowercase();
-    let dummy = preview_dir.join("_unused.jpg");
-    let mut apply = match ApplyOptions::try_from_req(req, &saved) {
+    let apply = ApplyOptions::from_request(req, &saved, Arc::clone(&state.ffc_cache))
+        .and_then(|apply| apply.for_stage_preview(&stage));
+    let apply = match apply {
         Ok(apply) => apply,
         Err(e) => return fail_with(&e),
     };
-    apply.write_output = false;
-    apply.preview_mode = PreviewMode::Stage(stage.clone());
-    // Intermediate previews expose the original stage math. Fast mode only
-    // approximates a final rendered image, not the inspection of a stage.
-    if matches!(stage.as_str(), "ffc" | "gc" | "wb") {
-        apply.fast_mode = false;
-    }
-    apply.ffc_cache = Some(state.ffc_cache.clone());
-    match stage.as_str() {
-        "ffc" => {
-            apply.do_gc = false;
-            apply.do_wb = false;
-            apply.do_cc = false;
-        }
-        "gc" => {
-            apply.do_wb = false;
-            apply.do_cc = false;
-        }
-        "wb" => {
-            apply.do_cc = false;
-        }
-        "cc" | "corrected" => {}
-        other => return fail(ErrorCode::InvalidRequest, format!("unknown stage: {other}")),
-    }
-    match apply_saved_to_image_ex_with_progress(
+    match apply_to_image(
         &saved,
         &image,
-        &dummy,
+        &preview_dir.join("_unused.jpg"),
         Some(&preview_dir),
         &apply,
         &mut emit_progress,
     ) {
-        Ok(report) => {
-            let mut row = json!({
-                "ok": true,
-                "stage": stage,
-                "preview_dir": preview_dir,
-            });
-            if let Some(skip) = report.ffc_skipped {
-                row["ffc_skipped"] = json!(skip);
-            }
-            with_accel(row)
-        }
+        Ok(_) => with_accel(json!({
+            "ok": true,
+            "stage": stage,
+            "preview_dir": preview_dir,
+        })),
         Err(e) => fail_with(&e),
     }
 }
@@ -782,7 +670,7 @@ fn cmd_preview_stage(state: &ServeState, req: &Value) -> Value {
 fn cmd_export_cube(state: &ServeState, req: &Value) -> Value {
     // An explicit model must win over the last fit in a long-lived API session.
     if let Some(model) = json_str(req, &["model", "model_path"]) {
-        return match load_saved(model) {
+        return match SavedPipeline::load(model) {
             Ok(saved) => write_cube_reply(&saved, req),
             Err(e) => fail_with(&e),
         };
@@ -813,7 +701,7 @@ fn write_cube_reply(saved: &SavedPipeline, req: &Value) -> Value {
             }
         },
     };
-    match export_cube_from_saved(saved, &path, size) {
+    match saved.export_cube(&path, size) {
         Ok(()) => {
             json!({"ok":true,"path": path, "size": size, "note":"LUT does not include flat-field."})
         }
@@ -821,14 +709,15 @@ fn write_cube_reply(saved: &SavedPipeline, req: &Value) -> Value {
     }
 }
 
-pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
-    // Reset per request so a preview or previous batch cannot leak its choice.
-    crate::run_pipeline::set_auto_lut_request(false);
-    crate::run_pipeline::set_cpu_lut_request(json_bool(req, &["cpu_lut"], false));
+/// Handle one request; the flag asks the loop to stop.
+fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
+    // Set per request so a preview or previous batch cannot leak its choice.
+    let force_cpu = json_bool(req, &["cpu_lut"], false);
+    render::set_lut_request(force_cpu, false);
     if let Some(mode) = req.get("lut_device") {
         match mode.as_str() {
-            Some("auto") => crate::run_pipeline::set_auto_lut_request(true),
-            Some("cpu") => crate::run_pipeline::set_cpu_lut_request(true),
+            Some("auto") => render::set_lut_request(force_cpu, true),
+            Some("cpu") => render::set_lut_request(true, false),
             Some("gpu") => {}
             _ => {
                 return (
@@ -853,8 +742,9 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
             false,
         );
     }
+    let renders = matches!(cmd.as_str(), "run" | "apply" | "preview_stage");
     if let Some(value) = req.get("fast_mode") {
-        if !value.is_boolean() || !matches!(cmd.as_str(), "run" | "apply" | "preview_stage") {
+        if !value.is_boolean() || !renders {
             return (
                 fail(
                     ErrorCode::InvalidRequest,
@@ -864,7 +754,7 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
             );
         }
     }
-    if matches!(cmd.as_str(), "run" | "apply" | "preview_stage") {
+    if renders {
         ccp_detect::plane::reset_plane_execution();
     }
     match cmd.as_str() {
@@ -886,7 +776,7 @@ pub fn dispatch(state: &mut ServeState, req: &Value) -> (Value, bool) {
         #[cfg(test)]
         "__test_panic" => panic!("deliberate test panic"),
         "shutdown" | "quit" => {
-            let _ = crate::run_pipeline::flush_preview_encodes();
+            let _ = flush_preview_encodes();
             (json!({"ok":true,"event":"shutdown"}), true)
         }
         "" => (fail(ErrorCode::InvalidRequest, "missing cmd"), false),
@@ -910,13 +800,13 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 
 /// [`dispatch`] behind a panic boundary: a bug in one request becomes an
 /// error reply, so the worker stays alive and the reply stream stays in sync.
-pub fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
+fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| dispatch(state, req)));
     match result {
         Ok(reply) => reply,
         Err(payload) => {
             // Preview encoders may still reference a half-written request.
-            let _ = crate::run_pipeline::flush_preview_encodes();
+            let _ = flush_preview_encodes();
             (
                 fail(
                     ErrorCode::InternalError,
@@ -928,34 +818,30 @@ pub fn dispatch_guarded(state: &mut ServeState, req: &Value) -> (Value, bool) {
     }
 }
 
-/// Long-lived stdin/stdout loop. First line is the ready event.
+/// Serve stdin until EOF or `shutdown`; the first stdout line is the ready event.
 pub fn run() -> Result<(), String> {
-    let mut state = ServeState {
-        ..ServeState::default()
-    };
+    let mut state = ServeState::default();
     let report = probe_accelerators(&state.policy);
     set_runtime_from_report(&report);
-    state.device = "pending".into();
     let threads = report.assignment.threads.max(1) as usize;
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build_global();
-    emit_ready(&state);
+    emit_json(&ready_event(&state));
 
     let stdin = std::io::stdin();
     let result = serve_lines(&mut state, stdin.lock(), &mut |reply| emit_json(reply));
-    let _ = crate::run_pipeline::flush_preview_encodes();
-    cleanup_temp_files(&mut state);
+    let _ = flush_preview_encodes();
+    state.detect_cache.remove_files();
     result
 }
 
 /// Read NDJSON requests until EOF or shutdown, emitting one reply per request.
-pub fn serve_lines<R: BufRead>(
+fn serve_lines<R: BufRead>(
     state: &mut ServeState,
-    reader: R,
+    mut reader: R,
     emit: &mut dyn FnMut(&Value),
 ) -> Result<(), String> {
-    let mut reader = reader;
     let mut buffer = Vec::new();
     loop {
         buffer.clear();
@@ -998,61 +884,11 @@ pub fn serve_lines<R: BufRead>(
     Ok(())
 }
 
-fn touch_detect_cache(state: &mut ServeState, key: &str) {
-    if let Some(index) = state.detect_cache_order.iter().position(|k| k == key) {
-        if let Some(key) = state.detect_cache_order.remove(index) {
-            state.detect_cache_order.push_back(key);
-        }
-    }
-}
-
-fn remember_detect_cache(state: &mut ServeState, key: String, path: PathBuf) {
-    if let Some(previous) = state.detect_cache.insert(key.clone(), path.clone()) {
-        if previous != path {
-            let _ = std::fs::remove_file(previous);
-        }
-        state.detect_cache_order.retain(|k| k != &key);
-    }
-    state.detect_cache_order.push_back(key);
-    while state.detect_cache.len() > DETECT_CACHE_CAPACITY {
-        let Some(oldest) = state.detect_cache_order.pop_front() else {
-            break;
-        };
-        if let Some(evicted) = state.detect_cache.remove(&oldest) {
-            let _ = std::fs::remove_file(evicted);
-        }
-    }
-}
-
-fn clear_detect_cache(state: &mut ServeState) {
-    for (_, path) in state.detect_cache.drain() {
-        let _ = std::fs::remove_file(path);
-    }
-    state.detect_cache_order.clear();
-}
-
-fn remember_temp_output(state: &mut ServeState, path: PathBuf) {
-    state.temp_outputs.retain(|p| p != &path);
-    state.temp_outputs.push_back(path);
-    while state.temp_outputs.len() > TEMP_OUTPUT_CAPACITY {
-        if let Some(oldest) = state.temp_outputs.pop_front() {
-            let _ = std::fs::remove_file(oldest);
-        }
-    }
-}
-
-/// Remove every temp file this worker created (detect cache copies and
-/// default handshake outputs). Caller-chosen `handshake_out` paths are kept.
-fn cleanup_temp_files(state: &mut ServeState) {
-    clear_detect_cache(state);
-    for path in state.temp_outputs.drain(..) {
-        let _ = std::fs::remove_file(path);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::charts::Charts;
 
     #[test]
     fn invalid_or_unsupported_cc_method_fails_before_work() {
@@ -1197,16 +1033,16 @@ mod tests {
         assert!(!stop);
         assert_eq!(reply["ok"], false);
         assert_eq!(state.policy, "cpu");
-        assert_eq!(ccp_detect::runtime_policy().as_str(), "cpu");
+        assert_eq!(ccp_detect::probe::runtime_policy().as_str(), "cpu");
         assert_eq!(
-            ccp_detect::runtime_assignment().detect,
+            ccp_detect::probe::runtime_assignment().detect,
             auto.assignment.detect
         );
         assert_eq!(
-            ccp_detect::runtime_assignment().plane,
+            ccp_detect::probe::runtime_assignment().plane,
             auto.assignment.plane
         );
-        assert_eq!(ccp_detect::runtime_assignment().apply, "cpu");
+        assert_eq!(ccp_detect::probe::runtime_assignment().apply, "cpu");
     }
 
     #[test]
@@ -1287,19 +1123,12 @@ mod tests {
     }
 
     fn valid_model(dir: &Path) -> PathBuf {
-        let saved = SavedPipeline {
-            do_gc: false,
-            do_wb: false,
-            correction: Some(ccp_core::CorrectionModel {
-                kind: ccp_core::ModelKind::Ccm3x3,
-                feature_count: 3,
-                coefficients: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                ..ccp_core::CorrectionModel::default()
-            }),
-            ..SavedPipeline::default()
-        };
         let path = dir.join("model.json");
-        std::fs::write(&path, serde_json::to_string(&saved).unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            serde_json::to_string(&SavedPipeline::identity_ccm_fixture()).unwrap(),
+        )
+        .unwrap();
         path
     }
 
@@ -1342,40 +1171,6 @@ mod tests {
             reply["error"].as_str().unwrap().contains("preview_dir"),
             "{reply}"
         );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn detect_cache_and_temp_outputs_are_bounded_and_cleaned_up() {
-        let dir = std::env::temp_dir().join(format!("ccp-serve-cache-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let mut state = ServeState::default();
-        let mut cache_files = Vec::new();
-        let mut outputs = Vec::new();
-        for index in 0..(DETECT_CACHE_CAPACITY + 5) {
-            let cached = dir.join(format!("cache-{index}.json"));
-            std::fs::write(&cached, b"{}").unwrap();
-            remember_detect_cache(&mut state, format!("key-{index}"), cached.clone());
-            cache_files.push(cached);
-            let output = dir.join(format!("detect-{index}.json"));
-            std::fs::write(&output, b"{}").unwrap();
-            remember_temp_output(&mut state, output.clone());
-            outputs.push(output);
-        }
-        assert_eq!(state.detect_cache.len(), DETECT_CACHE_CAPACITY);
-        assert!(!state.detect_cache.contains_key("key-0"));
-        assert!(!cache_files[4].exists() && cache_files[5].exists());
-        assert!(!outputs[4].exists() && outputs[5].exists());
-        // Re-inserting a key replaces (and removes) its previous private copy.
-        let replacement = dir.join("replacement.json");
-        std::fs::write(&replacement, b"{}").unwrap();
-        remember_detect_cache(&mut state, "key-10".into(), replacement.clone());
-        assert!(!cache_files[10].exists());
-        assert_eq!(state.detect_cache.len(), DETECT_CACHE_CAPACITY);
-        cleanup_temp_files(&mut state);
-        assert!(state.detect_cache.is_empty());
-        assert!(cache_files.iter().chain(&outputs).all(|p| !p.exists()));
-        assert!(!replacement.exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1522,36 +1317,6 @@ mod tests {
     }
 
     #[test]
-    fn detect_cache_key_includes_mtime_crop_prefer() {
-        let a = detect_cache_key(Path::new("x.jpg"), &DetectSettings::default());
-        let b = detect_cache_key(
-            Path::new("x.jpg"),
-            &DetectSettings {
-                crop: 0.5,
-                prefer: "spyder".into(),
-                ..DetectSettings::default()
-            },
-        );
-        assert_ne!(a, b);
-        for settings in [
-            DetectSettings {
-                conf: 0.91,
-                ..DetectSettings::default()
-            },
-            DetectSettings {
-                allow_recall: false,
-                ..DetectSettings::default()
-            },
-            DetectSettings {
-                device: "directml".into(),
-                ..DetectSettings::default()
-            },
-        ] {
-            assert_ne!(a, detect_cache_key(Path::new("x.jpg"), &settings));
-        }
-    }
-
-    #[test]
     fn detection_snapshots_have_distinct_chart_identities_and_survive_selection() {
         let hs = json!({"cli_chart":"classic","patch_obbs":[[[0,0],[1,0],[1,1],[0,1]]],
             "charts":[{"cli_chart":"classic","patch_obbs":[[[0,0],[1,0],[1,1],[0,1]]]},
@@ -1560,11 +1325,9 @@ mod tests {
         let b = identify_detection_handshake(hs);
         assert_ne!(a["snapshot_id"], b["snapshot_id"]);
         assert_ne!(a["charts"][0]["chart_id"], a["charts"][1]["chart_id"]);
-        let selected = crate::run_pipeline::parse_handshake(&a, 1, false, 0.75).unwrap();
-        assert_eq!(
-            selected[0].chart_id,
-            a["charts"][1]["chart_id"].as_str().unwrap()
-        );
-        assert_eq!(selected[0].snapshot_id, a["snapshot_id"].as_str().unwrap());
+        let selected = Charts::from_request(&json!({"face":1}), &a).unwrap();
+        let (snapshot_id, chart_id) = selected.identities()[0];
+        assert_eq!(chart_id, a["charts"][1]["chart_id"].as_str().unwrap());
+        assert_eq!(snapshot_id, a["snapshot_id"].as_str().unwrap());
     }
 }

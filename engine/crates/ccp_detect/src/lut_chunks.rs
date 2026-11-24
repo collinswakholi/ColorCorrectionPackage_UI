@@ -25,7 +25,7 @@ where
 }
 
 /// Reuse a bounded scratch allocation while preserving commit-after-validation.
-pub fn apply_chunks_into<F>(
+pub(crate) fn apply_chunks_into<F>(
     rgb: &mut [f32],
     lut: &[f32],
     gs: usize,

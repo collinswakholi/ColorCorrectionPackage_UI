@@ -30,7 +30,6 @@ pub struct RawDet {
 #[derive(Debug, Clone)]
 pub struct Letterbox {
     pub canvas: Vec<u8>,
-    pub imgsz: u32,
     pub gain: f64,
     pub pad_x: f64,
     pub pad_y: f64,
@@ -94,7 +93,6 @@ pub fn letterbox_rgb(rgb: &[f32], width: i32, height: i32, imgsz: i32) -> Letter
     if width <= 0 || height <= 0 || imgsz <= 0 {
         return Letterbox {
             canvas,
-            imgsz: imgsz.max(0) as u32,
             gain: 1.0,
             pad_x: 0.0,
             pad_y: 0.0,
@@ -137,7 +135,6 @@ pub fn letterbox_rgb(rgb: &[f32], width: i32, height: i32, imgsz: i32) -> Letter
     }
     Letterbox {
         canvas,
-        imgsz: imgsz as u32,
         gain,
         pad_x,
         pad_y,
@@ -267,19 +264,7 @@ pub fn decode_obb(rows: &[[f32; OBB_ROW]], conf: f32, iou: f32, max_det: usize) 
     kept
 }
 
-/// Decode a flat f32 buffer of `[N, 29]` rows.
-pub fn decode_obb_flat(
-    data: &[f32],
-    n_rows: usize,
-    conf: f32,
-    iou: f32,
-    max_det: usize,
-) -> Vec<RawDet> {
-    let rows = preds_to_obb_rows(data, &[n_rows, OBB_ROW]);
-    decode_obb(&rows, conf, iou, max_det)
-}
-
-pub fn dets_from_raw(raw: &[RawDet], _imgsz: i32, gain: f64, pad_x: f64, pad_y: f64) -> Vec<Det> {
+pub fn dets_from_raw(raw: &[RawDet], gain: f64, pad_x: f64, pad_y: f64) -> Vec<Det> {
     let mut dets = Vec::with_capacity(raw.len());
     for box_ in raw {
         if box_.cls < 0 || box_.cls >= NUM_CLASSES {
