@@ -14,6 +14,7 @@
 - The engine keeps serving after a request line with invalid UTF-8, rejects non-path entries in apply image lists, reports unwritable output and preview folders, bounds its detection cache and removes its temporary detection files on exit.
 - Preview PNGs are complete before a request returns, failed preview writes are reported, and at most four preview encodes run at once.
 - Python SDK: read and check the worker protocol version (2 and 3 are supported), classify errors by `code` when the worker sends one (exposed as `ColorCorrectError.code`), stop the worker of an Engine that is garbage-collected without `close()`, treat `Shutdown`/`QUIT` like `shutdown`, and accept `setup_probe` in the command-line tool.
+- Python SDK: the NDJSON transport (`Engine`, `EngineError`, `Calibration`) moves to its own `colorcorrect_engine` module below the typed workflows, which removes an import cycle; import every public name from `colorcorrect` as before. `Engine.start()` starts the worker eagerly.
 - Update the API protocol reference for protocol 3: every command and request field, the ready event, detection snapshot and chart IDs, error codes, and the `auto` default policy.
 - Text and status colors meet WCAG AA contrast in both themes (muted text, light focus ring, error/warning/success, ΔE quality ramp), and the "fair" and "warning" ΔE bands are distinct in the dark theme.
 - New design tokens for type sizes, corner radii and spacing; views use them instead of fixed values.
