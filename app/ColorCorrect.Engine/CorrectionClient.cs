@@ -46,12 +46,6 @@ public sealed class CorrectionClient
         var outputPath = Path.Combine(runDir, "corrected" + options.OutputExtension());
         var reportPath = Path.Combine(runDir, "report.json");
         var modelPath = Path.Combine(runDir, "model.json");
-        if (options.ReferenceProfiles.Count > 0 || options.ReferenceAssignments.Count > 0)
-        {
-            await _worker.RequireCapabilityAsync("custom_references_v1", cancellationToken).ConfigureAwait(false);
-            await _worker.RequireCapabilityAsync("chart_identity_v1", cancellationToken).ConfigureAwait(false);
-        }
-        if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
 
         var payload = BaseRun(inputPath, outputPath, reportPath, modelPath, previewDir, options);
         payload["cmd"] = "run";
@@ -143,7 +137,6 @@ public sealed class CorrectionClient
 
         try
         {
-            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "apply",
@@ -260,7 +253,6 @@ public sealed class CorrectionClient
         Directory.CreateDirectory(previewDir);
         try
         {
-            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "preview_stage",
