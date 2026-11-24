@@ -25,8 +25,8 @@ version tags and manual runs always use the complete native workflow.
 
 ## Publish a version
 
-Publishing requires maintainer authorization. **0.3.0** is the next application
-release and includes SDK **2.3.0**. The desktop distributions carry the SDK wheel for use with their native worker.
+Publishing requires maintainer authorization. The next application release
+includes SDK **3.0.0** (0.3.0 shipped SDK 2.3.0). The desktop distributions carry the SDK wheel for use with their native worker.
 
 1. Update native versions together: shared .NET properties, application metadata,
    the four internal Rust packages and their Cargo lock entries. The SDK has its

@@ -21,7 +21,7 @@ import tempfile
 from typing import Any, Callable
 import weakref
 
-__version__ = "2.3.0"
+__version__ = "3.0.0"
 COMMANDS = ("devices", "setup_probe", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
 #: Worker NDJSON protocol versions this client understands. Studio 0.2.0-0.3.0

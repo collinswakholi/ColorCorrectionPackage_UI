@@ -156,7 +156,7 @@ with ColorCorrection(Config(save_path="results"), root="/path/to/ColorCorrectStu
 ```
 
 The desktop application is **0.3.0**.
-The independently versioned SDK is **2.3.0**. Its wheel does not include the native
+It includes the independently versioned SDK **2.3.0**; this source tree carries SDK 3.0.0 for the next release. Its wheel does not include the native
 worker or models. For custom references, typed
 options, model reload, and partial batch failures, see the [API guide](api/README.md)
 and [typed API reference](docs/api/README.md).

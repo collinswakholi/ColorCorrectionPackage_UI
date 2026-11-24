@@ -4,11 +4,12 @@ The Python API uses the same local native engine as the desktop app. Python 3.10
 is required; the SDK has no runtime dependencies on Python ML or GUI packages.
 Automatic DirectML/WebGPU inference is the default, with
 explicit CPU recovery when GPU execution is unavailable or fails. LUT application
-uses wgpu with CPU recovery. `backend="cpu"` retains CPU correction with Auto
+uses wgpu with CPU recovery. `backend="cpu"` selects CPU correction with Auto
 detection; `backend="cpu-inference"` explicitly selects CPU detection.
 
-CPU inference requires a native engine declaring `cpu_inference_v1` (0.2.2 and
-later, including the current 0.3.x engine). Older 0.2.1 packages use GPU
+The SDK requires a Studio 0.2.0 or later worker; 0.1.x workers are refused at
+startup. CPU inference requires a native engine declaring `cpu_inference_v1` (0.2.2 and
+later). Older 0.2.0 and 0.2.1 packages use GPU
 inference; updating the wheel does not replace that engine. On macOS, the native SDK root is
 `/Applications/ColorCorrect Studio.app/Contents/Resources/runtime`.
 
@@ -72,7 +73,7 @@ worker. `timeout` is a positive finite number of seconds per command (startup is
 bounded separately); `progress` receives text on the calling thread and must not
 issue recursive requests. `executable=` explicitly selects a worker; keep its
 compatible models/references/runtime together. `backend` accepts `auto`, `cpu`,
-`cpu-inference`, `directml`, `webgpu`, or `vulkan`. Legacy `cpu` selects CPU
+`cpu-inference`, `directml`, `webgpu`, or `vulkan`. `cpu` selects CPU
 correction and Auto detection. `cpu-inference` requires worker capability
 `cpu_inference_v1`; older workers are rejected clearly. DirectML is Windows-only.
 Forced GPU detection does not switch engines; correction CPU recovery remains enabled.
@@ -315,8 +316,8 @@ explicit selection/order separately. All selected charts require an explicit pro
 in custom mode. A single `reference=` requires one selected compatible chart; when
 multiple charts are detected, explicitly select one with `chart_ids=[chart.id]`.
 Passport profiles can be
-used with Classic detections. Workers must advertise `custom_references_v1` and
-`chart_identity_v1`; older workers fail clearly instead of ignoring the profiles.
+used with Classic detections. Every supported worker (Studio 0.2.0 and later)
+advertises `custom_references_v1` and `chart_identity_v1`.
 Reference snapshots are embedded in the saved model by the engine. Applying that
 model needs no external reference CSV/JSON.
 
@@ -339,9 +340,10 @@ with Client() as client:
 
 New models retain the white-image path and FFC settings in `python_api` provenance
 alongside the native model. The white image must remain accessible when FFC is
-reused. A requested FFC stage that was skipped is reported in warnings. Native
-legacy models retain their existing behavior; historical metrics are `None` if
-unavailable. If a legacy model requires FFC without a recorded white image, use
+reused. A requested FFC stage that was skipped is reported in warnings. Models
+saved by the desktop app or the raw `Engine` have no `python_api` metadata; they
+load unchanged, and their `metrics` are `None`. If such a model requires FFC
+without a recorded white image, use
 `ApplyOptions(white="white.jpg")` or explicitly `ApplyOptions(do_ffc=False)`.
 Explicitly enabling GC/WB/CC when a model has no corresponding fitted transform
 raises an actionable error before processing. Reported skipped stages also
@@ -349,7 +351,7 @@ appear in result warnings and execution diagnostics.
 
 Closing a client is permanent. A retained model handle raises `ClosedClientError`
 after close; load its saved JSON through a new client to continue. Raw Engine
-clients retain their legacy restart behavior.
+clients instead start a fresh worker on their next request.
 
 ## Typed results and errors
 
@@ -424,14 +426,11 @@ physical correction accuracy. The saved report describes the validation scope.
 Input/output color spaces remain independent from reference-value encoding.
 Non-sRGB/D65 input requires FFC, GC, and WB disabled.
 
-Legacy imports (`Engine`, `Calibration`, `EngineError`), scripts, direct
+The low-level API (`Engine`, `Calibration`, `EngineError`), scripts, direct
 `python api/colorcorrect.py`, `python -m colorcorrect`, and the `colorcorrect`
-console command remain available. The existing low-level API's output defaults
-are unchanged. [Advanced Engine API and NDJSON protocol](protocol.md) document the
-full transport and legacy behavior.
-
-Contributors can find repeatable checks and version-specific execution records
-in the [developer validation reference](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/api/VERIFICATION.md).
+console command remain available, with their own output defaults.
+[Advanced Engine API and NDJSON protocol](protocol.md) documents the
+full transport and low-level behavior.
 
 ### Exact random patch samples
 

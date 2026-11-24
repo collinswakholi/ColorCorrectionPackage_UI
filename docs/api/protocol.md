@@ -6,25 +6,26 @@ Python 3.10+; direct protocol clients do not require Python. Keep the worker,
 models, references, and native libraries together. A desktop window does not
 need to be open for processing.
 
-This reference follows the current source: the 0.3.x engine, which speaks NDJSON
-protocol 3, and SDK 2.3.x, which accepts protocol 2 and 3 workers. Check the
-worker's `protocol_version` and `capabilities` (for example `cpu_inference_v1`)
+This reference follows the current source: this engine (next release) speaks
+NDJSON protocol 3, and SDK 3.0.0 accepts protocol 2 and 3 workers. Studio
+0.2.0–0.3.0 workers speak protocol 2, which the SDK still accepts; 0.1.x workers
+report no protocol version and are rejected. Check the worker's `protocol_version` and `capabilities` (for example `cpu_inference_v1`)
 before requesting newer functionality; a newer SDK does not upgrade a separately
 installed worker.
 
-## Legacy Engine workflow
+## Low-level Engine workflow
 
 For everyday work start with the [installed run/predict SDK](../../api/README.md)
 and [typed configuration guide](README.md#configuration-reference). This reference
 documents the preserved low-level `Engine` interface and transport. Its raw reply
-shapes and legacy defaults differ from the typed SDK. Install the wheel or use
+shapes and defaults differ from the typed SDK. Install the wheel or use
 `python -m pip install ./api`; no `sys.path` modification is needed.
 
 ```python
 from colorcorrect import Engine
 ```
 
-A legacy fit/apply example:
+A low-level fit/apply example:
 
 ```python
 from colorcorrect import Engine
@@ -52,20 +53,20 @@ Detection-specific settings go in `detect_options={...}`. A supplied handshake
 skips detection. No chart-type or space settings are removed or inferred from filenames.
 
 `run`, `apply` and `preview_stage` accept `fast_mode: true | false` (default false).
-Require `combined_lut65_v1` before enabling it. It combines active GC/WB/CC stages
+Every supported worker advertises `combined_lut65_v1`. It combines active GC/WB/CC stages
 in a cached 65³ LUT, with FFC applied separately. Fitting coefficients and
 intermediate previews keep their existing math. The final rendered metrics are
 computed from the selected output. `apply_execution.method` identifies
 `combined-lut65`, `cc-lut33`, `identity`, or a standard-domain fallback.
 CPU/GPU chunk counts and recovery reasons are reported independently.
 The typed SDK exposes `CalibrationOptions(fast_mode=True)` and
-`ApplyOptions(fast_mode=True)`, both enabled by default. The raw protocol keeps
-its legacy default of false. The experimental `cc_method` option was removed;
+`ApplyOptions(fast_mode=True)`, both enabled by default. The raw protocol defaults
+to false. The experimental `cc_method` option was removed;
 workers reject it explicitly.
 
 ![Calibration, validation, and application workflow](../images/workflow.svg)
 
-In this legacy interface, the flow is `detect` → `fit` → inspect the report → `apply`.
+In this low-level interface, the flow is `detect` → `fit` → inspect the report → `apply`.
 The current typed SDK uses `Client.calibrate()` or `ColorCorrection.run()`.
 The notebooks show source, corrected, and cumulative stage images alongside the
 reported chart errors.
@@ -128,7 +129,7 @@ For contributor checks and execution records, see
 
 ## Python API contract
 
-`Engine(executable=None, root=None, policy="auto", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` and `CCP_NEW_UI_ROOT`. Without them it looks for the worker in the app folder, then in `engine/target/release` of a source checkout (on Linux, `ccp-engine-launch` first). Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The legacy `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
+`Engine(executable=None, root=None, policy="auto", timeout=600, progress=None)` discovers the worker and resources from the app folder. Explicit paths override `CCP_ENGINE_EXE` and `CCP_NEW_UI_ROOT`. Without them it looks for the worker in the app folder, then in `engine/target/release` of a source checkout (on Linux, `ccp-engine-launch` first). Native ONNX GPU libraries are resolved beside the worker. An explicit package root is authoritative: an incomplete package fails rather than borrowing a development runtime through `ORT_DYLIB_PATH`. The `cpu` policy controls LUT processing only: chart and plane inference follow Auto, including CPU recovery. All file arguments accept `Path` or strings; relative paths are relative to the caller's current working directory, not the worker executable.
 
 | Method | Operation | Required arguments |
 |---|---|---|
@@ -143,7 +144,7 @@ For contributor checks and execution records, see
 | `request(command, **parameters)` | Complete native protocol escape hatch | command + documented JSON fields |
 | `close()` | Stop worker and release pipes | none |
 
-Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. An Engine that is garbage-collected or still open at interpreter exit asks its worker to shut down and then terminates it, but explicit closing is the supported way to flush deferred work. `Engine.protocol_version` reports the worker's protocol (2 when the ready event omits it); other versions are refused at startup. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply (including its `code`; typed-SDK errors expose it as `ColorCorrectError.code`); `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
+Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. An Engine that is garbage-collected or still open at interpreter exit asks its worker to shut down and then terminates it, but explicit closing is the supported way to flush deferred work. `Engine.protocol_version` reports the worker's protocol (`None` until the worker starts). A ready event without one (a Studio 0.1.x worker) and versions other than 2 and 3 are refused at startup. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply (including its `code`; typed-SDK errors expose it as `ColorCorrectError.code`); `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
 
 A timeout, corrupt protocol, interrupted call or failing progress callback terminates that worker before reuse. The next call starts a fresh worker; last-fit state and caches are lost. Save model paths explicitly. The timeout covers each command; initial worker startup has a separate timeout. `close()` waits for an in-flight request, then asks the worker to flush deferred preview PNGs and acknowledge shutdown (up to 10 seconds, bounded by the client timeout). It then terminates a child that is still running, including after an acknowledgement. A resulting nonzero child cleanup code does not by itself indicate an incomplete operation; inspect the operation reply and saved artifacts. Configure request timeouts to bound in-flight work. Termination cannot undo already written output files. This is a trusted local file-processing API, not a sandbox or authenticated service; do not expose it directly to untrusted network requests.
 
@@ -158,7 +159,7 @@ A line that is not valid UTF-8 or not valid JSON gets an `invalid_request` error
 | Field | Meaning |
 |---|---|
 | `ok`, `event` | Always `true` and `"ready"` |
-| `protocol_version` | `3` for this engine (`2` for 0.2.x–0.3.0 workers). Protocol 3 only adds error `code`s; requests and successful replies are unchanged |
+| `protocol_version` | `3` for this engine (`2` for 0.2.0–0.3.0 workers; 0.1.x workers omit it). Protocol 3 only adds error `code`s; requests and successful replies are unchanged |
 | `capabilities` | Feature markers: `custom_references_v1`, `chart_identity_v1`, `combined_lut65_v1`, `cpu_inference_v1` |
 | `patch_sampling` | Exact seeded sampling contract, `random-lcg32-v1`; absent on workers that only support grid sampling |
 | `portable_lut` | `true` when the worker was built with the portable wgpu LUT path |
@@ -212,7 +213,7 @@ The SDK also reports `shutdown_failure` when the worker acknowledged shutdown bu
 
 ### `devices` / `warmup`
 
-Optional `policy`: `auto`, `cpu`, `cpu-inference`, `directml` (alias `dml`), `webgpu`, or `vulkan`. Auto tries eligible GPU routes, then explicitly selected CPU inference. `cpu` selects CPU correction with Auto detection; `cpu-inference` explicitly selects CPU detection and requires capability `cpu_inference_v1`. Explicit GPU policies select only that inference route; Vulkan uses the WebGPU route with its Vulkan graphics backend. GPU correction retains independent CPU recovery. Unsupported policy strings normalize to `auto` for legacy compatibility; they do not enable other inference engines.
+Optional `policy`: `auto`, `cpu`, `cpu-inference`, `directml` (alias `dml`), `webgpu`, or `vulkan`. Auto tries eligible GPU routes, then explicitly selected CPU inference. `cpu` selects CPU correction with Auto detection; `cpu-inference` explicitly selects CPU detection and requires capability `cpu_inference_v1`. Explicit GPU policies select only that inference route; Vulkan uses the WebGPU route with its Vulkan graphics backend. GPU correction retains independent CPU recovery. Unsupported policy strings normalize to `auto`; they do not enable other inference engines.
 
 Detection options below also apply to warmup. A failed warmup reply carries `code` `inference_failed` (or `unsupported_capability` for a build without chart inference). `devices` returns the planned `assignment`, backend availability and runtime diagnostics; planning alone does not prove execution. `warmup` returns `warmed`, `device`, `title`, or an error. Inspect the completed operation's backend diagnostics for actual execution.
 
