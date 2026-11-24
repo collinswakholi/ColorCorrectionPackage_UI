@@ -1244,14 +1244,7 @@ pub fn neutrals_json_path() -> PathBuf {
     if let Some(root) = std::env::var_os("CCP_NEW_UI_ROOT") {
         return PathBuf::from(root).join("refs/neutrals.json");
     }
-    #[cfg(debug_assertions)]
-    {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../refs/neutrals.json")
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        PathBuf::from("refs/neutrals.json")
-    }
+    PathBuf::from("refs/neutrals.json")
 }
 
 pub fn load_neutrals_table(path: Option<&Path>) -> Result<HashMap<String, Vec<String>>> {
@@ -1298,16 +1291,4 @@ pub fn lookup_neutrals(
         out.push((index, name, spec.reference_lab_d50[index]));
     }
     Ok(out)
-}
-
-pub fn classic_lab_d50() -> &'static [Lab; 24] {
-    &CLASSIC_LAB_D50
-}
-
-pub fn spyder_lab_d50() -> &'static [Lab; 24] {
-    &SPYDER_LAB_D50
-}
-
-pub fn digital_sg_lab_d50() -> &'static [Lab; 140] {
-    &DIGITAL_SG_LAB_D50
 }
