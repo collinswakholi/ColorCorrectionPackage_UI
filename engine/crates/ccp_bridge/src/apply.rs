@@ -332,7 +332,9 @@ mod tests {
     use image::RgbImage as Rgb8;
     use serde_json::json;
 
-    use crate::fit::tests::{classic_handshake, preview_exists, run_from_json, write_cast_classic};
+    use crate::test_support::{
+        classic_handshake, preview_exists, run_from_json, write_cast_classic,
+    };
 
     #[test]
     fn apply_progress_groups_fast_transforms_and_omits_disabled_or_absent_work() {

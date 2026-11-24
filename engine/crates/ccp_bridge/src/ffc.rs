@@ -213,7 +213,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ccp-ffc-cache-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let image = dir.join("white.png");
-        crate::fit::tests::write_cast_classic(&image, 40, 30);
+        crate::test_support::write_cast_classic(&image, 40, 30);
         let params = FfcFitParams {
             method: FfcFitMethod::Linear,
             bins: 8,

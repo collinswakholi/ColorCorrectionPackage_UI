@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn parse_handshake_reads_obbs() {
-        let hs = crate::fit::tests::classic_handshake(120, 80);
+        let hs = crate::test_support::classic_handshake(120, 80);
         let faces = parse_handshake(&hs, 0, false, 0.75).unwrap();
         assert_eq!(faces.len(), 1);
         assert_eq!(faces[0].patch_obbs.len(), 24);

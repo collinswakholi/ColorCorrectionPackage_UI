@@ -18,6 +18,8 @@ mod render;
 mod report;
 mod request;
 mod serve;
+#[cfg(test)]
+mod test_support;
 mod work;
 
 pub use serve::run;
