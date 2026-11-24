@@ -24,9 +24,11 @@ import weakref
 __version__ = "2.3.0"
 COMMANDS = ("devices", "setup_probe", "warmup", "detect", "run", "apply", "preview_stage",
             "export_cube")
-#: Worker NDJSON protocol versions this client understands. A ready event
-#: without protocol_version is treated as version 2.
+#: Worker NDJSON protocol versions this client understands. Studio 0.2.0-0.3.0
+#: workers speak protocol 2. A ready event without protocol_version comes from
+#: a 0.1.x worker, which is rejected.
 SUPPORTED_PROTOCOL_VERSIONS = (2, 3)
+_MINIMUM_STUDIO = "0.2.0"
 _DEFAULT_POLICY = "auto"
 _STILL_FORMATS = ("png", "jpg", "jpeg")
 
@@ -165,10 +167,9 @@ class Engine:
         self.ready: dict = {}
 
     @property
-    def protocol_version(self) -> int:
-        """Protocol version from the worker's ready event (2 when absent)."""
-        version = self.ready.get("protocol_version", 2)
-        return version if type(version) is int else 2
+    def protocol_version(self) -> int | None:
+        """Protocol version from the worker's ready event; None before it starts."""
+        return self.ready.get("protocol_version")
 
     def _environment(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -244,7 +245,11 @@ class Engine:
             self.ready = self._read_reply(self.timeout)
             if self.ready.get("event") != "ready":
                 raise EngineError("Worker did not send a ready event", self.ready)
-            version = self.ready.get("protocol_version", 2)
+            if "protocol_version" not in self.ready:
+                raise EngineError(
+                    "Worker did not report a protocol version, so it predates ColorCorrect Studio "
+                    f"{_MINIMUM_STUDIO}. Install ColorCorrect Studio {_MINIMUM_STUDIO} or later.", self.ready)
+            version = self.ready["protocol_version"]
             if type(version) is not int or version not in SUPPORTED_PROTOCOL_VERSIONS:
                 raise EngineError(
                     f"Unsupported worker protocol version {version!r}; this client supports "
