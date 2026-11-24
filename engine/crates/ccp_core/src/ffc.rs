@@ -4,8 +4,8 @@
 #![allow(clippy::needless_range_loop)]
 
 use crate::color::{
-    clamp01, lab_to_xyz, linear_rgb_to_xyz, linear_to_srgb, srgb_d65_space, srgb_lstar_d65,
-    srgb_to_linear, xyz_to_lab, xyz_to_linear_rgb,
+    lab_to_xyz, linear_rgb_to_xyz, linear_to_srgb, srgb_d65_space, srgb_lstar_d65, srgb_to_linear,
+    xyz_to_lab, xyz_to_linear_rgb,
 };
 use crate::maps::{fit_least_squares, solve_linear_system};
 use crate::mlp::{fit_mlp, MlpParams, MlpWeights};
@@ -711,16 +711,6 @@ pub fn identity_gain(height: usize, width: usize) -> Array2<f32> {
     Array2::from_elem((height.max(1), width.max(1)), 1.0)
 }
 
-/// Keep `solve_linear_system` referenced for 1-D FFC fallback surfaces.
-#[allow(dead_code)]
-fn ridge_solve_1d(xtx: Vec<f64>, rhs: Vec<f64>, n: usize) -> Result<Vec<f64>> {
-    solve_linear_system(xtx, rhs, n)
-}
-
-pub fn clip01(v: f32) -> f32 {
-    clamp01(v as f64) as f32
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -800,7 +790,7 @@ mod tests {
             }
         }
         let gain = Array2::from_elem((6, 6), 1.2);
-        let gc = GammaModel::legacy(vec![1.05, 0.0]);
+        let gc = GammaModel::curve(vec![0.0, 50.0, 100.0], vec![0.0, 55.0, 100.0]);
         let fused = apply_ffc_gc_fused(&img, &gain, &gc);
         assert!(fused
             .iter()

@@ -1,4 +1,4 @@
-//! Honest ΔE00: same-index cells only. Hide when apply-only / no chart.
+//! Honest ΔE00: same-index cells only.
 
 use crate::color::{
     adapt_xyz_white, delta_e_2000, encoded_to_linear_rgb, lab_d50_to_target_lab, linear_rgb_to_xyz,
@@ -8,25 +8,9 @@ use crate::maps::{
     apply_correction_pixel, fit_correction_model, CorrectionSettings, MappingOptions, ModelKind,
 };
 use crate::refs::ChartPatch;
-use crate::{Error, Result, SATURATION_THRESHOLD};
+use crate::{Error, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DeltaECell {
-    pub index: usize,
-    pub name: String,
-    pub delta_e00: f64,
-    pub saturated: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DeltaEReport {
-    pub cells: Vec<DeltaECell>,
-    pub mean: f64,
-    pub median: f64,
-    pub max: f64,
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CrossValidationReport {
@@ -143,48 +127,4 @@ pub fn mean_delta_e00(measured_srgb: &[Vec3], reference_lab_d50: &[Lab]) -> Resu
         sum += delta_e00_same_index(*rgb, *lab)?;
     }
     Ok(sum / measured_srgb.len() as f64)
-}
-
-/// Hide metrics if apply-only / no chart. Stage ΔE only if that stage had Opt2/manual patches.
-pub fn delta_e_report(
-    patches: Option<&[ChartPatch]>,
-    apply_only: bool,
-    stage_had_opt2_or_manual: bool,
-) -> Option<Result<DeltaEReport>> {
-    if apply_only || !stage_had_opt2_or_manual {
-        return None;
-    }
-    let patches = patches?;
-    if patches.is_empty() {
-        return None;
-    }
-    Some(build_report(patches))
-}
-
-fn build_report(patches: &[ChartPatch]) -> Result<DeltaEReport> {
-    let mut cells = Vec::with_capacity(patches.len());
-    let mut values = Vec::with_capacity(patches.len());
-    for patch in patches {
-        let de = delta_e00_same_index(patch.original_measured_srgb, patch.reference_lab_d50)?;
-        let saturated = patch
-            .original_measured_srgb
-            .iter()
-            .any(|&c| c >= SATURATION_THRESHOLD);
-        cells.push(DeltaECell {
-            index: patch.index,
-            name: patch.name.clone(),
-            delta_e00: de,
-            saturated,
-        });
-        values.push(de);
-    }
-    let mean = values.iter().sum::<f64>() / values.len() as f64;
-    let max = values.iter().copied().fold(0.0, f64::max);
-    let med = median(values);
-    Ok(DeltaEReport {
-        cells,
-        mean,
-        median: med,
-        max,
-    })
 }

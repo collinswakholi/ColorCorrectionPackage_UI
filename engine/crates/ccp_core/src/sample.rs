@@ -1,6 +1,6 @@
 //! Load 8-bit stills (EXIF-oriented) and sample Opt2 `patch_obbs` (inner 0.70, 9×9).
 
-use crate::color::{clamp01, Vec3};
+use crate::color::Vec3;
 use crate::refs::{ChartPatch, ChartSpec, Quad};
 use crate::{Error, Result, SATURATION_THRESHOLD};
 use image::{DynamicImage, ImageDecoder, RgbImage as Gray8};
@@ -551,10 +551,6 @@ fn tiff_is_16bit(data: &[u8]) -> bool {
         }
         _ => false,
     }
-}
-
-pub fn clamp_srgb(rgb: Vec3) -> Vec3 {
-    [clamp01(rgb[0]), clamp01(rgb[1]), clamp01(rgb[2])]
 }
 
 #[cfg(test)]

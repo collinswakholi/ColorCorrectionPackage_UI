@@ -247,14 +247,14 @@ public sealed class PortableComputeTests
                 vm.Compute.FastMode = cycle % 2 == 0;
                 Assert.Equal(mode, vm.Compute.SelectedAccelPolicy);
                 var options = Assert.IsType<CorrectionOptions>(build.Invoke(vm, null));
-                Assert.True(options.CpuLut);
+                Assert.Equal("cpu", options.LutDevice);
                 Assert.Equal(cycle % 2 == 0, options.FastMode);
                 vm.Compute.ForceCpu = false;
-                Assert.False(Assert.IsType<CorrectionOptions>(build.Invoke(vm, null)).CpuLut);
+                Assert.NotEqual("cpu", Assert.IsType<CorrectionOptions>(build.Invoke(vm, null)).LutDevice);
                 Assert.Equal(mode, vm.Compute.SelectedAccelPolicy);
             }
         }
-        vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { CpuLut = true, FastMode = true } });
+        vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { LutDevice = "cpu", FastMode = true } });
         Assert.True(vm.Compute.ForceCpu);
         Assert.True(vm.Compute.FastMode);
         vm.RestoreWorkingItems(new SessionState { Options = new CorrectionOptions { FastMode = false } });

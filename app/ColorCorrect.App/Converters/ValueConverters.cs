@@ -159,39 +159,3 @@ public sealed class LogLevelToWeightConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         AvaloniaProperty.UnsetValue;
 }
-
-public sealed class NumericToStringConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value?.ToString() ?? "";
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var text = value as string;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return AvaloniaProperty.UnsetValue;
-        }
-
-        if (targetType == typeof(int) || targetType == typeof(int?))
-        {
-            return int.TryParse(text, NumberStyles.Integer, culture, out var i) ? i : AvaloniaProperty.UnsetValue;
-        }
-
-        if (targetType == typeof(decimal) || targetType == typeof(decimal?))
-        {
-            return decimal.TryParse(text, NumberStyles.Float | NumberStyles.AllowExponent, culture, out var m)
-                ? m
-                : AvaloniaProperty.UnsetValue;
-        }
-
-        if (targetType == typeof(double) || targetType == typeof(double?))
-        {
-            return double.TryParse(text, NumberStyles.Float | NumberStyles.AllowExponent, culture, out var d)
-                ? d
-                : AvaloniaProperty.UnsetValue;
-        }
-
-        return AvaloniaProperty.UnsetValue;
-    }
-}

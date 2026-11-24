@@ -76,7 +76,7 @@ fn sat_flags_stay_on_measured_index() {
 
 #[test]
 fn apply_gc_image_matches_pixel() {
-    let model = GammaModel::legacy(vec![1.0, 0.0]);
+    let model = GammaModel::curve(vec![0.0, 50.0, 100.0], vec![0.0, 45.0, 100.0]);
     let mut img = Array3::<f32>::zeros((8, 8, 3));
     for y in 0..8 {
         for x in 0..8 {

@@ -17,5 +17,4 @@ public partial class LayoutViewModel : ViewModelBase
     [ObservableProperty] private bool _libraryExpanded;
     [ObservableProperty] private bool _processExpanded = true;
     [ObservableProperty] private bool _modelExpanded;
-    [ObservableProperty] private bool _settingsExpanded;
 }

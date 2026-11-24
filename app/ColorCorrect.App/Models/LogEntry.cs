@@ -19,7 +19,6 @@ public sealed class LogEntry
     public bool IsDetail { get; init; }
 
     public string TimeLabel => string.IsNullOrEmpty(Timestamp) ? "" : $"[{Timestamp}]";
-    public string DisplayLine => IsDetail ? Message : $"{TimeLabel}  {Message}";
     public Thickness BlockMargin => IsDetail ? new Thickness(0, 0, 0, 1) : new Thickness(0, 8, 0, 2);
 
     public string Icon => Level switch

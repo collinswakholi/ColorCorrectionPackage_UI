@@ -45,7 +45,4 @@ public static class ToastService
 
     public static void ShowWarning(string message, int durationMs = 4500) =>
         Show(message, ToastType.Warning, durationMs);
-
-    public static void ShowInfo(string message, int durationMs = 3500) =>
-        Show(message, ToastType.Info, durationMs);
 }

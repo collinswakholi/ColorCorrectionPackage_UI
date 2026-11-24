@@ -19,7 +19,7 @@ public sealed class BatchProgressTests
         var path = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(path, "{\"gc_model\":null,\"gc_coeffs\":[],\"wb_diag\":[1,1,1],\"correction\":null}");
+            File.WriteAllText(path, "{\"gc_model\":null,\"gc_coeffs\":null,\"wb_diag\":[1,1,1],\"correction\":null}");
             var source = new CorrectionOptions { DoGc = true, DoWb = true, DoCc = true, OutputDir = "explicit-export-folder" };
             var captured = MainWindowViewModel.CaptureBatchOptions(source, false, path);
             Assert.True(captured.WriteOutput); Assert.Equal("none", captured.PreviewMode); Assert.Equal("", captured.OutputDir);

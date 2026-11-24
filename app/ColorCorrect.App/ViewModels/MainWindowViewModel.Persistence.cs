@@ -84,7 +84,6 @@ public partial class MainWindowViewModel
         Theme = Layout.IsLightTheme ? "Light" : "Dark",
         TrustedOutputDirs = _trusted.ToList(),
         CatalogFolders = CatalogFolders.Select(folder => folder.Path).ToList(),
-        ForceCpu = Compute.ForceCpu,
         AccelPolicy = Compute.SelectedAccelPolicy.Value,
         ShowLattice = Stage.ShowLattice,
         ShowSample = Stage.ShowSample,
@@ -123,11 +122,7 @@ public partial class MainWindowViewModel
             Stage.Crop = state.Crop is > 0.04 and <= 1 ? state.Crop : 0.75;
             Stage.OverlayCrop = Stage.Crop;
             Layout.IsLightTheme = string.Equals(state.Theme, "Light", StringComparison.OrdinalIgnoreCase);
-            var policy = !string.IsNullOrWhiteSpace(state.AccelPolicy)
-                ? state.AccelPolicy
-                : state.ForceCpu ? "cpu" : "auto";
-            Compute.SelectedAccelPolicy = Pick(AccelPolicies, policy == "cpu" ? "auto" : policy);
-            Compute.ForceCpu = state.ForceCpu || policy == "cpu";
+            Compute.SelectedAccelPolicy = Pick(AccelPolicies, string.IsNullOrWhiteSpace(state.AccelPolicy) ? "auto" : state.AccelPolicy);
             _worker.Policy = Compute.SelectedAccelPolicy.Value;
             Stage.ShowLattice = state.ShowLattice ?? true;
             Stage.ShowSample = state.ShowSample ?? true;
@@ -161,7 +156,7 @@ public partial class MainWindowViewModel
             }
             RestoreWorkingItemsCore(state);
             var skipped = state.Items.Count - Session.Count;
-            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s). Video is not supported.";
+            if (skipped > 0) Job.Status = $"Skipped {skipped} unsupported session item(s); only JPEG, PNG and TIFF stills are supported.";
             return skipped;
         }
         finally
@@ -193,7 +188,7 @@ public partial class MainWindowViewModel
         ApplyReport(null);
         foreach (var dto in state.Items)
         {
-            if (dto.IsVideo || !IsImage(dto.Path))
+            if (!IsImage(dto.Path))
             {
                 continue;
             }
@@ -273,8 +268,8 @@ public partial class MainWindowViewModel
     private void ApplyOptions(CorrectionOptions options)
     {
         Settings.ClearDrafts(notify: false);
-        Compute.ForceCpu = options.CpuLut;
-        Compute.SelectedProcessingDevice = Pick(ProcessingDevices, options.CpuLut ? "cpu" : options.LutDevice);
+        Compute.ForceCpu = options.LutDevice == "cpu";
+        Compute.SelectedProcessingDevice = Pick(ProcessingDevices, options.LutDevice);
         Compute.FastMode = options.FastMode;
         Output.BatchPreviewResults = options.BatchPreviewResults;
         options.Normalize();

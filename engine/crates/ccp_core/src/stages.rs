@@ -12,7 +12,7 @@ use crate::color::{
 use crate::maps::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};
-use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, SATURATION_THRESHOLD, WB_DIAG_SCALE};
+use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, WB_DIAG_SCALE};
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -185,11 +185,11 @@ pub fn extrapolate_saturated(
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GammaModel {
-    /// Legacy descending polynomial coefficients `[a_n, …, a_0]` for L*.
-    /// Kept so version-1 model files apply identically.
+    /// Always empty. Pre-0.1 polynomial GC is no longer applied (models that
+    /// relied on it are rejected at load); the field keeps saved JSON unchanged.
     #[serde(default)]
     pub coeffs: Vec<f64>,
-    /// Monotonic Hermite knots for version-2 models.
+    /// Monotonic Hermite knots.
     #[serde(default)]
     pub knots: Vec<f64>,
     #[serde(default)]
@@ -199,12 +199,14 @@ pub struct GammaModel {
 }
 
 impl GammaModel {
-    pub fn legacy(coeffs: Vec<f64>) -> Self {
+    /// Monotonic Hermite curve through `(knots, values)`.
+    pub fn curve(knots: Vec<f64>, values: Vec<f64>) -> Self {
+        let slopes = monotone_slopes(&knots, &values);
         Self {
-            coeffs,
-            knots: Vec::new(),
-            values: Vec::new(),
-            slopes: Vec::new(),
+            coeffs: Vec::new(),
+            knots,
+            values,
+            slopes,
         }
     }
 
@@ -214,12 +216,12 @@ impl GammaModel {
             && self.knots.len() == self.slopes.len()
     }
 
-    /// Evaluate the fitted lightness mapping. New models use a shape-preserving
-    /// cubic Hermite curve; legacy models retain their polynomial behavior.
+    /// Evaluate the fitted shape-preserving cubic Hermite lightness curve.
+    /// A model without a valid curve (rejected at load) maps L* unchanged.
     pub fn map_lstar(&self, input: f64) -> f64 {
         let x = input.clamp(0.0, 100.0);
         if !self.is_monotonic_curve() {
-            return poly_eval(x, &self.coeffs);
+            return x;
         }
         let last = self.knots.len() - 1;
         if x <= self.knots[0] {
@@ -247,7 +249,8 @@ impl GammaModel {
     }
 }
 
-pub fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
+#[cfg(test)]
+fn poly_eval(x: f64, coeffs: &[f64]) -> f64 {
     let mut result = 0.0;
     for &c in coeffs {
         result = result * x + c;
@@ -460,13 +463,7 @@ fn fit_monotonic_gamma_profile(ref_l: &[f64], measured_l: &[f64]) -> Result<Gamm
     isotonic_non_decreasing(&mut values, &weights);
     values[0] = 0.0;
     values[last] = 100.0;
-    let slopes = monotone_slopes(&knots, &values);
-    Ok(GammaModel {
-        coeffs: Vec::new(),
-        knots,
-        values,
-        slopes,
-    })
+    Ok(GammaModel::curve(knots, values))
 }
 
 /// Fit GC from **named** neutrals only (that chart’s table).
@@ -711,12 +708,6 @@ pub fn apply_wb_inplace(img: &mut Array3<f32>, wb: &WhiteBalance) {
     });
 }
 
-pub fn apply_wb_image(img: &Array3<f32>, wb: &WhiteBalance) -> Array3<f32> {
-    let mut out = img.clone();
-    apply_wb_inplace(&mut out, wb);
-    out
-}
-
 pub fn apply_encoded_lut_inplace(img: &mut Array3<f32>, lut: &[f32], gs: usize) {
     map_rgb_inplace(img, |rgb| {
         let c = crate::maps::sample_encoded_lut(lut, gs, rgb);
@@ -740,16 +731,6 @@ pub fn apply_cc_inplace(
         crate::maps::apply_correction_pixel(model, rgb, settings)
             .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32])
     })
-}
-
-pub fn apply_cc_image(
-    img: &Array3<f32>,
-    model: &CorrectionModel,
-    settings: &CorrectionSettings,
-) -> Result<Array3<f32>> {
-    let mut out = img.clone();
-    apply_cc_inplace(&mut out, model, settings)?;
-    Ok(out)
 }
 
 fn ensure_contiguous(img: &mut Array3<f32>) {
@@ -790,24 +771,10 @@ pub struct StageConfig {
     pub do_cc: bool,
 }
 
-impl StageConfig {
-    pub fn default_on() -> Self {
-        Self {
-            do_sat_extrapolate: true,
-            do_gc: true,
-            do_wb: true,
-            do_cc: true,
-        }
-    }
-}
-
-pub fn default_sat_threshold() -> f64 {
-    SATURATION_THRESHOLD
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SATURATION_THRESHOLD;
 
     #[test]
     fn gamma_max_degree_nine_does_not_exceed_sample_rank() {
@@ -850,9 +817,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_gamma_still_uses_polynomial() {
-        let model = GammaModel::legacy(vec![1.05, -2.0]);
-        assert!((model.map_lstar(50.0) - 50.5).abs() < 1e-12);
+    fn curve_without_knots_is_identity() {
+        let model = GammaModel {
+            coeffs: vec![1.05, -2.0],
+            knots: Vec::new(),
+            values: Vec::new(),
+            slopes: Vec::new(),
+        };
+        assert!(!model.is_monotonic_curve());
+        assert_eq!(model.map_lstar(50.0), 50.0);
     }
 
     fn test_patch(spec: &ChartSpec, name: &str, rgb: Vec3) -> ChartPatch {

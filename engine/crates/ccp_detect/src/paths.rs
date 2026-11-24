@@ -1,4 +1,5 @@
-//! Locate the CCP_New_UI root (`models/opt2` + `refs/neutrals.json`) and Opt2 deploy dir.
+//! Locate the resource root (`models/opt2` + `refs/neutrals.json`, found via `CCP_NEW_UI_ROOT`
+//! or parent-directory discovery) and the Opt2 deploy dir.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -49,23 +50,8 @@ pub fn find_ccp_new_ui_root() -> Option<PathBuf> {
     None
 }
 
-pub fn opt2_candidates(root: &Path) -> Vec<PathBuf> {
-    vec![
-        root.join("models").join("opt2").join("deploy_exports"),
-        root.join("models").join("opt2"),
-    ]
-}
-
 pub fn deploy_dir_from_root(root: &Path) -> PathBuf {
-    for dir in opt2_candidates(root) {
-        if dir.join(PRIMARY_ONNX).is_file() {
-            return dir;
-        }
-    }
-    opt2_candidates(root)
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| root.join("models").join("opt2"))
+    root.join("models").join("opt2")
 }
 
 pub fn default_deploy_dir() -> PathBuf {
@@ -76,27 +62,15 @@ pub fn default_deploy_dir() -> PathBuf {
         return deploy_dir_from_root(&root);
     }
     if let Ok(cwd) = env::current_dir() {
-        for rel in [
-            PathBuf::from("models").join("opt2").join("deploy_exports"),
-            PathBuf::from("models").join("opt2"),
-            PathBuf::from("chart_detection")
-                .join("models")
-                .join("opt2")
-                .join("deploy_exports"),
-        ] {
-            let cand = cwd.join(&rel);
-            if cand.join(PRIMARY_ONNX).is_file() {
-                return cand;
-            }
+        let cand = deploy_dir_from_root(&cwd);
+        if cand.join(PRIMARY_ONNX).is_file() {
+            return cand;
         }
     }
     PathBuf::from("models/opt2")
 }
 
 pub fn primary_onnx_path(deploy_dir: &Path) -> PathBuf {
-    if deploy_dir.join(PRIMARY_ONNX).is_file() {
-        return deploy_dir.join(PRIMARY_ONNX);
-    }
     deploy_dir.join(PRIMARY_ONNX)
 }
 
@@ -104,26 +78,9 @@ pub fn recall_onnx_path(deploy_dir: &Path) -> PathBuf {
     deploy_dir.join(RECALL_ONNX)
 }
 
-pub fn opt2_onnx_candidates(root: &Path) -> Vec<PathBuf> {
-    vec![
-        root.join("models").join("opt2"),
-        root.join("models").join("opt2").join("deploy_exports"),
-    ]
-}
-
 pub fn resolve_opt2_onnx_dir() -> Option<PathBuf> {
-    if let Some(root) = find_ccp_new_ui_root() {
-        for dir in opt2_onnx_candidates(&root) {
-            if dir.join(PRIMARY_ONNX).is_file() {
-                return Some(dir);
-            }
-        }
-    }
     let deploy = default_deploy_dir();
-    if deploy.join(PRIMARY_ONNX).is_file() {
-        return Some(deploy);
-    }
-    None
+    deploy.join(PRIMARY_ONNX).is_file().then_some(deploy)
 }
 
 pub fn plane_onnx_path() -> Option<PathBuf> {
@@ -131,11 +88,6 @@ pub fn plane_onnx_path() -> Option<PathBuf> {
         return Some(PathBuf::from(p));
     }
     let root = find_ccp_new_ui_root()?;
-    [
-        root.join("models").join(PLANE_ONNX),
-        root.join("models").join("opt2").join(PLANE_ONNX),
-        root.join("models").join("plane").join(PLANE_ONNX),
-    ]
-    .into_iter()
-    .find(|candidate| candidate.is_file())
+    let candidate = root.join("models").join("plane").join(PLANE_ONNX);
+    candidate.is_file().then_some(candidate)
 }

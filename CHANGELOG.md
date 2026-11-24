@@ -23,6 +23,15 @@
 - Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
 - Checking that a loaded model and its white reference are unchanged no longer hashes files on the UI thread while you edit settings; the check runs in the background and again, authoritatively, when Apply or a batch starts.
 
+### Removed (app/engine)
+
+- Saved models from before ColorCorrect Studio 0.1 no longer load: bare correction-model JSON, polynomial gamma (`gc_coeffs` without a `gc_model` curve) and single-hidden-layer neural networks without `layer_weights`. The engine reports `invalid_model` with a message to fit a new calibration. Models saved by 0.1.0 and later are unaffected.
+- The engine no longer reads undocumented request aliases that no client sends: `chart_all`, `white_image`/`white_image_path`, `do_sat_extrapolate`, `fit_samples_degree`, `poly_degree`, `nn_tol`, `(nn_)batch_normalization`, `drop_rate`, `rgb_clip_lo`/`rgb_clip_hi`, `ffc.fit_method`, and top-level `ffc_method`/`ffc_tol`/`ffc_cut_off`/`ffc_max_val`. All aliases documented in the protocol reference remain.
+- Models and references are only searched for in the shipped layout (`models/opt2`, `models/plane`, `refs/`); the older `deploy_exports`, `chart_detection/` and flat `models/` locations are gone.
+- The app no longer honours `COLORCORRECT_EXE` or searches `dist/` folders for the engine; use `CCP_ENGINE_EXE`. The missing-resources error names `CCP_NEW_UI_ROOT`.
+- Settings written by 0.1.x are no longer migrated: the pre-layers `HiddenSize`, the duplicate `CpuLut`/`ForceCpu` flags (`LutDevice` carries the choice), and the 0.1.x `cpu` acceleration policy, which now restores as Auto. The app falls back only to `settings.json`, not the pre-release `session.json`, and restored sessions skip unsupported files by format rather than by a retired video flag.
+- Removed dead code, unused XAML styles and resources, and the engine's benchmark and diagnostic examples.
+
 ## 0.3.0
 
 - Support reproducible chart fits with an exact random sample count per patch and a seed. Grid sampling remains available for existing recipes.

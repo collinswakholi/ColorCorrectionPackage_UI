@@ -546,9 +546,6 @@ impl InferenceSession {
     }
 }
 
-pub fn commit_inference_session(path: &Path, ep: GpuEp) -> Result<InferenceSession, String> {
-    commit_inference_session_classified(path, ep).map_err(|failure| failure.reason)
-}
 fn commit_inference_session_classified(
     path: &Path,
     ep: GpuEp,

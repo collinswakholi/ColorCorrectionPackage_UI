@@ -46,12 +46,6 @@ public sealed class CorrectionClient
         var outputPath = Path.Combine(runDir, "corrected" + options.OutputExtension());
         var reportPath = Path.Combine(runDir, "report.json");
         var modelPath = Path.Combine(runDir, "model.json");
-        if (options.ReferenceProfiles.Count > 0 || options.ReferenceAssignments.Count > 0)
-        {
-            await _worker.RequireCapabilityAsync("custom_references_v1", cancellationToken).ConfigureAwait(false);
-            await _worker.RequireCapabilityAsync("chart_identity_v1", cancellationToken).ConfigureAwait(false);
-        }
-        if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
 
         var payload = BaseRun(inputPath, outputPath, reportPath, modelPath, previewDir, options);
         payload["cmd"] = "run";
@@ -143,11 +137,9 @@ public sealed class CorrectionClient
 
         try
         {
-            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "apply",
-                ["cpu_lut"] = options.CpuLut,
                 ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
                 ["policy"] = _worker.Policy,
@@ -261,11 +253,9 @@ public sealed class CorrectionClient
         Directory.CreateDirectory(previewDir);
         try
         {
-            if (options.FastMode) await _worker.RequireCapabilityAsync("combined_lut65_v1", cancellationToken).ConfigureAwait(false);
             var payload = new Dictionary<string, object?>
             {
                 ["cmd"] = "preview_stage",
-                ["cpu_lut"] = options.CpuLut,
                 ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
                 ["policy"] = _worker.Policy,
@@ -310,7 +300,6 @@ public sealed class CorrectionClient
         return new Dictionary<string, object?>
         {
             ["policy"] = _worker.Policy,
-            ["cpu_lut"] = options.CpuLut,
             ["lut_device"] = options.LutDevice,
                 ["fast_mode"] = options.FastMode,
             ["image"] = inputPath,
@@ -346,9 +335,8 @@ public sealed class CorrectionClient
             ["nn_lr"] = options.NnLr,
             ["nn_epochs"] = options.NnEpochs,
             ["nn_patience"] = options.NnPatience,
-            ["nn_tol"] = options.NnTol,
             ["tol"] = options.NnTol,
-            ["poly_degree"] = options.Degree,
+            ["degree"] = options.Degree,
         };
     }
 

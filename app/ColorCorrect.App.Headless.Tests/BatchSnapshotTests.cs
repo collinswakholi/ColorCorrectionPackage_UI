@@ -28,7 +28,7 @@ public sealed class BatchSnapshotTests
         File.WriteAllText(Path.Combine(root, "refs", "neutrals.json"), "{}");
         var model = Path.Combine(root, "source-model.json");
         var white = Path.Combine(root, "white.jpg");
-        File.WriteAllText(model, "{\"gc_model\":null,\"gc_coeffs\":[],\"wb_diag\":[1,1,1],\"correction\":null}");
+        File.WriteAllText(model, "{\"gc_model\":null,\"gc_coeffs\":null,\"wb_diag\":[1,1,1],\"correction\":null}");
         File.WriteAllText(white, "original white bytes");
         var options = new CorrectionOptions { DoFfc = true, DoGc = true, DoCc = true, WhiteImagePath = white, BatchPreviewResults = false };
         try

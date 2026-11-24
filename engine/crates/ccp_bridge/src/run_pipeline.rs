@@ -452,9 +452,10 @@ pub struct SavedPipeline {
     pub do_gc: bool,
     pub do_wb: bool,
     pub do_cc: bool,
-    /// Version-1 polynomial field. Read indefinitely for model compatibility.
+    /// Pre-0.1 polynomial GC. Always written as null; a model that still relies
+    /// on it is rejected by [`load_saved`] with a refit message.
     pub gc_coeffs: Option<Vec<f64>>,
-    /// Version-2 endpoint-safe monotonic lightness curve.
+    /// Endpoint-safe monotonic lightness curve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gc_model: Option<GammaModel>,
     pub wb_diag: Option<[f64; 3]>,
@@ -519,8 +520,6 @@ impl SavedPipeline {
         if self.do_gc {
             if let Some(model) = &self.gc_model {
                 lut.gc = Some(model.clone());
-            } else if let Some(coeffs) = &self.gc_coeffs {
-                lut.gc = Some(GammaModel::legacy(coeffs.clone()));
             }
         }
         if self.do_wb {
@@ -836,14 +835,6 @@ pub fn load_neutrals() -> HashMap<String, Vec<String>> {
     load_neutrals_table(None).unwrap_or_else(|_| ccp_core::refs::embedded_neutrals_table())
 }
 
-pub fn rgb_image_to_array3(img: &RgbImage) -> Result<Array3<f32>> {
-    Array3::from_shape_vec(
-        (img.height as usize, img.width as usize, 3),
-        img.rgb.clone(),
-    )
-    .map_err(|e| Error::Message(e.to_string()))
-}
-
 pub fn rgb_image_into_array3(img: RgbImage) -> Result<Array3<f32>> {
     Array3::from_shape_vec((img.height as usize, img.width as usize, 3), img.rgb)
         .map_err(|e| Error::Message(e.to_string()))
@@ -859,12 +850,6 @@ fn array3_f32s(arr: &Array3<f32>) -> std::borrow::Cow<'_, [f32]> {
 
 fn f32_to_u8(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
-}
-
-pub fn array3_to_rgb_image(arr: &Array3<f32>) -> Result<RgbImage> {
-    let height = arr.shape()[0] as u32;
-    let width = arr.shape()[1] as u32;
-    Ok(RgbImage::new(width, height, array3_f32s(arr).into_owned())?)
 }
 
 fn array3_to_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
@@ -932,23 +917,6 @@ fn encode_jpeg(rgb: &Rgb8, path: &Path, quality: u8) -> Result<()> {
                 format!("JPEG encode failed: {e}"),
             )
         })
-}
-
-pub fn write_preview_jpeg(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
-    let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let rgb = preview_rgb8(arr)?;
-    encode_jpeg(&rgb, path, 72)
-}
-
-pub fn write_preview_png(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
-    let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    encode_preview_png(&preview_rgb8(arr)?, path)
 }
 
 fn write_preview_rgb_file(rgb: &Rgb8, path: &Path) -> Result<()> {
@@ -1122,9 +1090,7 @@ fn requested_ffc_method(req: &Value) -> Result<FfcFitMethod> {
         Some(Value::Object(map)) => Some(map),
         _ => return Err(Error::Message("ffc must be an object".into())),
     };
-    let selector = fields
-        .and_then(|m| m.get("method").or_else(|| m.get("fit_method")))
-        .or_else(|| req.get("ffc_method"));
+    let selector = fields.and_then(|m| m.get("method"));
     match selector {
         None => Ok(FfcFitMethod::Poly),
         Some(value) => match value.as_str().map(str::to_ascii_lowercase).as_deref() {
@@ -1178,30 +1144,22 @@ fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> Result<FfcFitParams
         upsample: Upsample::Cubic,
         nn_max_iter: nn_max_iter as usize,
         tol: {
-            let v = json_f64(&ffc, &["tol"], json_f64(req, &["ffc_tol"], 1e-8));
+            let v = json_f64(&ffc, &["tol"], 1e-8);
             if v.is_finite() && v > 0.0 {
                 v
             } else {
                 1e-8
             }
         },
-        cut_off: json_f64(
-            &ffc,
-            &["cut_off", "ffc_cut_off"],
-            json_f64(req, &["ffc_cut_off"], 1.3),
-        ) as f32,
-        max_val: json_f64(
-            &ffc,
-            &["max_val", "ffc_max_val"],
-            json_f64(req, &["ffc_max_val"], 1.8),
-        ) as f32,
+        cut_off: json_f64(&ffc, &["cut_off"], 1.3) as f32,
+        max_val: json_f64(&ffc, &["max_val"], 1.8) as f32,
     })
 }
 
 fn mapping_from_req(req: &Value) -> MappingOptions {
     let defaults = MappingOptions::default();
     let include_combinations = json_bool(req, &["include_combinations"], true);
-    let poly_degree = json_i64(req, &["degree", "poly_degree", "fit_samples_degree"], 2) as i32;
+    let poly_degree = json_i64(req, &["degree"], 2) as i32;
     let pls = req.get("pls").cloned().unwrap_or(Value::Null);
     let pls_components = json_i64(
         &pls,
@@ -1231,15 +1189,11 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         .to_ascii_lowercase();
     let nn_batch_norm = json_bool(
         &nn,
-        &["batch_norm", "batch_normalization"],
-        json_bool(req, &["nn_batch_norm", "nn_batch_normalization"], false),
+        &["batch_norm"],
+        json_bool(req, &["nn_batch_norm"], false),
     );
-    let nn_dropout = json_f64(
-        &nn,
-        &["dropout", "drop_rate"],
-        json_f64(req, &["nn_dropout", "drop_rate"], 0.0),
-    )
-    .clamp(0.0, 0.8);
+    let nn_dropout =
+        json_f64(&nn, &["dropout"], json_f64(req, &["nn_dropout"], 0.0)).clamp(0.0, 0.8);
     let nn_epochs = json_i64(
         &nn,
         &["epochs", "nn_epochs"],
@@ -1255,11 +1209,7 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         &["lr", "learning_rate"],
         json_f64(req, &["nn_lr"], 0.001),
     );
-    let tol = json_f64(
-        &nn,
-        &["tol", "nn_tol"],
-        json_f64(req, &["tol", "nn_tol"], 1e-6),
-    );
+    let tol = json_f64(&nn, &["tol"], json_f64(req, &["tol"], 1e-6));
     let tol = if tol.is_finite() && tol > 0.0 {
         tol
     } else {
@@ -1280,8 +1230,8 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         nn_patience,
         learning_rate,
         tol,
-        clip_lo: json_f64(req, &["clip_lo", "rgb_clip_lo"], -0.2),
-        clip_hi: json_f64(req, &["clip_hi", "rgb_clip_hi"], 1.3),
+        clip_lo: json_f64(req, &["clip_lo"], -0.2),
+        clip_hi: json_f64(req, &["clip_hi"], 1.3),
     }
 }
 
@@ -1992,13 +1942,13 @@ pub fn run_from_json_ex(
     let handshake = load_handshake_value(req)?;
     let crop = json_f64(req, &["crop"], 0.75);
     let face = json_i64(req, &["face"], 0).max(0) as usize;
-    let use_all = json_bool(req, &["use_all", "chart_all"], false);
+    let use_all = json_bool(req, &["use_all"], false);
     let faces = parse_handshake(&handshake, face, use_all, crop)?;
     let reference_context = resolve_request_references(req, &faces)?;
 
-    let white_path = json_str(req, &["white", "white_image", "white_image_path"]);
+    let white_path = json_str(req, &["white"]);
     let stages = StageConfig {
-        do_sat_extrapolate: json_bool(req, &["do_sat", "do_sat_extrapolate"], true),
+        do_sat_extrapolate: json_bool(req, &["do_sat"], true),
         do_gc: json_bool(req, &["do_gc"], true),
         do_wb: json_bool(req, &["do_wb"], true),
         do_cc: json_bool(req, &["do_cc"], true),
@@ -2484,34 +2434,44 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
     let invalid =
         |error: &dyn std::fmt::Display| Error::coded(ErrorCode::InvalidModel, error.to_string());
     let v: Value = serde_json::from_str(&text).map_err(|e| invalid(&e))?;
-    if v.get("correction").is_some()
-        || v.get("gc_coeffs").is_some()
-        || v.get("gc_model").is_some()
-        || v.get("wb_diag").is_some()
+    let unsupported = || {
+        invalid(&format!(
+            "{} was written by a release older than ColorCorrect Studio 0.1 and is no longer supported. Fit a new calibration.",
+            path.display()
+        ))
+    };
+    if v.get("correction").is_none()
+        && v.get("gc_coeffs").is_none()
+        && v.get("gc_model").is_none()
+        && v.get("wb_diag").is_none()
     {
-        let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
-        if let Some(correction) = &saved.correction {
-            correction.validate()?;
-        }
-        if let Some(context) = &saved.reference_context {
-            if context.version != 1 {
-                return Err(invalid(&"unsupported reference context version"));
-            }
-            for profile in &context.reference_profiles {
-                profile.resolve().map_err(|e| invalid(&e))?;
-            }
-        }
-        return Ok(saved);
+        // Bare correction models predate the saved-pipeline format; no
+        // tagged release wrote them.
+        return Err(invalid(&format!(
+            "Not a ColorCorrect saved pipeline: {}. Bare correction models from releases older than ColorCorrect Studio 0.1 are no longer supported. Fit a new calibration.",
+            path.display()
+        )));
     }
-    let correction: CorrectionModel = serde_json::from_value(v).map_err(|e| invalid(&e))?;
-    correction.validate()?;
-    Ok(SavedPipeline {
-        version: 1,
-        kind: correction.kind.name().into(),
-        do_cc: true,
-        correction: Some(correction),
-        ..SavedPipeline::default()
-    })
+    let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
+    match &saved.gc_model {
+        Some(gc) if !gc.is_monotonic_curve() => return Err(unsupported()),
+        None if saved.gc_coeffs.as_ref().is_some_and(|c| !c.is_empty()) => {
+            return Err(unsupported())
+        }
+        _ => {}
+    }
+    if let Some(correction) = &saved.correction {
+        correction.validate()?;
+    }
+    if let Some(context) = &saved.reference_context {
+        if context.version != 1 {
+            return Err(invalid(&"unsupported reference context version"));
+        }
+        for profile in &context.reference_profiles {
+            profile.resolve().map_err(|e| invalid(&e))?;
+        }
+    }
+    Ok(saved)
 }
 
 #[derive(Clone, Debug)]
@@ -2565,16 +2525,6 @@ impl ApplyOptions {
         }
     }
 
-    /// Keep the historical Rust constructor infallible for library callers.
-    /// Out-of-range FFC parameters fall back to the saved/default parameters;
-    /// use [`ApplyOptions::try_from_req`] to reject them instead.
-    pub fn from_req(req: &Value, saved: &SavedPipeline) -> Self {
-        let method = requested_ffc_method(req).unwrap_or(FfcFitMethod::Poly);
-        let ffc = Self::ffc_from_req(req, saved, method)
-            .unwrap_or_else(|_| saved.ffc_params.clone().unwrap_or_default());
-        Self::with_params(req, saved, ffc)
-    }
-
     pub fn try_from_req(req: &Value, saved: &SavedPipeline) -> Result<Self> {
         let ffc = if json_bool(req, &["do_ffc"], false) {
             let ffc = Self::ffc_from_req(req, saved, requested_ffc_method(req)?)?;
@@ -2592,7 +2542,7 @@ impl ApplyOptions {
         saved: &SavedPipeline,
         method: FfcFitMethod,
     ) -> Result<FfcFitParams> {
-        if req.get("ffc").is_some() || req.get("ffc_method").is_some() {
+        if req.get("ffc").is_some() {
             ffc_params_from_req(req, method)
         } else {
             Ok(saved.ffc_params.clone().unwrap_or_default())
@@ -2606,7 +2556,7 @@ impl ApplyOptions {
             do_gc: json_bool(req, &["do_gc"], saved.do_gc),
             do_wb: json_bool(req, &["do_wb"], saved.do_wb),
             do_cc: json_bool(req, &["do_cc"], saved.do_cc),
-            white: json_str(req, &["white", "white_image", "white_image_path"])
+            white: json_str(req, &["white"])
                 .filter(|s| !s.is_empty())
                 .map(PathBuf::from),
             crop_rect: json_str(req, &["crop_rect"]).map(str::to_string),
@@ -2620,14 +2570,6 @@ impl ApplyOptions {
 
 /// Apply a saved GC+WB+CC model. No detect. No invented Classic-24 ΔE.
 /// FFC is re-fit from the current white still when `do_ffc` is on — it is never in the cube.
-pub fn compute_ffc_gain(
-    white: &Path,
-    crop_rect: Option<&str>,
-    params: &FfcFitParams,
-) -> Result<Array2<f32>> {
-    Ok((*CachedFfc::compute(white, crop_rect, params)?.gain).clone())
-}
-
 pub fn apply_saved_to_work(
     work: &mut Array3<f32>,
     saved: &SavedPipeline,
@@ -2676,27 +2618,6 @@ pub fn apply_saved_to_work(
             apply_cc_accel(work, model, settings)?;
         }
     }
-    Ok(())
-}
-
-pub fn u8_rgb_to_array3(width: u32, height: u32, rgb: &[u8]) -> Result<Array3<f32>> {
-    let n = width as usize * height as usize * 3;
-    if rgb.len() != n {
-        return Err(Error::Message(format!("rgb24 length {} != {n}", rgb.len())));
-    }
-    let floats: Vec<f32> = rgb.iter().map(|b| *b as f32 / 255.0).collect();
-    Array3::from_shape_vec((height as usize, width as usize, 3), floats)
-        .map_err(|e| Error::Message(e.to_string()))
-}
-
-pub fn array3_to_u8_rgb(arr: &Array3<f32>, dest: &mut [u8]) -> Result<()> {
-    let src = array3_f32s(arr);
-    if dest.len() != src.len() {
-        return Err(Error::Message("rgb24 dest size mismatch".into()));
-    }
-    dest.par_iter_mut()
-        .zip(src.par_iter())
-        .for_each(|(d, s)| *d = f32_to_u8(*s));
     Ok(())
 }
 
@@ -2978,7 +2899,10 @@ mod tests {
             do_gc: true,
             do_wb: true,
             do_cc: true,
-            gc_model: Some(GammaModel::legacy(vec![0.002, 0.8, 0.0])),
+            gc_model: Some(GammaModel::curve(
+                vec![0.0, 50.0, 100.0],
+                vec![0.0, 45.0, 100.0],
+            )),
             wb_diag: Some([1.12, 0.91, 1.03]),
             correction: Some(CorrectionModel {
                 kind: ModelKind::Ccm3x3,
@@ -3677,7 +3601,12 @@ mod tests {
             assert!(ApplyOptions::try_from_req(&req, &saved).is_ok());
         }
         assert_eq!(
-            requested_ffc_method(&json!({"ffc_method":"Polynomial"})).unwrap(),
+            requested_ffc_method(&json!({"ffc":{"method":"Polynomial"}})).unwrap(),
+            FfcFitMethod::Poly
+        );
+        // Undocumented pre-0.2 spellings are no longer read.
+        assert_eq!(
+            requested_ffc_method(&json!({"ffc_method":"nn","ffc":{"fit_method":"pls"}})).unwrap(),
             FfcFitMethod::Poly
         );
     }
@@ -4458,10 +4387,13 @@ mod tests {
             };
             if kind == ModelKind::NeuralNet {
                 model.hidden_size = 8;
+                model.nn_residual = true;
                 model.w1 = vec![0.01; 64];
                 model.b1 = vec![0.0; 8];
                 model.w2 = vec![0.02; 24];
                 model.b2 = vec![0.0; 3];
+                model.layer_weights = vec![model.w1.clone(), model.w2.clone()];
+                model.layer_biases = vec![model.b1.clone(), model.b2.clone()];
             }
             if kind == ModelKind::Pls {
                 model.pls_components = 4;
@@ -4501,37 +4433,59 @@ mod tests {
                 Some(FfcFitMethod::Poly)
             );
         }
+    }
 
-        let nn = CorrectionModel {
-            kind: ModelKind::NeuralNet,
-            poly_degree: 1,
-            feature_count: 4,
-            hidden_size: 4,
-            w1: vec![0.2; 16],
-            b1: vec![0.0; 4],
-            w2: vec![0.1; 12],
-            b2: vec![0.0; 3],
+    #[test]
+    fn load_saved_rejects_pre_studio_models_with_refit_message() {
+        let dir = std::env::temp_dir().join(format!("ccp-pre-studio-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bare = CorrectionModel {
+            kind: ModelKind::Ccm3x3,
+            feature_count: 3,
+            coefficients: vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
             ..CorrectionModel::default()
         };
-        let dir = std::env::temp_dir().join(format!("ccp-nn-bare-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let path = dir.join("nn.json");
-        std::fs::write(&path, serde_json::to_string(&nn).unwrap()).unwrap();
-        let loaded = load_saved(&path).unwrap();
-        assert_eq!(loaded.kind, "nn");
-        assert_eq!(loaded.correction.unwrap().w1.len(), 16);
-
-        let legacy = SavedPipeline {
+        let polynomial_gc = SavedPipeline {
             version: 1,
             do_gc: true,
             gc_coeffs: Some(vec![1.05, -2.0]),
             gc_model: None,
             ..SavedPipeline::default()
         };
-        let legacy_json = serde_json::to_string(&legacy).unwrap();
-        let legacy_back: SavedPipeline = serde_json::from_str(&legacy_json).unwrap();
-        let (legacy_lut, _) = legacy_back.lut_pipeline().unwrap();
-        assert!((legacy_lut.gc.unwrap().map_lstar(50.0) - 50.5).abs() < 1e-12);
+        let mut uncurved_gc = progress_fixture();
+        uncurved_gc.gc_model = Some(GammaModel {
+            coeffs: vec![1.05, -2.0],
+            knots: Vec::new(),
+            values: Vec::new(),
+            slopes: Vec::new(),
+        });
+        let cases = [
+            serde_json::to_string(&bare).unwrap(),
+            serde_json::to_string(&polynomial_gc).unwrap(),
+            serde_json::to_string(&uncurved_gc).unwrap(),
+        ];
+        for (index, text) in cases.iter().enumerate() {
+            let path = dir.join(format!("legacy-{index}.json"));
+            let bare = index == 0;
+            std::fs::write(&path, text).unwrap();
+            let error = load_saved(&path).expect_err("pre-Studio model must be rejected");
+            assert_eq!(error.code(), ErrorCode::InvalidModel, "{error}");
+            let message = error.to_string();
+            assert!(
+                message.contains("older than ColorCorrect Studio 0.1")
+                    && message.contains("Fit a new calibration")
+                    && (!bare || message.contains("Not a ColorCorrect saved pipeline")),
+                "{message}"
+            );
+        }
+        let current = SavedPipeline {
+            gc_coeffs: Some(Vec::new()),
+            ..progress_fixture()
+        };
+        let path = dir.join("current.json");
+        std::fs::write(&path, serde_json::to_string(&current).unwrap()).unwrap();
+        load_saved(&path).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -4544,16 +4498,9 @@ mod tests {
         }
         let mut miscounted = progress_fixture();
         miscounted.correction.as_mut().unwrap().feature_count = 1_000;
-        let bare = CorrectionModel {
-            kind: ModelKind::RootPolynomial2,
-            feature_count: 6,
-            coefficients: vec![1.0],
-            ..CorrectionModel::default()
-        };
         let cases = [
             serde_json::to_string(&truncated).unwrap(),
             serde_json::to_string(&miscounted).unwrap(),
-            serde_json::to_string(&bare).unwrap(),
         ];
         for (index, text) in cases.iter().enumerate() {
             let path = dir.join(format!("crafted-{index}.json"));

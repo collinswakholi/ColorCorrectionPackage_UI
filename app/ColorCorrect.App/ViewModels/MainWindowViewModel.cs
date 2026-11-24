@@ -104,7 +104,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         HookWorkerProgress();
         if (_persistenceEnabled)
         {
-            var hasSavedSettings = File.Exists(SessionStore.SettingsPath()) || File.Exists(SessionStore.FilePath());
+            var hasSavedSettings = File.Exists(SessionStore.SettingsPath());
             RestoreSession();
             if (!hasSavedSettings)
             {
@@ -159,8 +159,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        // Same side effects as the former generated On*Changed hooks, then re-raise on the
-        // shell so anything still observing the shell's forwarders stays current.
+        // Same side effects as the former generated On*Changed hooks. Views bind through
+        // Settings.*, so the shell does not re-raise sub-view-model property names.
         switch (e.PropertyName)
         {
             case nameof(CorrectionSettingsViewModel.DoFfc): OnDoFfcChanged(Settings.DoFfc); break;
@@ -197,8 +197,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(CorrectionSettingsViewModel.IncludeCombinations): OnIncludeCombinationsChanged(Settings.IncludeCombinations); break;
             case nameof(CorrectionSettingsViewModel.SkipSaturated): OnSkipSaturatedChanged(Settings.SkipSaturated); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The working session: the active still, session and selection flags, counts, catalog filter and image metadata.</summary>
@@ -215,8 +213,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(WorkspaceViewModel.SampleQuery): OnSampleQueryChanged(Workspace.SampleQuery); break;
             case nameof(WorkspaceViewModel.SelectedGroup): OnSelectedGroupChanged(Workspace.SelectedGroup); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Processing engine state: worker startup and readiness, processing device and acceleration choices, and the GPU setup options.</summary>
@@ -238,8 +234,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(ComputeViewModel.SelectedSetupMode): OnSelectedSetupModeChanged(Compute.SelectedSetupMode); break;
             case nameof(ComputeViewModel.SetupSummary): OnSetupSummaryChanged(Compute.SetupSummary); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The image stage: preview bitmaps, chart and plane overlay geometry, crop, face choice, display toggles and the selected processing stage.</summary>
@@ -260,8 +254,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(StageViewModel.IsStagePreviewLoading): OnIsStagePreviewLoadingChanged(Stage.IsStagePreviewLoading); break;
             case nameof(StageViewModel.LastPreviewDir): OnLastPreviewDirChanged(Stage.LastPreviewDir); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The running operation: busy and batching flags, job and batch progress with their labels, the current stage, the status line and the last error.</summary>
@@ -276,8 +268,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(JobViewModel.JobProgress): OnJobProgressChanged(Job.JobProgress); break;
             case nameof(JobViewModel.BatchProgress): OnBatchProgressChanged(Job.BatchProgress); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Outputs and models: output folder and format, which results to save and which can be saved, save progress, the report flag, the loaded model and its status, and the batch preview option.</summary>
@@ -294,8 +284,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(OutputViewModel.UseLoadedModel): OnUseLoadedModelChanged(Output.UseLoadedModel); break;
             case nameof(OutputViewModel.BatchPreviewResults): OnBatchPreviewResultsChanged(Output.BatchPreviewResults); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Window layout preferences: light/dark theme with its label and hint, and which sidebar sections are expanded.</summary>
@@ -307,8 +295,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             case nameof(LayoutViewModel.IsLightTheme): OnIsLightThemeChanged(Layout.IsLightTheme); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>
@@ -537,7 +523,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }
         if (skipped > 0)
         {
-            Job.Status = $"Skipped {skipped} unsupported or unreadable file(s); video is not supported.";
+            Job.Status = $"Skipped {skipped} unsupported or unreadable file(s); only JPEG, PNG and TIFF stills are supported.";
             Log("Import", Job.Status, LogLevel.Warning);
         }
     }
@@ -877,15 +863,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Log("Output", $"Opened {dir}.");
     }
 
-    [RelayCommand]
-    private void SelectItem(SessionItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            HandleSessionClick(item, toggle: false, range: false);
-        }
-    }
-
     [RelayCommand(CanExecute = nameof(CanNavigatePrevious))]
     private void PreviousSession() => NavigateSession(-1);
 
@@ -904,15 +881,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         if (next >= 0 && next < Session.Count)
         {
             HandleSessionClick(Session[next], toggle: false, range: false);
-        }
-    }
-
-    [RelayCommand]
-    private void AddSample(CatalogItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            AddPaths([item.Path], collapseLibrary: false);
         }
     }
 
@@ -1024,32 +992,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         File.Copy(Output.LoadedModelPath, dest, overwrite: true);
         Output.ModelIoStatus = $"Saved {Path.GetFileName(dest)}";
         Log("Model", $"Saved {Path.GetFileName(dest)}.", LogLevel.Success, [dest]);
-    }
-
-    [RelayCommand]
-    private async Task SaveItemAsync(SessionItemViewModel? item)
-    {
-        if (item is null || Dialogs is null)
-        {
-            return;
-        }
-
-        if (!File.Exists(item.CorrectedPath) && !await MaterializeCorrectedAsync(item))
-        {
-            Job.Status = "Could not write a full-resolution corrected still.";
-            ToastService.ShowWarning(Job.Status);
-            return;
-        }
-
-        var dest = await Dialogs.SaveImageAsync(Path.GetFileNameWithoutExtension(item.Path) + "_corrected" + Path.GetExtension(item.CorrectedPath));
-        if (string.IsNullOrWhiteSpace(dest))
-        {
-            return;
-        }
-
-        File.Copy(item.CorrectedPath, dest, overwrite: true);
-        Job.Status = $"Saved {Path.GetFileName(dest)}";
-        Log("Save", dest);
     }
 
     [RelayCommand]
@@ -1792,7 +1734,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             : [100];
         return new CorrectionOptions
         {
-            CpuLut = Compute.ForceCpu,
             LutDevice = Compute.SelectedProcessingDevice.Value,
             FastMode = Compute.FastMode,
             BatchPreviewResults = Output.BatchPreviewResults,
@@ -1808,7 +1749,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             OutputFormat = Output.SelectedOutputFormat.Value,
             OutputDir = Output.OutputDir,
             PlsComponents = (int)Math.Clamp(Settings.PlsComponents, 0, 64),
-            HiddenSize = hiddenLayers[0],
             HiddenLayers = hiddenLayers,
             NnOptimizer = Settings.SelectedNnOptimizer.Value,
             NnBatchNormalization = Settings.NnBatchNormalization,
@@ -2224,16 +2164,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         Stage.OverlayScaleX = Stage.NaturalWidth / Math.Max(1, _sourceWidth);
         Stage.OverlayScaleY = Stage.NaturalHeight / Math.Max(1, _sourceHeight);
-    }
-
-    private static int MapSourceToPreview(int source, int sourceExtent, int previewExtent)
-    {
-        if (sourceExtent <= 1 || previewExtent <= 1 || sourceExtent == previewExtent)
-        {
-            return source;
-        }
-
-        return (int)Math.Clamp((long)source * previewExtent / sourceExtent, 0, previewExtent - 1);
     }
 
     private static int MapPreviewToSource(int preview, int previewExtent, int sourceExtent)

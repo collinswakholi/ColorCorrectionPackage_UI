@@ -153,7 +153,10 @@ mod tests {
             do_gc: true,
             do_wb: true,
             do_cc: true,
-            gc_model: Some(GammaModel::legacy(vec![0.002, 0.8, 0.])),
+            gc_model: Some(GammaModel::curve(
+                vec![0.0, 50.0, 100.0],
+                vec![0.0, 45.0, 100.0],
+            )),
             wb_diag: Some([1.12, 0.91, 1.03]),
             correction: Some(CorrectionModel {
                 kind: ModelKind::Ccm3x3,
@@ -209,7 +212,7 @@ mod tests {
             &combined_lut_cached(&changed, &options).unwrap()
         ));
         changed = saved.clone();
-        changed.gc_model.as_mut().unwrap().coeffs[1] = 0.75;
+        changed.gc_model.as_mut().unwrap().values[1] = 40.0;
         assert!(!Arc::ptr_eq(
             &old,
             &combined_lut_cached(&changed, &options).unwrap()

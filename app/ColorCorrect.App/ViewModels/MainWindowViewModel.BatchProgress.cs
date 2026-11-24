@@ -33,8 +33,8 @@ public partial class MainWindowViewModel
             using var document = JsonDocument.Parse(File.ReadAllText(appliedModel));
             var model = document.RootElement;
             static bool Present(JsonElement model, string name) => model.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null;
-            captured.DoGc &= Present(model, "gc_model") || (model.TryGetProperty("gc_coeffs", out var coefficients)
-                && coefficients.ValueKind == JsonValueKind.Array && coefficients.GetArrayLength() > 0);
+            // gc_coeffs is always null in Studio models; only the gc_model curve is applied.
+            captured.DoGc &= Present(model, "gc_model");
             captured.DoWb &= Present(model, "wb_diag");
             if (model.TryGetProperty("correction", out var correction)) captured.DoCc &= correction.ValueKind != JsonValueKind.Null;
         }

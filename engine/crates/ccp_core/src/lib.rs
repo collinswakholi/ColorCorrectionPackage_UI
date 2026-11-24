@@ -53,10 +53,6 @@ pub enum Error {
         height: u32,
         max_pixels: u64,
     },
-    #[error("apply-only / no chart: ΔE metrics are hidden")]
-    MetricsHidden,
-    #[error("Phase 2 reconciler is disabled until a .ts path exists")]
-    ReconcilerDisabled,
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]

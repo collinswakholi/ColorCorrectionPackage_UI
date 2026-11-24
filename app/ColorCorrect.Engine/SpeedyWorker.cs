@@ -149,21 +149,6 @@ public sealed class SpeedyWorker : IAsyncDisposable
         }
     }
 
-    public async Task<WorkerReply> ExecAsync(
-        IReadOnlyList<string> argv,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-    {
-        // Legacy argv path is not used by ColorCorrect Studio. Map a lone detect/correct token to typed cmds.
-        var cmd = argv.Count > 0 ? argv[0] : "ping";
-        var payload = new Dictionary<string, object?> { ["cmd"] = cmd == "correct" ? "run" : cmd };
-        var result = await SendAsync(payload, timeout, cancellationToken).ConfigureAwait(false);
-        var ok = result.TryGetProperty("ok", out var okEl) && okEl.ValueKind != JsonValueKind.False && okEl.GetBoolean();
-        var raw = result.GetRawText();
-        var err = result.TryGetProperty("error", out var e) ? e.GetString() ?? "" : "";
-        return new WorkerReply(ok, ok ? 0 : 1, raw, err, raw);
-    }
-
     public async Task<DetectOutcome> DetectAsync(
         string inputPath,
         double crop = 0.75,
