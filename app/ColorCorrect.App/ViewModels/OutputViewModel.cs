@@ -1,9 +1,3 @@
-using System;
-using System.Collections.ObjectModel;
-using Avalonia;
-using Avalonia.Media.Imaging;
-using ColorCorrect.App.Models;
-using ColorCorrect.Engine;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ColorCorrect.App.ViewModels;
@@ -34,7 +28,8 @@ public partial class OutputViewModel : ViewModelBase
     [ObservableProperty] private bool _useLoadedModel;
     [ObservableProperty] private string _modelLabel = "No model loaded";
     [ObservableProperty] private string _modelIoStatus = "";
-    [ObservableProperty] private string _savedModelSummary = "";
-    [ObservableProperty] private bool _hasSavedModelSummary;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasSavedModelSummary))] private string _savedModelSummary = "";
     [ObservableProperty] private bool _batchPreviewResults = true;
+
+    public bool HasSavedModelSummary => !string.IsNullOrWhiteSpace(SavedModelSummary);
 }

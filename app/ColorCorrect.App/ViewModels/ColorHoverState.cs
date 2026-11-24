@@ -21,7 +21,6 @@ public partial class ColorHoverState : ObservableObject
     [ObservableProperty] private string _extra = "";
     [ObservableProperty] private IBrush? _swatch;
     [ObservableProperty] private IBrush? _swatch2;
-    [ObservableProperty] private string _swatch2Label = "";
     [ObservableProperty] private bool _isCompare;
     [ObservableProperty] private string _sampleLabel = "";
     [ObservableProperty] private string _refR = "";
@@ -84,7 +83,6 @@ public partial class ColorHoverState : ObservableObject
         var after = double.IsFinite(row.After) ? row.After.ToString("0.00") : "—";
         Extra = row.Saturated ? $"ΔE {before} → {after}  sat" : $"ΔE {before} → {after}";
         Swatch2 = new SolidColorBrush(Color.FromRgb(rr, rg, rb));
-        Swatch2Label = "Reference";
         IsVisible = true;
         OnPropertyChanged(nameof(HasExtra));
         OnPropertyChanged(nameof(HasSwatch2));

@@ -162,7 +162,7 @@ public partial class MainWindowViewModel
         finally
         {
             _restoring = wasRestoring;
-            UpdateCcSummary(); NotifyRunCommands(); ScheduleSave();
+            UpdateProcessSummary(); NotifyRunCommands(); ScheduleSave();
         }
     }
 
@@ -316,6 +316,6 @@ public partial class MainWindowViewModel
         Output.LoadedModelPath = model;
         Output.UseLoadedModel = options.UseLoadedModel == true && File.Exists(model);
         _loadedModelPlane = FfcPlane.TryLoad(model);
-        UpdateCcSummary();
+        UpdateProcessSummary();
     }
 }

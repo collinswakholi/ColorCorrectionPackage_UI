@@ -154,6 +154,5 @@ public partial class CorrectionSettingsViewModel : ViewModelBase
     [ObservableProperty] private string _degreeLabel = "Polynomial degree";
     [ObservableProperty] private bool _showFfcNn;
     [ObservableProperty] private bool _showFfcIter;
-    [ObservableProperty] private string _ccSummary = "Linear · degree 2";
     [ObservableProperty] private string _processSummary = "FFC off · GC 5 · WB · CC Root polynomial";
 }

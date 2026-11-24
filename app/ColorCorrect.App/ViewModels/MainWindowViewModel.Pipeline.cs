@@ -391,28 +391,28 @@ public partial class MainWindowViewModel
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnDoGcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnDoWbChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnDoCcChanged(bool value)
     {
         NotifyStageRadios();
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnSelectedFfcFitMethodChanged(NamedValue value)
@@ -421,48 +421,48 @@ public partial class MainWindowViewModel
         Settings.ShowFfcNn = value.Value == "nn";
         Settings.ShowFfcIter = value.Value is "nn" or "pls";
         RefreshValidation();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcTolChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcCutOffChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcMaxValChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnClipLoChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnClipHiChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcNnMaxIterChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcBinsChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnFfcSmoothWindowChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnFfcDegreeChanged(decimal value)
     {
-        UpdateCcSummary();
+        UpdateProcessSummary();
         if (!_restoring) ScheduleSave();
     }
     private void OnForceCpuChanged(bool value)

@@ -265,8 +265,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             case nameof(JobViewModel.Busy): OnBusyChanged(Job.Busy); break;
             case nameof(JobViewModel.IsBatching): OnIsBatchingChanged(Job.IsBatching); break;
-            case nameof(JobViewModel.JobProgress): OnJobProgressChanged(Job.JobProgress); break;
-            case nameof(JobViewModel.BatchProgress): OnBatchProgressChanged(Job.BatchProgress); break;
         }
     }
 
@@ -441,12 +439,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Compute.WorkerStartupComplete = false;
         Compute.WorkerStartupError = "";
         _ = StartWorkerAsync();
-    }
-
-    public Task LoadImageAsync(string path)
-    {
-        AddPaths([path]);
-        return Task.CompletedTask;
     }
 
     public void AddPaths(IEnumerable<string> paths, bool collapseLibrary = true)
@@ -1302,7 +1294,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Settings.ClipHi = 1.3m;
         Compute.Phase2Teacher = true;
         ClearNumericDrafts();
-        UpdateCcSummary();
+        UpdateProcessSummary();
         Log("Settings", "Reset correction settings to defaults.", LogLevel.Info, CorrectionSettingsDetails());
         ScheduleSave();
     }
@@ -1809,15 +1801,13 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(NnSettingsValid));
         OnPropertyChanged(nameof(HasHiddenLayersError));
         OnPropertyChanged(nameof(HiddenLayersError));
-        UpdateCcSummary();
+        UpdateProcessSummary();
         RefreshValidation();
     }
 
-    private void UpdateCcSummary()
+    private void UpdateProcessSummary()
     {
-        var options = BuildOptions();
-        Settings.CcSummary = options.Summary();
-        Settings.ProcessSummary = BuildProcessSummary(options);
+        Settings.ProcessSummary = BuildProcessSummary(BuildOptions());
         RefreshIdlePipeline();
     }
 
@@ -2466,7 +2456,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         catch (IOException) { _loadedModelIdentity = null; }
         Output.ModelLabel = File.Exists(value) ? $"Model · {Path.GetFileName(value)}" : "No model loaded";
         Output.SavedModelSummary = DescribeSavedModel(value);
-        Output.HasSavedModelSummary = !string.IsNullOrWhiteSpace(Output.SavedModelSummary);
         if (!File.Exists(value) && Output.UseLoadedModel)
         {
             Output.UseLoadedModel = false;
@@ -2567,22 +2556,22 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         if (!_restoring)
         {
-            UpdateCcSummary();
+            UpdateProcessSummary();
             ScheduleSave();
         }
     }
 
-    private void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
-    private void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); RefreshValidation(); ScheduleSave(); } }
-    private void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    private void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnSelectedInputSpaceChanged(NamedValue value) { if (!_restoring) { UpdateProcessSummary(); RefreshValidation(); ScheduleSave(); } }
+    private void OnSelectedInputWhiteChanged(NamedValue value) { if (!_restoring) { UpdateProcessSummary(); RefreshValidation(); ScheduleSave(); } }
+    private void OnSelectedTargetSpaceChanged(NamedValue value) { if (!_restoring) { UpdateProcessSummary(); ScheduleSave(); } }
+    private void OnSelectedTargetWhiteChanged(NamedValue value) { if (!_restoring) { UpdateProcessSummary(); ScheduleSave(); } }
     private void OnSelectedOutputFormatChanged(NamedValue value) { if (!_restoring) ScheduleSave(); }
     private void OnSkipSaturatedChanged(bool value) { if (!_restoring) ScheduleSave(); }
     private void OnIncludeCombinationsChanged(bool value)
     {
         if (!_restoring)
         {
-            UpdateCcSummary();
+            UpdateProcessSummary();
             ScheduleSave();
         }
     }
@@ -2594,16 +2583,16 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(NnSettingsValid));
         OnPropertyChanged(nameof(HasHiddenLayersError));
         OnPropertyChanged(nameof(HiddenLayersError));
-        UpdateCcSummary();
+        UpdateProcessSummary();
         NotifyRunCommands();
         if (!_restoring && CorrectionOptions.TryParseHiddenLayers(value, out _, out _))
         {
             ScheduleSave();
         }
     }
-    private void OnSelectedNnOptimizerChanged(NamedValue value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    private void OnNnBatchNormalizationChanged(bool value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
-    private void OnNnDropoutChanged(decimal value) { if (!_restoring) { UpdateCcSummary(); ScheduleSave(); } }
+    private void OnSelectedNnOptimizerChanged(NamedValue value) { if (!_restoring) { UpdateProcessSummary(); ScheduleSave(); } }
+    private void OnNnBatchNormalizationChanged(bool value) { if (!_restoring) { UpdateProcessSummary(); ScheduleSave(); } }
+    private void OnNnDropoutChanged(decimal value) { if (!_restoring) { UpdateProcessSummary(); ScheduleSave(); } }
     private void OnNnLrChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnNnEpochsChanged(decimal value) { if (!_restoring) ScheduleSave(); }
     private void OnNnPatienceChanged(decimal value) { if (!_restoring) ScheduleSave(); }
@@ -2640,8 +2629,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         }, token);
     }
 
-    private void OnBatchProgressChanged(double value) => Job.BatchProgressPct = $"{value:0}%";
-    private void OnJobProgressChanged(double value) => Job.JobProgressPct = $"{value:0}%";
 
     private void OnFaceIndexChanged(int value)
     {
@@ -2693,8 +2680,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnIsLightThemeChanged(bool value)
     {
-        Layout.ThemeLabel = value ? "Dark" : "Light";
-        Layout.ThemeHint = value ? "Switch to dark theme" : "Switch to light theme";
         if (Application.Current is { } app)
         {
             app.RequestedThemeVariant = value ? ThemeVariant.Light : ThemeVariant.Dark;
