@@ -1,6 +1,5 @@
 //! Hardware inventory and portable GPU inference policy.
 
-use std::env;
 use std::sync::Mutex;
 use std::thread::available_parallelism;
 
@@ -202,7 +201,7 @@ fn cpu_info() -> CpuInfo {
     let cores = logical_cores();
     #[cfg(windows)]
     {
-        let brand = env::var("PROCESSOR_IDENTIFIER").unwrap_or_else(|_| "Unknown CPU".into());
+        let brand = std::env::var("PROCESSOR_IDENTIFIER").unwrap_or_else(|_| "Unknown CPU".into());
         let vendor = if brand.to_ascii_lowercase().contains("intel") {
             "Intel"
         } else if brand.to_ascii_lowercase().contains("amd") {
@@ -290,6 +289,7 @@ fn sysctl_brand() -> Option<String> {
     }
 }
 
+#[cfg(windows)]
 fn vendor_from_pci(id: u32) -> &'static str {
     match id {
         0x10DE => "NVIDIA",
