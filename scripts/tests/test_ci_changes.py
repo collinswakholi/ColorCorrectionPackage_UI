@@ -13,12 +13,11 @@ from check_ci_results import failures
 
 class ChangeClassification(unittest.TestCase):
     def test_readme_demo_and_bundled_documentation(self):
-        for paths in (["README.md"], ["docs/images/demo/studio-dark.png"], ["docs/images/demo/demo-manifest.json"],
-                      ["docs/images/demo/storyboard.json"],
+        for paths in (["README.md"], ["docs/images/demo/studio-dark.png"],
                       ["README.md", "docs/images/demo/studio-dark.gif", "docs/images/demo/README.md"]):
             self.assertFalse(classify_paths(paths)["native"])
         for path in ("api/README.md", "docs/api/README.md", "docs/user-guide.md", "docs/images/workflow.svg",
-                     "docs/images/demo/runner.py", "docs/images/demo/unknown.json", "notebooks/tutorial.ipynb", "unknown/new-file.txt",
+                     "docs/images/demo/runner.py", "docs/images/demo/unknown.json", "docs/images/demo/storyboard.json", "notebooks/tutorial.ipynb", "unknown/new-file.txt",
                      "/README.md", "../README.md", "docs\\images\\demo\\test.png"):
             self.assertTrue(classify_paths(["README.md", path])["native"], path)
         for paths in (None, [], ["README.md", "engine/src/main.rs"]):

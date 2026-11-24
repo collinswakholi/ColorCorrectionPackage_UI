@@ -105,7 +105,6 @@ GPU and interactive Mac desktop acceptance remain separate.
   sources, numerical comparisons and interpretation limits.
 - [Model provenance](../model-provenance.md): model hashes, declared terms and
   unresolved training-data provenance.
-- [Demo production](demo.md): capture sources, encoding and media reproduction.
 
 Counts belong to their recorded source/package identities. Hosted build and
 installation checks do not establish interactive UI, hardware GPU or high-DPI
