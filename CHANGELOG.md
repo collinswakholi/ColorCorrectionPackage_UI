@@ -23,6 +23,16 @@
 - Long operations are no longer stopped while the engine is still reporting progress; the timeout now applies to silence, with an overall limit of six times the timeout.
 - Checking that a loaded model and its white reference are unchanged no longer hashes files on the UI thread while you edit settings; the check runs in the background and again, authoritatively, when Apply or a batch starts.
 
+### Removed (SDK, scripts, docs)
+
+- Python SDK 3.0.0 (was 2.3.0) needs a Studio 0.2.0 or later worker. A worker whose ready event has no `protocol_version` (Studio 0.1.x) is refused at startup with an error naming Studio 0.2.0; protocol 2 (Studio 0.2.0–0.3.0) and protocol 3 stay supported. `Engine.protocol_version` is `None` until the worker starts.
+- SDK: `COLORCORRECT_EXE` is no longer read; set `CCP_ENGINE_EXE` instead.
+- SDK: worker discovery looks only in the app folder and `engine/target/release` (plus `ccp-engine-launch` on Linux), no longer in `dist/win-cpu`, `dist/<rid>/payload` or `dist/<rid>`. A macOS `.app` root resolves `Contents/Resources/runtime` only, not `Contents/MacOS`.
+- SDK: `load_calibration` accepts saved pipelines only; bare correction-model files (top-level `feature_count` with `coefficients`/`w1`), which no Studio release wrote, are rejected. Detection requires the `snapshot_id` and per-chart `chart_id` that every 0.2.0+ worker sends, and no longer reads a `faces` key or a single-chart handshake without `charts`. `BackendInfo.diagnostics` no longer copies `frames_processed`.
+- SDK: custom references and fast mode no longer pre-check `custom_references_v1`, `chart_identity_v1` and `combined_lut65_v1`, which every supported worker declares. The `cpu_inference_v1` and exact-sampling checks remain.
+- Remove unused developer scripts (`benchmark_warm_pipeline.py`, `compare_workflow_images.py`, `compute_inventory.py`, `sanitize_model_metadata.py`, `summarize_compute.py`, `ui_inventory.py`, `validate_gpu_corpus.py`, `fetch_onnxruntime.ps1`, `link_samples.ps1`), the one-off public 0.3.0 download check (`verify-public-030.yml`, `verify_public_download.py`) and the 0.2.1 demo capture tooling (`create_demo.py`, its storyboard and manifest). The README demo media stay.
+- Remove historical validation records (`docs/readiness.md`, `docs/ui-validation.md`, `docs/validation-windows.md`, `docs/api/VERIFICATION.md`, `docs/development/demo.md`) and trim `docs/native-validation.md` to current procedures. The SDK check instructions moved to the developer guide.
+
 ## 0.3.0
 
 - Support reproducible chart fits with an exact random sample count per patch and a seed. Grid sampling remains available for existing recipes.
