@@ -1,0 +1,184 @@
+<!--
+  Motion layer. Merged by Controls/Motion.cs only when animations are enabled, so the static
+  theme (Theme.axaml) always describes each settled state on its own. Reduced-motion users,
+  the headless test platform and the XAML previewer never load this file.
+
+  Durations: fast 120 ms (hover, press) · base 180 ms (selection, state) · slow 240 ms (reveal).
+  Curves ease out. Only small chrome animates; the image stage is never animated per frame.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Buttons: colour cross-fades on hover, a 2 % press-in on click. -->
+    <Style Selector="Button /template/ Border#PART_Border">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button">
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <DoubleTransition Property="Opacity" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="Button:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.98)" />
+    </Style>
+
+    <!-- Segmented stage switch, overlay toggles, section headers. -->
+    <Style Selector="RadioButton /template/ Border#Bd, ToggleButton /template/ Border#Bd">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ToggleButton /template/ Border#DisclosureBorder, ToggleButton /template/ Border#HeaderBd">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Tabs: the accent underline and hover wash ease in. -->
+    <Style Selector="TabItem /template/ Border#AccentBd">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Lists, inputs, thumbnails and sidebar rows. -->
+    <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter, ComboBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="TextBox /template/ Border#PART_BorderElement, ComboBox /template/ Border#Background">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.thumbTile, Border.catalogTile">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.stageRow, Border.patchRowHost, Border.dropZone, Border.whiteChip, Border.controlSection, Border.sidebarBlock">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Rectangle.dropDash, Rectangle.stageEmptyDash">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Stroke" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.stageEmpty, Border.stageEmptyIcon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Pipeline chips settle into their state colour. -->
+    <Style Selector="Border.pipelineChip">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!-- The stage that is running breathes gently; it stops as soon as the stage completes. -->
+    <Style Selector="Border.pipelineChip.Active">
+        <Style.Animations>
+            <Animation Duration="0:0:1.6" IterationCount="Infinite" PlaybackDirection="Alternate" Easing="SineEaseInOut">
+                <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+                <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.62" /></KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <!-- Progress: the bar glides to each new value, and a soft sheen shows work is alive. -->
+    <Style Selector="ProgressBar /template/ Border#PART_Indicator">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Width" Duration="0:0:0.24" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ProgressBar /template/ Border#Sheen">
+        <Setter Property="IsVisible" Value="True" />
+        <Setter Property="RenderTransform" Value="translateX(-48px)" />
+        <Style.Animations>
+            <Animation Duration="0:0:1.8" IterationCount="Infinite" Easing="SineEaseInOut">
+                <KeyFrame Cue="0%"><Setter Property="RenderTransform" Value="translateX(-48px)" /></KeyFrame>
+                <KeyFrame Cue="100%"><Setter Property="RenderTransform" Value="translateX(420px)" /></KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <!-- Busy status dot pulses; ready and error dots stay still. -->
+    <Style Selector="Ellipse.busyPulse">
+        <Style.Animations>
+            <Animation Duration="0:0:1.2" IterationCount="Infinite" PlaybackDirection="Alternate" Easing="SineEaseInOut">
+                <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+                <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.35" /></KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <!-- Results, plots and overlays fade and rise into place. -->
+    <Style Selector=":is(Control).reveal">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.24" Easing="CubicEaseOut" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.24" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Drag-and-drop prompt fades in over the workspace and the card settles. -->
+    <Style Selector="Grid#DragOverlay">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.16" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Grid#DragOverlay Border.dropPrompt">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Grid#DragOverlay.on Border.dropPrompt">
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+</Styles>
