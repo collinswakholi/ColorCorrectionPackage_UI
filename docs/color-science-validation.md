@@ -18,7 +18,7 @@ FFC, GC and WB are implemented in encoded sRGB/D65. Previously the app silently 
 2. **Conversions and identities:** published matrix coefficients for six nonlinear/linear-primary families; ten transfer-function vectors; black, white and transfer breakpoints; XYZ/Lab and RGB/XYZ round trips; Bradford white round trips; identical-color comparison for all **8 RGB spaces × 8 selectable whites**.
 3. **Integration:** report before/after scoring for **8 × 8 input/output space pairs** at their nominal whites; five-fold held-out linear fits on 30 interior-gamut colors for each of eight outputs, maximum ΔE00 below 0.001; stage safety checks for every space/white combination; existing fit/apply/report tests.
 
-Implementation fixtures and tests are in `engine/crates/ccp_core/tests/color_validation.rs` and `fixtures/`; bridge integration checks are in `run_pipeline.rs`. Run from `engine`:
+Implementation fixtures and tests are in `engine/crates/ccp_core/tests/color_validation.rs` and `fixtures/`; worker integration checks are in `engine/crates/ccp_bridge/src/` (`report.rs`, `model.rs`, `fit.rs` and `apply.rs`). Run from `engine`:
 
 ```powershell
 cargo test -p ccp_core -p ccp_bridge --lib --tests --locked
