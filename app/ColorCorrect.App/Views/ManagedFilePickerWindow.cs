@@ -2,9 +2,8 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using ColorCorrect.App.Views;
 
-namespace ColorCorrect.App.Services;
+namespace ColorCorrect.App.Views;
 
 // Used only by the WSL managed storage provider. Explicit dimensions prevent
 // long file names/paths from sizing a new picker to the whole virtual desktop.

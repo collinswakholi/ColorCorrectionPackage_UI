@@ -6,7 +6,7 @@ using Avalonia.Input;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using ColorCorrect.App.Services;
+using ColorCorrect.App.Views;
 using Xunit;
 
 namespace ColorCorrect.App.Headless.Tests;

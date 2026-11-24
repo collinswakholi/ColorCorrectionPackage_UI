@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
-using ColorCorrect.App.Views;
+using ColorCorrect.App.Services;
 
-namespace ColorCorrect.App.Services;
+namespace ColorCorrect.App.Views;
 
 public sealed class WindowDialogs : IAppDialogs
 {

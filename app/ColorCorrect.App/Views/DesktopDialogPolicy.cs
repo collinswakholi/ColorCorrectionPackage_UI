@@ -3,7 +3,7 @@ using System.IO;
 using Avalonia;
 using Avalonia.Dialogs;
 
-namespace ColorCorrect.App.Services;
+namespace ColorCorrect.App.Views;
 
 internal static class DesktopDialogPolicy
 {

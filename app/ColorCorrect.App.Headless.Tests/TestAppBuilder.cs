@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using ColorCorrect.App;
-using ColorCorrect.App.Services;
+using ColorCorrect.App.Views;
 
 [assembly: AvaloniaTestApplication(typeof(ColorCorrect.App.Headless.Tests.TestAppBuilder))]
 [assembly: AvaloniaTestIsolation(AvaloniaTestIsolationLevel.PerTest)]
