@@ -4,7 +4,7 @@
 //! should branch on `code` and display `error`.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ErrorCode {
+pub(crate) enum ErrorCode {
     /// Malformed, missing or out-of-range request fields (also invalid JSON/UTF-8).
     InvalidRequest,
     /// Unknown or removed command.
@@ -44,7 +44,7 @@ impl ErrorCode {
         Self::InternalError,
     ];
 
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::InvalidRequest => "invalid_request",
             Self::UnsupportedCommand => "unsupported_command",
@@ -61,13 +61,13 @@ impl ErrorCode {
     }
 
     /// Parse a code string (for example one set by `ccp_detect`).
-    pub fn parse(value: &str) -> Option<Self> {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|code| code.as_str() == value)
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("{0}")]
     Message(String),
     /// A message with an explicit protocol error code.
@@ -83,10 +83,10 @@ pub enum Error {
     Image(#[from] image::ImageError),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
-    pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
+    pub(crate) fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
         Self::Coded {
             code,
             message: message.into(),
@@ -95,7 +95,7 @@ impl Error {
 
     /// An image load failure, described by `message`: anything that is not an
     /// I/O failure or the pixel cap means the file could not be decoded.
-    pub fn image_load(error: &ccp_core::Error, message: impl Into<String>) -> Self {
+    pub(crate) fn image_load(error: &ccp_core::Error, message: impl Into<String>) -> Self {
         let code = match core_code(error) {
             code @ (ErrorCode::IoError | ErrorCode::ImageTooLarge) => code,
             _ => ErrorCode::ImageDecodeFailed,
@@ -104,7 +104,7 @@ impl Error {
     }
 
     /// Stable protocol-3 code for this error.
-    pub fn code(&self) -> ErrorCode {
+    pub(crate) fn code(&self) -> ErrorCode {
         match self {
             Self::Coded { code, .. } => *code,
             Self::Message(_) | Self::Json(_) => ErrorCode::InvalidRequest,
