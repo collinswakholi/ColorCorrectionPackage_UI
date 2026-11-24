@@ -126,7 +126,7 @@ public sealed class SaveWorkflowTests
         var dialogs = new DeferredConfirmation();
         vm.Dialogs = dialogs;
         var changes = 0;
-        vm.PropertyChanged += (_, args) =>
+        vm.Output.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName != nameof(vm.Output.IsSaving)) return;
             Dispatcher.UIThread.VerifyAccess();

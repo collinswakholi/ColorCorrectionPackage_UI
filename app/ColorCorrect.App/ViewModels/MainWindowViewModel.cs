@@ -159,8 +159,8 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        // Same side effects as the former generated On*Changed hooks, then re-raise on the
-        // shell so anything still observing the shell's forwarders stays current.
+        // Same side effects as the former generated On*Changed hooks. Views bind through
+        // Settings.*, so the shell does not re-raise sub-view-model property names.
         switch (e.PropertyName)
         {
             case nameof(CorrectionSettingsViewModel.DoFfc): OnDoFfcChanged(Settings.DoFfc); break;
@@ -197,8 +197,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(CorrectionSettingsViewModel.IncludeCombinations): OnIncludeCombinationsChanged(Settings.IncludeCombinations); break;
             case nameof(CorrectionSettingsViewModel.SkipSaturated): OnSkipSaturatedChanged(Settings.SkipSaturated); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The working session: the active still, session and selection flags, counts, catalog filter and image metadata.</summary>
@@ -215,8 +213,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(WorkspaceViewModel.SampleQuery): OnSampleQueryChanged(Workspace.SampleQuery); break;
             case nameof(WorkspaceViewModel.SelectedGroup): OnSelectedGroupChanged(Workspace.SelectedGroup); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Processing engine state: worker startup and readiness, processing device and acceleration choices, and the GPU setup options.</summary>
@@ -238,8 +234,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(ComputeViewModel.SelectedSetupMode): OnSelectedSetupModeChanged(Compute.SelectedSetupMode); break;
             case nameof(ComputeViewModel.SetupSummary): OnSetupSummaryChanged(Compute.SetupSummary); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The image stage: preview bitmaps, chart and plane overlay geometry, crop, face choice, display toggles and the selected processing stage.</summary>
@@ -260,8 +254,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(StageViewModel.IsStagePreviewLoading): OnIsStagePreviewLoadingChanged(Stage.IsStagePreviewLoading); break;
             case nameof(StageViewModel.LastPreviewDir): OnLastPreviewDirChanged(Stage.LastPreviewDir); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>The running operation: busy and batching flags, job and batch progress with their labels, the current stage, the status line and the last error.</summary>
@@ -276,8 +268,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(JobViewModel.JobProgress): OnJobProgressChanged(Job.JobProgress); break;
             case nameof(JobViewModel.BatchProgress): OnBatchProgressChanged(Job.BatchProgress); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Outputs and models: output folder and format, which results to save and which can be saved, save progress, the report flag, the loaded model and its status, and the batch preview option.</summary>
@@ -294,8 +284,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             case nameof(OutputViewModel.UseLoadedModel): OnUseLoadedModelChanged(Output.UseLoadedModel); break;
             case nameof(OutputViewModel.BatchPreviewResults): OnBatchPreviewResultsChanged(Output.BatchPreviewResults); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Window layout preferences: light/dark theme with its label and hint, and which sidebar sections are expanded.</summary>
@@ -307,8 +295,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         {
             case nameof(LayoutViewModel.IsLightTheme): OnIsLightThemeChanged(Layout.IsLightTheme); break;
         }
-
-        OnPropertyChanged(e.PropertyName);
     }
 
     /// <summary>Color picker, loupe, pin and hover-card state.</summary>

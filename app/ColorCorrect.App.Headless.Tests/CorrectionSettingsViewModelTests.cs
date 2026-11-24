@@ -15,12 +15,15 @@ public sealed class CorrectionSettingsViewModelTests
         try
         {
             var shellChanges = new List<string?>();
+            var settingChanges = new List<string?>();
             ((INotifyPropertyChanged)vm).PropertyChanged += (_, e) => shellChanges.Add(e.PropertyName);
+            ((INotifyPropertyChanged)vm.Settings).PropertyChanged += (_, e) => settingChanges.Add(e.PropertyName);
 
             vm.Settings.WhiteImagePath = "";
             vm.Settings.DoFfc = true; // FFC without a white reference is invalid
             Assert.Contains("white reference", vm.ValidationMessage);
-            Assert.Contains("DoFfc", shellChanges); // re-raised on the shell under the same name
+            Assert.Contains(nameof(CorrectionSettingsViewModel.DoFfc), settingChanges);
+            Assert.DoesNotContain(nameof(CorrectionSettingsViewModel.DoFfc), shellChanges);
             Assert.Contains(nameof(MainWindowViewModel.ValidationMessage), shellChanges);
 
             vm.Settings.DoFfc = false; 
