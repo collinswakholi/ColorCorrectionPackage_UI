@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ColorCorrect.App.ViewModels"
-        xmlns:conv="using:ColorCorrect.App.Converters"
         x:Class="ColorCorrect.App.Views.FfcSettingsDialog"
         x:DataType="vm:MainWindowViewModel"
         Title="FFC settings"
@@ -14,10 +13,6 @@
         CanResize="True"
         KeyboardNavigation.TabNavigation="Cycle"
         Opened="OnOpened">
-
-    <Window.Resources>
-        <conv:NumericToStringConverter x:Key="NumericToString"/>
-    </Window.Resources>
 
     <Border Background="{DynamicResource SidebarBrush}"
             BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"

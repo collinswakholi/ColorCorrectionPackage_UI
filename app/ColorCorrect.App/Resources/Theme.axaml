@@ -563,117 +563,8 @@
     </Style>
 
     <!-- ================================================================== -->
-    <!-- Pipeline Stage Row  (Classes="pipelineStageRow")                -->
-    <!-- ================================================================== -->
-
-    <Style Selector="Border.pipelineStageRow">
-        <Setter Property="Background"      Value="{DynamicResource CardBrush}" />
-        <Setter Property="BorderBrush"      Value="{DynamicResource ThemeBorderBrush}" />
-        <Setter Property="BorderThickness"  Value="1" />
-        <Setter Property="CornerRadius"     Value="8" />
-        <Setter Property="Padding"          Value="10,6" />
-        <Setter Property="Margin"           Value="0,0,0,4" />
-    </Style>
-
-    <Styles>
-    <Styles.Resources>
-
-    <!-- Gear icon button (small, right-aligned in stage rows) -->
-    <ControlTheme x:Key="GearButton" TargetType="Button">
-        <Setter Property="Background"      Value="Transparent" />
-        <Setter Property="BorderThickness"  Value="0" />
-        <Setter Property="Foreground"       Value="{DynamicResource TextSecondaryBrush}" />
-        <Setter Property="FontSize"         Value="14" />
-        <Setter Property="Padding"          Value="6,4" />
-        <Setter Property="Cursor"           Value="Hand" />
-        <Setter Property="ToolTip.Tip"      Value="Settings" />
-        <Setter Property="Template">
-            <ControlTemplate>
-                <Border x:Name="PART_Border"
-                        Background="{TemplateBinding Background}"
-                        CornerRadius="{DynamicResource RadiusMd}"
-                        Padding="{TemplateBinding Padding}">
-                    <ContentPresenter HorizontalAlignment="Center"
-                                      VerticalAlignment="Center"
-                                      Content="{TemplateBinding Content}"
-                                      ContentTemplate="{TemplateBinding ContentTemplate}" />
-                </Border>
-            </ControlTemplate>
-        </Setter>
-        <Style Selector="^:pointerover /template/ Border#PART_Border">
-            <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}" />
-        </Style>
-        <Style Selector="^:pointerover">
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
-        </Style>
-    </ControlTheme>
-
-    </Styles.Resources>
-    </Styles>
-
-    <!-- ================================================================== -->
-    <!-- Thumbnail Image Gallery  (horizontal scrolling)                 -->
-    <!-- ================================================================== -->
-
-    <!-- Apply via Classes="thumbnails" on ListBox -->
-    <Style Selector="ListBox.thumbnails">
-        <Setter Property="Background"      Value="Transparent" />
-        <Setter Property="BorderThickness"  Value="0" />
-        <Setter Property="Padding"          Value="0" />
-        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
-        <Setter Property="ScrollViewer.VerticalScrollBarVisibility"   Value="Disabled" />
-        <Setter Property="ItemsPanel">
-            <Setter.Value>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <Styles>
-    <Styles.Resources>
-
-    <!-- Thumbnail ListBoxItem — border highlights on selection -->
-    <!-- Applied via Theme="{StaticResource ThumbnailListBoxItem}" -->
-    <ControlTheme x:Key="ThumbnailListBoxItem" TargetType="ListBoxItem">
-        <Setter Property="Padding" Value="2" />
-        <Setter Property="Margin"  Value="0,0,4,0" />
-        <Setter Property="Cursor"  Value="Hand" />
-        <Setter Property="Template">
-            <ControlTemplate>
-                <Border x:Name="ThumbBd" Background="Transparent"
-                        CornerRadius="{DynamicResource RadiusMd}" Padding="{TemplateBinding Padding}"
-                        BorderThickness="2" BorderBrush="Transparent">
-                    <ContentPresenter Content="{TemplateBinding Content}"
-                                      ContentTemplate="{TemplateBinding ContentTemplate}" />
-                </Border>
-            </ControlTemplate>
-        </Setter>
-        <Style Selector="^:selected /template/ Border#ThumbBd">
-            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
-            <Setter Property="Background"  Value="{DynamicResource RadioCheckedBgBrush}" />
-        </Style>
-        <Style Selector="^:pointerover:not(:selected) /template/ Border#ThumbBd">
-            <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
-        </Style>
-    </ControlTheme>
-
-    </Styles.Resources>
-    </Styles>
-
-    <!-- ================================================================== -->
     <!-- Settings Dialog Styles                                          -->
     <!-- ================================================================== -->
-
-    <Style Selector="Border.settingsInfoBox">
-        <Setter Property="Background"      Value="{DynamicResource SurfaceBrush}" />
-        <Setter Property="BorderBrush"      Value="{DynamicResource ThemeBorderBrush}" />
-        <Setter Property="BorderThickness"  Value="1" />
-        <Setter Property="CornerRadius"     Value="6" />
-        <Setter Property="Padding"          Value="10,8" />
-        <Setter Property="Margin"           Value="0,8,0,0" />
-    </Style>
 
     <Style Selector="Border.controlSection">
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
@@ -895,14 +786,6 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}" />
         <Setter Property="Foreground" Value="{DynamicResource LogTimeBrush}" />
         <Setter Property="Margin" Value="0,0,8,0" />
-    </Style>
-
-    <Style Selector="TextBlock.pill">
-        <Setter Property="FontSize" Value="10" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
-        <Setter Property="Background" Value="{DynamicResource CardElevatedBrush}" />
-        <Setter Property="Padding" Value="7,2" />
     </Style>
 
     <Style Selector="Border.thumbTile">
@@ -1298,16 +1181,6 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     </Style>
 
-    <Style Selector="Border.toolGroup">
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Margin" Value="0,0,8,4" />
-    </Style>
-
-    <Style Selector="WrapPanel.stageToolbar">
-        <Setter Property="Orientation" Value="Horizontal" />
-        <Setter Property="Margin" Value="0,0,0,8" />
-    </Style>
-
     <Style Selector="Border.catalogTile">
         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
@@ -1355,12 +1228,6 @@
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
-    <Style Selector="Button.thumbHit">
-        <Setter Property="Width" Value="76" />
-        <Setter Property="Height" Value="76" />
-        <Setter Property="MinWidth" Value="0" />
-        <Setter Property="MinHeight" Value="0" />
-    </Style>
     <Style Selector="StackPanel.sessionCell">
         <Setter Property="Margin" Value="0" />
         <Setter Property="Width" Value="76" />
@@ -1404,10 +1271,6 @@
     </Style>
     <Style Selector="Border#Sidebar.narrow StackPanel.thumbCell">
         <Setter Property="Margin" Value="0,0,6,8" />
-    </Style>
-    <Style Selector="Border#Sidebar.narrow Button.thumbHit">
-        <Setter Property="Width" Value="64" />
-        <Setter Property="Height" Value="64" />
     </Style>
     <Style Selector="Border#Sidebar.narrow StackPanel.sessionCell">
         <Setter Property="Margin" Value="0,0,6,6" />
@@ -1558,14 +1421,6 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
         <Setter Property="Padding" Value="8,4" />
-    </Style>
-
-    <Style Selector="Border.kindBadge">
-        <Setter Property="Background" Value="#99000000" />
-        <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="Width" Value="28" />
-        <Setter Property="Height" Value="28" />
-        <Setter Property="Padding" Value="0" />
     </Style>
 
 
