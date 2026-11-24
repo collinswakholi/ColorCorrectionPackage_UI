@@ -1,6 +1,6 @@
 # Compatibility and migration
 
-The current app keeps the Avalonia interface, Rust correction engine, built-in reference tables, legacy model/session readers and the `CCP-New` data location.
+The current app keeps the Avalonia interface, Rust correction engine, built-in reference tables, readers for models and sessions saved by Studio 0.1 and later, and the `CCP-New` data location. Models saved before Studio 0.1 must be refit.
 
 - Fast correction is the default: a combined 65³ GC/WB/CC LUT. Advanced settings retain the previous separate-stage method for reproducing older outputs. FFC remains spatial and separate.
 - CPU/GPU selects correction execution. Auto detection tries eligible DirectML/WebGPU routes, then explicit CPU inference. Forced GPU detection fails clearly when unavailable. The new `cpu-inference` policy explicitly selects CPU detection; legacy `cpu` retains CPU correction with Auto detection.

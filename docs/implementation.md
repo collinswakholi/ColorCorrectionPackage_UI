@@ -1,8 +1,8 @@
 # Engine architecture
 
 ColorCorrect Studio uses an Avalonia desktop interface, a native Rust engine and
-an optional Python SDK. The application processes still images and preserves
-legacy models, sessions and the `CCP-New` data location. See [building](building.md),
+an optional Python SDK. The application processes still images and reads
+models and sessions saved by Studio 0.1 and later from the `CCP-New` data location. See [building](building.md),
 [compatibility](compatibility.md) and the [developer guide](development/README.md).
 
 ## Reference profiles

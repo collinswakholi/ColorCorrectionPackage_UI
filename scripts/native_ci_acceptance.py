@@ -171,7 +171,7 @@ def verify_macos_runtime(payload: Path, work: Path, evidence: Path, env: dict) -
 
 def clean_environment(package: Path, rid: str, runtime: Path | None = None) -> dict[str, str]:
     prefixes = ("CCP_", "ORT_", "DYLD_", "WGPU_", "VK_", "CUBECL_", "D3D12_", "MESA_", "DOTNET_", "COMPLUS_")
-    remove = {"COLORCORRECT_EXE", "PYTHONPATH", "PYTHONHOME", "LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT", "LIBTORCH", "LIBTORCH_USE_PYTORCH", "PATH", "PSMODULEPATH"}
+    remove = {"PYTHONPATH", "PYTHONHOME", "LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT", "LIBTORCH", "LIBTORCH_USE_PYTORCH", "PATH", "PSMODULEPATH"}
     env = {key: value for key, value in os.environ.items() if key.upper() not in remove and not key.upper().startswith(prefixes)}
     system = TARGETS[rid][0]
     runtime = runtime or package

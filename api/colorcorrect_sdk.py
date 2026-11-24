@@ -960,7 +960,7 @@ class CalibrationModel:
         parameters.update(requested)
         if any(parameters.get(key) is True for key in ("do_gc", "do_wb", "do_cc")):
             saved = _json(self.path)
-            available = {"do_gc": saved.get("gc_model") is not None or saved.get("gc_coeffs") is not None,
+            available = {"do_gc": saved.get("gc_model") is not None,
                          "do_wb": saved.get("wb_diag") is not None,
                          "do_cc": saved.get("correction") is not None}
             for stage, present in available.items():
