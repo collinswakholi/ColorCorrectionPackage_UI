@@ -8,11 +8,15 @@ use crate::color::{
     srgb_d65_space, srgb_to_lab_d65, srgb_to_linear, xyz_to_linear_rgb, Lab, RgbColorSpace, Vec3,
     WhitePoint,
 };
+use crate::error::{Error, Result};
 #[cfg(test)]
 use crate::maps::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
+use crate::maps::{RGB_CLIP_HI, RGB_CLIP_LO};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};
-use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, WB_DIAG_SCALE};
+
+/// CCP `compute_diag` scale applied to the median per-channel ratio.
+const WB_DIAG_SCALE: f64 = 0.95;
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -774,7 +778,7 @@ pub struct StageConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SATURATION_THRESHOLD;
+    use crate::sample::SATURATION_THRESHOLD;
 
     #[test]
     fn gamma_max_degree_nine_does_not_exceed_sample_rank() {

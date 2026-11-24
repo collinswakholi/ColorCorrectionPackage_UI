@@ -14,12 +14,12 @@ use ccp_core::honest::cross_validate_correction;
 use ccp_core::lut::DEFAULT_LUT_SIZE;
 use ccp_core::maps::{
     fit_correction_model, parse_model_kind, CorrectionSettings, MappingOptions, ModelKind,
+    RIDGE_LAMBDA,
 };
 use ccp_core::phase2::emit_rpcc2_teacher;
 use ccp_core::refs::{embedded_neutrals_table, load_neutrals_table, ChartPatch};
 use ccp_core::sample::SamplingOptions;
 use ccp_core::stages::{apply_gc_inplace, apply_wb_inplace, extrapolate_saturated, fit_gc, fit_wb};
-use ccp_core::RIDGE_LAMBDA;
 use ndarray::Array3;
 use serde::Serialize;
 use serde_json::{json, Value};

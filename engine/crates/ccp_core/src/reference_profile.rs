@@ -5,8 +5,8 @@ use crate::color::{
     adapt_xyz_white, encoded_to_linear_rgb, lab_to_xyz, linear_rgb_to_xyz, parse_rgb_color_space,
     parse_white_point, xyz_to_lab, Lab,
 };
+use crate::error::{Error, Result};
 use crate::refs::{chart_spec, ChartKind, ChartPatch, ChartSpec};
-use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -156,7 +156,7 @@ impl ReferenceProfile {
         spec.reference_srgb = labs
             .iter()
             .copied()
-            .map(crate::lab_d50_to_srgb)
+            .map(crate::color::lab_d50_to_srgb)
             .collect::<Result<_>>()?;
         spec.reference_lab_d50 = labs;
         Ok(spec)

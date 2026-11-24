@@ -7,7 +7,7 @@
 // NIPALS updates several row-major matrices together; indices make those layouts explicit.
 #![allow(clippy::needless_range_loop)]
 
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 
 pub const PLS_TOL: f64 = 1e-6;
 

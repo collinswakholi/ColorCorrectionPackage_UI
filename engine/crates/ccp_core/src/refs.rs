@@ -1,7 +1,7 @@
 //! Per-chart CIE Lab D50/2° tables in Opt2 row-major. Same-index law.
 
 use crate::color::{lab_d50_to_srgb, Lab};
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

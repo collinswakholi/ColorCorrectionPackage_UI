@@ -7,11 +7,17 @@ use crate::color::{
     lab_to_xyz, linear_rgb_to_xyz, linear_to_srgb, srgb_d65_space, srgb_lstar_d65, srgb_to_linear,
     xyz_to_lab, xyz_to_linear_rgb,
 };
+use crate::error::{Error, Result};
 use crate::maps::{fit_least_squares, solve_linear_system};
 use crate::mlp::{fit_mlp, MlpParams, MlpWeights};
 use crate::pls::{auto_ncomp, fit_pls, PLS_TOL};
 use crate::stages::GammaModel;
-use crate::{Error, Result, FFC_EXTREMITY_CUT_OFF, FFC_EXTREMITY_MAX};
+
+/// CCP_rs FFC `transform_extremity` — tanh soft-cap starts here.
+const FFC_EXTREMITY_CUT_OFF: f32 = 1.3;
+
+/// CCP_rs FFC `transform_extremity` — asymptotic gain ceiling.
+const FFC_EXTREMITY_MAX: f32 = 1.8;
 use ndarray::{Array2, Array3};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};

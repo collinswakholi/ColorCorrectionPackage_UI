@@ -5,7 +5,7 @@
 //! early stop on validation **R²**, `n_iter_no_change = 15% × max_iter`,
 //! Adam, L2 `alpha=1e-4`, batch `min(200, N)`.
 //!
-//! FFC (`for_ffc`): hidden 100, shuffle on, 3 LR cuts, MSE floor `5e-4`.
+//! FFC (`for_ffc_iters`): hidden 100, shuffle on, 3 LR cuts, MSE floor `5e-4`.
 
 // Training kernels operate on several row-major buffers in lockstep.
 #![allow(clippy::needless_range_loop)]
@@ -103,11 +103,7 @@ impl MlpParams {
         }
     }
 
-    /// CCP_rs `MlpParams::for_ffc`.
-    pub fn for_ffc() -> Self {
-        Self::for_ffc_iters(10_000)
-    }
-
+    /// CCP_rs `MlpParams::for_ffc`, with the requested iteration budget.
     pub fn for_ffc_iters(max_iter: usize) -> Self {
         let max_iter = max_iter.max(1);
         Self {
@@ -200,6 +196,7 @@ impl MlpWeights {
         }
     }
 
+    #[cfg(test)]
     pub fn predict3(&self, x: &[f64]) -> [f64; 3] {
         let mut hidden = [0.0; MAX_HIDDEN];
         let mut out = [0.0; 3];

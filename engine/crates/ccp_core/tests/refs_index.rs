@@ -1,9 +1,9 @@
+use ccp_core::color::{delta_e_2000, Lab};
 use ccp_core::honest::mean_delta_e00;
 use ccp_core::refs::{
     chart_spec, chart_spec_from_name, load_neutrals_table, lookup_neutrals, neutrals_json_path,
     ChartKind,
 };
-use ccp_core::{delta_e_2000, Lab};
 
 #[test]
 fn spyder_names_and_white() {

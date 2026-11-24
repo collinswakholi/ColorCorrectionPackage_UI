@@ -1,8 +1,10 @@
 //! Phase 2 teacher: emit RPCC2 weights.
 
-use crate::maps::{fit_correction_model, CorrectionSettings, MappingOptions, ModelKind};
+use crate::error::Result;
+use crate::maps::{
+    fit_correction_model, CorrectionSettings, MappingOptions, ModelKind, RIDGE_LAMBDA,
+};
 use crate::refs::ChartPatch;
-use crate::{Result, RIDGE_LAMBDA};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 //! Bradford CAT, CIE Lab, sRGB, and CIEDE2000 (Sharma) — Speedy `color.cpp`.
 
-use crate::{Error, Result};
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 

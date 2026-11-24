@@ -1,10 +1,11 @@
+use ccp_core::color::Lab;
 use ccp_core::ffc::{apply_ffc_float, identity_gain};
 use ccp_core::lut::{cube_text, LutPipeline, LUT_NO_FFC_COMMENT};
 use ccp_core::refs::{ChartPatch, Vec2};
+use ccp_core::sample::SATURATION_THRESHOLD;
 use ccp_core::stages::{
     apply_gc_image, apply_gc_pixel, extrapolate_saturated, flag_saturated, GammaModel,
 };
-use ccp_core::{Lab, SATURATION_THRESHOLD};
 use ndarray::Array3;
 
 #[test]

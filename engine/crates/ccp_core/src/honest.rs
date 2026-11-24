@@ -4,11 +4,11 @@ use crate::color::{
     adapt_xyz_white, delta_e_2000, encoded_to_linear_rgb, lab_d50_to_target_lab, linear_rgb_to_xyz,
     parse_white_point, srgb_to_lab_d65, xyz_to_lab, Lab, RgbColorSpace, Vec3,
 };
+use crate::error::{Error, Result};
 use crate::maps::{
     apply_correction_pixel, fit_correction_model, CorrectionSettings, MappingOptions, ModelKind,
 };
 use crate::refs::ChartPatch;
-use crate::{Error, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 

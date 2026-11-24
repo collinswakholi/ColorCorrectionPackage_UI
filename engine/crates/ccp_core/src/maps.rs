@@ -8,9 +8,19 @@ use crate::color::{
     encoded_to_linear_rgb, lab_d50_to_target_linear, linear_to_encoded_rgb, parse_rgb_color_space,
     parse_white_point, RgbColorSpace, Vec3, WhitePoint,
 };
+use crate::error::{Error, Result};
 use crate::refs::ChartPatch;
-use crate::{Error, Result, RIDGE_LAMBDA};
+use crate::sample::SATURATION_THRESHOLD;
 use serde::{Deserialize, Serialize};
+
+/// Ridge used by Speedy OLS maps (CCM, RPCC, linear).
+pub const RIDGE_LAMBDA: f64 = 1e-5;
+
+/// CCP_rs sat-check working floor (`clamp(-0.2, 1.3)` before the 0–1 stretch).
+pub const RGB_CLIP_LO: f64 = -0.2;
+
+/// CCP_rs sat-check working ceiling (`clamp(-0.2, 1.3)` before the 0–1 stretch).
+pub const RGB_CLIP_HI: f64 = 1.3;
 
 const MIN_POLY_DEGREE: i32 = 1;
 const MAX_POLY_DEGREE: i32 = 7;
@@ -96,11 +106,11 @@ pub struct MappingOptions {
 }
 
 fn default_clip_lo() -> f64 {
-    crate::RGB_CLIP_LO
+    RGB_CLIP_LO
 }
 
 fn default_clip_hi() -> f64 {
-    crate::RGB_CLIP_HI
+    RGB_CLIP_HI
 }
 
 fn default_nn_optimizer() -> String {
@@ -111,7 +121,7 @@ impl Default for MappingOptions {
     fn default() -> Self {
         Self {
             extrapolate_saturated: true,
-            saturation_threshold: 0.99,
+            saturation_threshold: SATURATION_THRESHOLD,
             poly_degree: 2,
             include_combinations: true,
             pls_components: 0,
@@ -124,8 +134,8 @@ impl Default for MappingOptions {
             nn_patience: 1500,
             learning_rate: 0.001,
             tol: 1e-6,
-            clip_lo: crate::RGB_CLIP_LO,
-            clip_hi: crate::RGB_CLIP_HI,
+            clip_lo: RGB_CLIP_LO,
+            clip_hi: RGB_CLIP_HI,
         }
     }
 }

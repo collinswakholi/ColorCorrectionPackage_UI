@@ -1,8 +1,11 @@
 //! Load 8-bit stills (EXIF-oriented) and sample Opt2 `patch_obbs` (inner 0.70, 9×9).
 
 use crate::color::Vec3;
+use crate::error::{Error, Result};
 use crate::refs::{ChartPatch, ChartSpec, Quad};
-use crate::{Error, Result, SATURATION_THRESHOLD};
+
+/// Saturation flag: any encoded channel at or above this value.
+pub const SATURATION_THRESHOLD: f64 = 0.99;
 use image::{DynamicImage, ImageDecoder, RgbImage as Gray8};
 use std::io::Cursor;
 use std::path::Path;
