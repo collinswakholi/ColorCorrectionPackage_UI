@@ -150,11 +150,6 @@ pub fn chart_index(name: &str) -> Option<usize> {
     CHART_TYPES.iter().position(|t| *t == name)
 }
 
-pub fn chart_rows_cols(chart_type: &str) -> Option<(i32, i32)> {
-    let i = chart_index(chart_type)?;
-    Some((CHART_ROWS[i], CHART_COLS[i]))
-}
-
 pub fn cli_chart_from_detector(chart_type: &str) -> &'static str {
     match chart_type {
         "spyder_4x6" => "spyder",

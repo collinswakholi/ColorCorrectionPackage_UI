@@ -736,12 +736,6 @@ pub fn delta_e_2000(c1: Lab, c2: Lab) -> f64 {
     (dl * dl + dc * dc + dh * dh + rt * dc * dh).sqrt()
 }
 
-pub fn default_srgb_d65() -> Result<(WhitePoint, RgbColorSpace)> {
-    let d65 = parse_white_point("d65")?;
-    let srgb = parse_rgb_color_space("srgb", &d65)?;
-    Ok((d65, srgb))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

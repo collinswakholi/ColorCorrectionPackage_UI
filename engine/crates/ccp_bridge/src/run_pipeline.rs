@@ -836,14 +836,6 @@ pub fn load_neutrals() -> HashMap<String, Vec<String>> {
     load_neutrals_table(None).unwrap_or_else(|_| ccp_core::refs::embedded_neutrals_table())
 }
 
-pub fn rgb_image_to_array3(img: &RgbImage) -> Result<Array3<f32>> {
-    Array3::from_shape_vec(
-        (img.height as usize, img.width as usize, 3),
-        img.rgb.clone(),
-    )
-    .map_err(|e| Error::Message(e.to_string()))
-}
-
 pub fn rgb_image_into_array3(img: RgbImage) -> Result<Array3<f32>> {
     Array3::from_shape_vec((img.height as usize, img.width as usize, 3), img.rgb)
         .map_err(|e| Error::Message(e.to_string()))
@@ -859,12 +851,6 @@ fn array3_f32s(arr: &Array3<f32>) -> std::borrow::Cow<'_, [f32]> {
 
 fn f32_to_u8(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
-}
-
-pub fn array3_to_rgb_image(arr: &Array3<f32>) -> Result<RgbImage> {
-    let height = arr.shape()[0] as u32;
-    let width = arr.shape()[1] as u32;
-    Ok(RgbImage::new(width, height, array3_f32s(arr).into_owned())?)
 }
 
 fn array3_to_rgb8(arr: &Array3<f32>) -> Result<Rgb8> {
@@ -932,23 +918,6 @@ fn encode_jpeg(rgb: &Rgb8, path: &Path, quality: u8) -> Result<()> {
                 format!("JPEG encode failed: {e}"),
             )
         })
-}
-
-pub fn write_preview_jpeg(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
-    let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let rgb = preview_rgb8(arr)?;
-    encode_jpeg(&rgb, path, 72)
-}
-
-pub fn write_preview_png(arr: &Array3<f32>, path: impl AsRef<Path>) -> Result<()> {
-    let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    encode_preview_png(&preview_rgb8(arr)?, path)
 }
 
 fn write_preview_rgb_file(rgb: &Rgb8, path: &Path) -> Result<()> {
@@ -2565,16 +2534,6 @@ impl ApplyOptions {
         }
     }
 
-    /// Keep the historical Rust constructor infallible for library callers.
-    /// Out-of-range FFC parameters fall back to the saved/default parameters;
-    /// use [`ApplyOptions::try_from_req`] to reject them instead.
-    pub fn from_req(req: &Value, saved: &SavedPipeline) -> Self {
-        let method = requested_ffc_method(req).unwrap_or(FfcFitMethod::Poly);
-        let ffc = Self::ffc_from_req(req, saved, method)
-            .unwrap_or_else(|_| saved.ffc_params.clone().unwrap_or_default());
-        Self::with_params(req, saved, ffc)
-    }
-
     pub fn try_from_req(req: &Value, saved: &SavedPipeline) -> Result<Self> {
         let ffc = if json_bool(req, &["do_ffc"], false) {
             let ffc = Self::ffc_from_req(req, saved, requested_ffc_method(req)?)?;
@@ -2620,14 +2579,6 @@ impl ApplyOptions {
 
 /// Apply a saved GC+WB+CC model. No detect. No invented Classic-24 ΔE.
 /// FFC is re-fit from the current white still when `do_ffc` is on — it is never in the cube.
-pub fn compute_ffc_gain(
-    white: &Path,
-    crop_rect: Option<&str>,
-    params: &FfcFitParams,
-) -> Result<Array2<f32>> {
-    Ok((*CachedFfc::compute(white, crop_rect, params)?.gain).clone())
-}
-
 pub fn apply_saved_to_work(
     work: &mut Array3<f32>,
     saved: &SavedPipeline,
@@ -2676,27 +2627,6 @@ pub fn apply_saved_to_work(
             apply_cc_accel(work, model, settings)?;
         }
     }
-    Ok(())
-}
-
-pub fn u8_rgb_to_array3(width: u32, height: u32, rgb: &[u8]) -> Result<Array3<f32>> {
-    let n = width as usize * height as usize * 3;
-    if rgb.len() != n {
-        return Err(Error::Message(format!("rgb24 length {} != {n}", rgb.len())));
-    }
-    let floats: Vec<f32> = rgb.iter().map(|b| *b as f32 / 255.0).collect();
-    Array3::from_shape_vec((height as usize, width as usize, 3), floats)
-        .map_err(|e| Error::Message(e.to_string()))
-}
-
-pub fn array3_to_u8_rgb(arr: &Array3<f32>, dest: &mut [u8]) -> Result<()> {
-    let src = array3_f32s(arr);
-    if dest.len() != src.len() {
-        return Err(Error::Message("rgb24 dest size mismatch".into()));
-    }
-    dest.par_iter_mut()
-        .zip(src.par_iter())
-        .for_each(|(d, s)| *d = f32_to_u8(*s));
     Ok(())
 }
 

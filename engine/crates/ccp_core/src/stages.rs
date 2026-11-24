@@ -12,7 +12,7 @@ use crate::color::{
 use crate::maps::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};
-use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, SATURATION_THRESHOLD, WB_DIAG_SCALE};
+use crate::{Error, Result, RGB_CLIP_HI, RGB_CLIP_LO, WB_DIAG_SCALE};
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -711,12 +711,6 @@ pub fn apply_wb_inplace(img: &mut Array3<f32>, wb: &WhiteBalance) {
     });
 }
 
-pub fn apply_wb_image(img: &Array3<f32>, wb: &WhiteBalance) -> Array3<f32> {
-    let mut out = img.clone();
-    apply_wb_inplace(&mut out, wb);
-    out
-}
-
 pub fn apply_encoded_lut_inplace(img: &mut Array3<f32>, lut: &[f32], gs: usize) {
     map_rgb_inplace(img, |rgb| {
         let c = crate::maps::sample_encoded_lut(lut, gs, rgb);
@@ -740,16 +734,6 @@ pub fn apply_cc_inplace(
         crate::maps::apply_correction_pixel(model, rgb, settings)
             .map(|c| [c[0] as f32, c[1] as f32, c[2] as f32])
     })
-}
-
-pub fn apply_cc_image(
-    img: &Array3<f32>,
-    model: &CorrectionModel,
-    settings: &CorrectionSettings,
-) -> Result<Array3<f32>> {
-    let mut out = img.clone();
-    apply_cc_inplace(&mut out, model, settings)?;
-    Ok(out)
 }
 
 fn ensure_contiguous(img: &mut Array3<f32>) {
@@ -790,24 +774,10 @@ pub struct StageConfig {
     pub do_cc: bool,
 }
 
-impl StageConfig {
-    pub fn default_on() -> Self {
-        Self {
-            do_sat_extrapolate: true,
-            do_gc: true,
-            do_wb: true,
-            do_cc: true,
-        }
-    }
-}
-
-pub fn default_sat_threshold() -> f64 {
-    SATURATION_THRESHOLD
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SATURATION_THRESHOLD;
 
     #[test]
     fn gamma_max_degree_nine_does_not_exceed_sample_rank() {

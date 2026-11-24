@@ -95,7 +95,6 @@ pub fn classify_core(error: &ccp_core::Error) -> ErrorCode {
         | Core::Unsupported16BitTiff { .. }
         | Core::Unsupported16Bit { .. } => ErrorCode::ImageDecodeFailed,
         Core::ImageTooLarge { .. } => ErrorCode::ImageTooLarge,
-        Core::MetricsHidden | Core::ReconcilerDisabled => ErrorCode::InvalidRequest,
         Core::Io(_) => ErrorCode::IoError,
         Core::Image(image) => classify_image(image),
         Core::Json(_) => ErrorCode::InvalidRequest,
