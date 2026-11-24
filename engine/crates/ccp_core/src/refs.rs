@@ -48,10 +48,22 @@ impl Quad {
     }
 }
 
+/// Which chart, cell and reference profile a sampled patch came from.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PatchProvenance {
+    #[serde(default)]
+    pub custom_reference: bool,
+    pub chart_id: String,
+    pub template_id: String,
+    pub cell_id: String,
+    pub profile_id: String,
+    pub profile_revision: u32,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChartPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<crate::reference_profile::PatchProvenance>,
+    pub provenance: Option<PatchProvenance>,
     pub name: String,
     pub index: usize,
     pub reference_lab_d50: Lab,

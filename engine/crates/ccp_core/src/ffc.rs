@@ -8,7 +8,7 @@ use crate::color::{
     xyz_to_lab, xyz_to_linear_rgb,
 };
 use crate::error::{Error, Result};
-use crate::maps::{fit_least_squares, solve_linear_system};
+use crate::linalg::{fit_least_squares, solve_linear_system};
 use crate::mlp::{fit_mlp, MlpParams, MlpWeights};
 use crate::pls::{auto_ncomp, fit_pls, PLS_TOL};
 use crate::stages::GammaModel;

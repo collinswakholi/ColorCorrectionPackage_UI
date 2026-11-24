@@ -7,6 +7,7 @@ pub mod color;
 mod error;
 pub mod ffc;
 pub mod honest;
+mod linalg;
 pub mod lut;
 pub mod maps;
 mod mlp;

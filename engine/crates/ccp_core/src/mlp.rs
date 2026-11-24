@@ -1,6 +1,6 @@
 //! Compact dense MLP used by chart correction and FFC.
 //!
-//! CC (`from_cc`): raw polynomial features (no input standardization),
+//! CC (`MappingOptions::mlp_params`): raw polynomial features (no input standardization),
 //! NumPy MT19937 seed 42, `shuffle=false` after the train/val split,
 //! early stop on validation **R²**, `n_iter_no_change = 15% × max_iter`,
 //! Adam, L2 `alpha=1e-4`, batch `min(200, N)`.
@@ -9,8 +9,6 @@
 
 // Training kernels operate on several row-major buffers in lockstep.
 #![allow(clippy::needless_range_loop)]
-
-use crate::maps::MappingOptions;
 
 pub const MAX_HIDDEN: usize = 512;
 
@@ -22,7 +20,7 @@ pub enum MlpOptimizer {
 }
 
 impl MlpOptimizer {
-    fn parse(value: &str) -> Self {
+    pub fn parse(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "sgd" | "momentum" => Self::Sgd,
             "rmsprop" | "rms" => Self::RmsProp,
@@ -58,51 +56,6 @@ pub struct MlpParams {
 }
 
 impl MlpParams {
-    /// CCP_rs `MlpParams::from_cc_regressor` (UI: hidden 100, 10000 iter, patience 15%).
-    pub fn from_cc(mapping: &MappingOptions) -> Self {
-        let max_iter = mapping.nn_epochs.max(1) as usize;
-        let patience = if mapping.nn_patience > 0 {
-            mapping.nn_patience as usize
-        } else {
-            ((max_iter as f64) * 0.15).max(10.0) as usize
-        };
-        Self {
-            hidden: mapping.hidden_size.max(1) as usize,
-            hidden_layers: if mapping.hidden_layers.is_empty() {
-                vec![mapping.hidden_size.max(1) as usize]
-            } else {
-                mapping
-                    .hidden_layers
-                    .iter()
-                    .take(4)
-                    .map(|&width| width.clamp(4, MAX_HIDDEN as i32) as usize)
-                    .collect()
-            },
-            optimizer: MlpOptimizer::parse(&mapping.nn_optimizer),
-            batch_normalization: mapping.nn_batch_norm,
-            dropout: mapping.nn_dropout.clamp(0.0, 0.8),
-            n_out: 3,
-            max_iter,
-            learning_rate: mapping.learning_rate,
-            tol: if mapping.tol.is_finite() && mapping.tol > 0.0 {
-                mapping.tol
-            } else {
-                1e-6
-            },
-            random_state: 42,
-            shuffle: false,
-            early_stopping: true,
-            validation_fraction: 0.15,
-            n_iter_no_change: patience.max(1),
-            alpha: 1e-4,
-            lr_decay_factor: 0.2,
-            max_lr_reductions: 0,
-            convergence_floor: 0.0,
-            use_numpy_rng: true,
-            residual_output: true,
-        }
-    }
-
     /// CCP_rs `MlpParams::for_ffc`, with the requested iteration budget.
     pub fn for_ffc_iters(max_iter: usize) -> Self {
         let max_iter = max_iter.max(1);
@@ -875,6 +828,7 @@ fn update_values(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::maps::MappingOptions;
 
     #[test]
     fn numpy_mt_first_uniform_matches_known() {
@@ -934,7 +888,7 @@ mod tests {
             tol: 2.5e-5,
             ..MappingOptions::default()
         };
-        let params = MlpParams::from_cc(&mapping);
+        let params = mapping.mlp_params();
         assert!((params.tol - 2.5e-5).abs() < 1e-18);
     }
 
@@ -965,7 +919,7 @@ mod tests {
                 learning_rate: 0.005,
                 ..MappingOptions::default()
             };
-            let params = MlpParams::from_cc(&mapping);
+            let params = mapping.mlp_params();
             let baseline_mse = y
                 .chunks_exact(3)
                 .zip(x.chunks_exact(p))

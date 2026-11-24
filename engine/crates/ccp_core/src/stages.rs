@@ -10,7 +10,7 @@ use crate::color::{
 };
 use crate::error::{Error, Result};
 #[cfg(test)]
-use crate::maps::fit_least_squares;
+use crate::linalg::fit_least_squares;
 use crate::maps::{CorrectionModel, CorrectionSettings};
 use crate::maps::{RGB_CLIP_HI, RGB_CLIP_LO};
 use crate::refs::{lookup_neutrals, ChartPatch, ChartSpec};

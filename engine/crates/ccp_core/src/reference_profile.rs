@@ -6,7 +6,7 @@ use crate::color::{
     parse_white_point, xyz_to_lab, Lab,
 };
 use crate::error::{Error, Result};
-use crate::refs::{chart_spec, ChartKind, ChartPatch, ChartSpec};
+use crate::refs::{chart_spec, ChartKind, ChartPatch, ChartSpec, PatchProvenance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -29,17 +29,6 @@ pub struct ReferenceProfile {
 #[serde(deny_unknown_fields)]
 pub struct ChartReferenceAssignment {
     pub chart_id: String,
-    pub profile_id: String,
-    pub profile_revision: u32,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PatchProvenance {
-    #[serde(default)]
-    pub custom_reference: bool,
-    pub chart_id: String,
-    pub template_id: String,
-    pub cell_id: String,
     pub profile_id: String,
     pub profile_revision: u32,
 }
