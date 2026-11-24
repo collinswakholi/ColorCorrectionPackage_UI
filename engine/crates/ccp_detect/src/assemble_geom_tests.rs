@@ -1,8 +1,13 @@
-use ccp_detect::{
-    assemble_one, dets_from_raw, homography, lattice_plausible, letterbox_rgb, nms_charts,
-    order_visual_quad, scale_quad, warp, ChartDetection, ChartKind, Det, Quad, RawDet, Vec2,
-    LETTERBOX_PAD, NMS_CHARTS_IOU,
+//! Chart assembly from synthetic anchors, geometry helpers and crop parsing.
+
+use crate::assemble::{assemble_one, nms_charts};
+use crate::decode::{dets_from_raw, letterbox_rgb, RawDet};
+use crate::geom::{
+    aabb_iou, anchors_for, canonical_center, homography_4, lattice_plausible, order_visual_quad,
+    quad_center, scale_quad, warp, ChartDetection, ChartKind, Det, Quad, Vec2, LETTERBOX_PAD,
+    NMS_CHARTS_IOU,
 };
+use crate::plane::{parse_crop_rect, Rect};
 
 fn small_quad(cx: f64, cy: f64, half: f64) -> Quad {
     Quad::new(
@@ -18,11 +23,11 @@ fn uv_to_xy(u: f64, v: f64) -> Vec2 {
 }
 
 fn synthetic_classic_anchors() -> Vec<Det> {
-    let specs = ccp_detect::anchors_for(4, 6);
+    let specs = anchors_for(4, 6);
     specs
         .iter()
         .map(|spec| {
-            let c = ccp_detect::canonical_center(spec, 4, 6);
+            let c = canonical_center(spec, 4, 6);
             let p = uv_to_xy(c.x, c.y);
             Det {
                 chart_type: "classic_4x6".into(),
@@ -58,7 +63,7 @@ fn homography_identity() {
         Vec2::new(1.0, 1.0),
         Vec2::new(0.0, 1.0),
     ];
-    let h = homography(&src, &src).expect("identity homography");
+    let h = homography_4(&src, &src).expect("identity homography");
     let p = Vec2::new(0.3, 0.7);
     let q = warp(&h, p);
     assert!((q.x - p.x).abs() < 1e-9, "x {} vs {}", q.x, p.x);
@@ -72,7 +77,7 @@ fn homography_identity() {
 fn nms_charts_iou_035() {
     let a = chart_rect(0.90, 0.0);
     let b = chart_rect(0.40, 5.0);
-    let iou = ccp_detect::aabb_iou(a.corners, b.corners);
+    let iou = aabb_iou(a.corners, b.corners);
     assert!(iou >= NMS_CHARTS_IOU, "expected overlap >= 0.35, got {iou}");
     let kept = nms_charts(vec![b.clone(), a.clone()]);
     assert_eq!(kept.len(), 1);
@@ -117,8 +122,8 @@ fn assemble_one_eight_anchors_24_cells() {
     let (chart, _) = assemble_one(&dets, "classic_4x6", 0.75).expect("assemble_one");
     assert_eq!(chart.patch_cells.len(), 24);
     let inset = scale_quad(chart.patch_cells[0], 0.75);
-    let c0 = ccp_detect::geom::quad_center(chart.patch_cells[0]);
-    let ci = ccp_detect::geom::quad_center(inset);
+    let c0 = quad_center(chart.patch_cells[0]);
+    let ci = quad_center(inset);
     assert!((c0.x - ci.x).abs() < 1e-9);
     assert!((c0.y - ci.y).abs() < 1e-9);
 }
@@ -127,7 +132,7 @@ fn assemble_one_eight_anchors_24_cells() {
 fn shuffle_overlapping_charts_nms_keeps_one() {
     let left = chart_rect(0.81, 0.0);
     let overlap = chart_rect(0.77, 8.0);
-    assert!(ccp_detect::aabb_iou(left.corners, overlap.corners) >= 0.35);
+    assert!(aabb_iou(left.corners, overlap.corners) >= 0.35);
     let kept = nms_charts(vec![left, overlap]);
     assert_eq!(kept.len(), 1);
 }
@@ -157,7 +162,7 @@ fn dets_from_raw_class_type_times_8() {
         score: 0.5,
         cls: 8, // spyder tl
     }];
-    let dets = dets_from_raw(&raw, 1280, 1.0, 0.0, 0.0);
+    let dets = dets_from_raw(&raw, 1.0, 0.0, 0.0);
     assert_eq!(dets.len(), 1);
     assert_eq!(dets[0].chart_type, "spyder_4x6");
     assert_eq!(dets[0].anchor_name, "tl");
@@ -165,12 +170,12 @@ fn dets_from_raw_class_type_times_8() {
 
 #[test]
 fn parse_crop_rect_xyxy() {
-    let r = ccp_detect::parse_crop_rect("10,20,110,220").expect("rect");
+    let r = parse_crop_rect("10,20,110,220").expect("rect");
     assert_eq!(r.x, 10);
     assert_eq!(r.y, 20);
     assert_eq!(r.width, 100);
     assert_eq!(r.height, 200);
-    let full = ccp_detect::plane_or_full(640, 480, None, None);
+    let full = Rect::full(640, 480);
     assert_eq!(full.width, 640);
     assert_eq!(full.height, 480);
 }

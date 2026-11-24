@@ -6,7 +6,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 
 use ccp_detect::cache_key::{model_cache_identity, runtime_cache_identity};
-use ccp_detect::paths::{primary_onnx_path, recall_onnx_path};
+use ccp_detect::paths::{default_deploy_dir, primary_onnx_path, recall_onnx_path};
 use ccp_detect::DetectSettings;
 use serde_json::Value;
 
@@ -32,7 +32,7 @@ impl DetectCache {
         let canonical = image.canonicalize().unwrap_or_else(|_| image.to_path_buf());
         let metadata = std::fs::metadata(image).ok();
         let deploy = if settings.deploy_dir.as_os_str().is_empty() {
-            ccp_detect::default_deploy_dir()
+            default_deploy_dir()
         } else {
             settings.deploy_dir.clone()
         };

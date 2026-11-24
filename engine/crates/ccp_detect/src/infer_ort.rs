@@ -5,13 +5,13 @@ use std::sync::Mutex;
 
 use crate::assemble::assemble_charts;
 use crate::decode::{decode_obb, dets_from_raw, letterbox_rgb, preds_to_obb_rows};
+use crate::detection::{DetectResult, DetectSettings};
 use crate::geom::{
     cli_chart_from_detector, format_quad, DECODE_IOU, DEFAULT_CONF, DEFAULT_CROP, DEFAULT_MAX_DET,
     PRIMARY_SIZE, RECALL_SIZE,
 };
 use crate::handshake::{make_handshake, warmup_json};
 use crate::paths::{default_deploy_dir, primary_onnx_path, recall_onnx_path};
-use crate::{DetectResult, DetectSettings};
 
 use crate::gpu_inference::{CachedInference, ExecutionRecord, InferenceSession};
 
@@ -111,7 +111,7 @@ fn run_detect_forward(
         validate_output(&dims, &data)?;
         let rows = preds_to_obb_rows(&data, &dims.iter().map(|&d| d as usize).collect::<Vec<_>>());
         let raw = decode_obb(&rows, conf, iou, max_det.max(1) as usize);
-        Ok(dets_from_raw(&raw, imgsz, lb.gain, lb.pad_x, lb.pad_y))
+        Ok(dets_from_raw(&raw, lb.gain, lb.pad_x, lb.pad_y))
     })
 }
 
@@ -385,7 +385,7 @@ mod recall_failure_tests {
     #[test]
     fn failed_recall_is_not_reported_as_a_no_chart_result() {
         let result = super::failed_recall(
-            crate::DetectResult::default(),
+            crate::detection::DetectResult::default(),
             "CPU execution failed after GPU was unavailable".into(),
         );
         assert!(!result.ok);

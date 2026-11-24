@@ -9,9 +9,9 @@ use std::time::SystemTime;
 
 use ccp_core::lut::DEFAULT_LUT_SIZE;
 use ccp_detect::plane::{last_plane_ep, last_plane_inference};
+use ccp_detect::probe::{probe_accelerators, set_runtime_from_report, DevicePolicy};
 use ccp_detect::{
-    detect_chart, probe_accelerators, set_runtime_from_report, warmup_detector, DetectResult,
-    DetectSettings, DevicePolicy, DEFAULT_CONF, DEFAULT_CROP,
+    detect_chart, warmup_detector, DetectResult, DetectSettings, DEFAULT_CONF, DEFAULT_CROP,
 };
 use serde_json::{json, Value};
 
@@ -190,7 +190,7 @@ fn cmd_devices(state: &ServeState, req: &Value) -> Value {
         obj.insert("ok".into(), json!(true));
         #[cfg(feature = "ort-plane")]
         if state.warmed {
-            let inference = ccp_detect::infer_ort::inference_records(false);
+            let inference = ccp_detect::inference_records(false);
             if inference
                 .pointer("/detect/requested_policy")
                 .and_then(Value::as_str)
@@ -1033,16 +1033,16 @@ mod tests {
         assert!(!stop);
         assert_eq!(reply["ok"], false);
         assert_eq!(state.policy, "cpu");
-        assert_eq!(ccp_detect::runtime_policy().as_str(), "cpu");
+        assert_eq!(ccp_detect::probe::runtime_policy().as_str(), "cpu");
         assert_eq!(
-            ccp_detect::runtime_assignment().detect,
+            ccp_detect::probe::runtime_assignment().detect,
             auto.assignment.detect
         );
         assert_eq!(
-            ccp_detect::runtime_assignment().plane,
+            ccp_detect::probe::runtime_assignment().plane,
             auto.assignment.plane
         );
-        assert_eq!(ccp_detect::runtime_assignment().apply, "cpu");
+        assert_eq!(ccp_detect::probe::runtime_assignment().apply, "cpu");
     }
 
     #[test]

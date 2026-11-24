@@ -3,10 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const PLANE_INPUT: i32 = 512;
-pub const PLANE_CONF: f32 = 0.7;
-pub const PLANE_NMS: f32 = 0.6;
-pub const PLANE_SHRINK: f32 = 0.95;
+pub(crate) const PLANE_INPUT: i32 = 512;
+pub(crate) const PLANE_CONF: f32 = 0.7;
+pub(crate) const PLANE_NMS: f32 = 0.6;
+pub(crate) const PLANE_SHRINK: f32 = 0.95;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Rect {
@@ -17,7 +17,7 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn from_xyxy(x1: i32, y1: i32, x2: i32, y2: i32) -> Self {
+    pub(crate) fn from_xyxy(x1: i32, y1: i32, x2: i32, y2: i32) -> Self {
         Self {
             x: x1,
             y: y1,
@@ -43,11 +43,11 @@ impl Rect {
         self.y + self.height
     }
 
-    pub fn area(self) -> i64 {
+    pub(crate) fn area(self) -> i64 {
         i64::from(self.width.max(0)) * i64::from(self.height.max(0))
     }
 
-    pub fn shrink(self, ratio: f32) -> Self {
+    pub(crate) fn shrink(self, ratio: f32) -> Self {
         let shrink = 1.0 - ratio;
         let dx = (self.width as f32 * shrink) as i32;
         let dy = (self.height as f32 * shrink) as i32;
@@ -78,21 +78,6 @@ pub fn parse_crop_rect(s: &str) -> Option<Rect> {
         width: nums[2].checked_sub(nums[0])?,
         height: nums[3].checked_sub(nums[1])?,
     })
-}
-
-/// Manual crop wins; else detected box; miss → full frame.
-pub fn plane_or_full(
-    frame_w: i32,
-    frame_h: i32,
-    crop_rect: Option<&str>,
-    detected: Option<Rect>,
-) -> Rect {
-    if let Some(s) = crop_rect {
-        if let Some(r) = parse_crop_rect(s) {
-            return r;
-        }
-    }
-    detected.unwrap_or_else(|| Rect::full(frame_w, frame_h))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -128,7 +113,7 @@ fn aabb_iou(a: Rect, b: Rect) -> f32 {
     }
 }
 
-pub fn nms_boxes(mut dets: Vec<PlaneDet>, iou_thr: f32) -> Vec<PlaneDet> {
+pub(crate) fn nms_boxes(mut dets: Vec<PlaneDet>, iou_thr: f32) -> Vec<PlaneDet> {
     dets.sort_by(|a, b| {
         b.confidence
             .partial_cmp(&a.confidence)
@@ -147,7 +132,7 @@ pub fn nms_boxes(mut dets: Vec<PlaneDet>, iou_thr: f32) -> Vec<PlaneDet> {
     kept
 }
 
-pub fn largest_box(dets: &[PlaneDet]) -> Option<PlaneDet> {
+pub(crate) fn largest_box(dets: &[PlaneDet]) -> Option<PlaneDet> {
     dets.iter().max_by_key(|d| d.area_key()).cloned()
 }
 
@@ -158,7 +143,7 @@ impl PlaneDet {
 }
 
 /// Apply shrink 0.95 to the largest detection (CCP YOLO plane).
-pub fn select_plane_box(dets: &[PlaneDet], shrink: f32) -> Option<Rect> {
+pub(crate) fn select_plane_box(dets: &[PlaneDet], shrink: f32) -> Option<Rect> {
     largest_box(dets).map(|d| d.rect.shrink(shrink))
 }
 
@@ -184,7 +169,7 @@ pub fn detect_plane(
 
 #[cfg(feature = "ort-plane")]
 /// Shared bilinear preprocessing for production inference and isolated benchmarks.
-pub fn resize_rgb_to_nchw(rgb: &[u8], width: u32, height: u32, size: i32) -> Vec<f32> {
+pub(crate) fn resize_rgb_to_nchw(rgb: &[u8], width: u32, height: u32, size: i32) -> Vec<f32> {
     let size = size.max(1) as u32;
     let mut chw = vec![0.0f32; (3 * size * size) as usize];
     for y in 0..size {
@@ -277,7 +262,12 @@ fn parse_yolo_output(data: &[f32], dims: &[i64], img_w: i32, img_h: i32) -> Vec<
 
 /// Decode and select the same largest/shrunken plane used by production.
 #[cfg(feature = "ort-plane")]
-pub fn plane_box_from_output(data: &[f32], dims: &[i64], width: i32, height: i32) -> Option<Rect> {
+pub(crate) fn plane_box_from_output(
+    data: &[f32],
+    dims: &[i64],
+    width: i32,
+    height: i32,
+) -> Option<Rect> {
     select_plane_box(&parse_yolo_output(data, dims, width, height), PLANE_SHRINK)
 }
 
@@ -362,27 +352,6 @@ fn validate_output(dims: &[i64], data: &[f32]) -> Result<(), PlaneError> {
         )));
     }
     Ok(())
-}
-
-/// Detect the plane or fall back to the full frame (FFC miss path).
-pub fn detect_plane_or_full(
-    rgb: &[u8],
-    width: u32,
-    height: u32,
-    crop_rect: Option<&str>,
-    model_path: Option<&std::path::Path>,
-) -> Rect {
-    if let Some(s) = crop_rect {
-        if let Some(r) = parse_crop_rect(s) {
-            return r;
-        }
-    }
-    if let Some(path) = model_path {
-        if let Ok(Some(r)) = detect_plane(rgb, width, height, path) {
-            return r;
-        }
-    }
-    Rect::full(width as i32, height as i32)
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ use ccp_core::stages::{
     apply_cc_inplace, apply_encoded_lut_inplace, apply_gc_inplace, apply_gc_pixel,
     apply_wb_inplace, apply_wb_pixel,
 };
-use ccp_detect::{runtime_policy, DevicePolicy};
+use ccp_detect::probe::{gpu_correction_enabled, runtime_policy, DevicePolicy};
 use ndarray::Array3;
 use rayon::prelude::*;
 use serde_json::{json, Value};
@@ -250,7 +250,7 @@ fn apply_lut(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Res
     let request = LUT_REQUEST.get();
     let small_auto = request.auto && auto_uses_cpu(img.len() / 3);
     if runtime_policy() != DevicePolicy::Cpu
-        && ccp_detect::probe::gpu_correction_enabled()
+        && gpu_correction_enabled()
         && !request.force_cpu
         && !small_auto
     {

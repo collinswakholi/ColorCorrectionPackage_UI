@@ -189,7 +189,7 @@ impl FitRequest {
 
 /// Neutral patch names per chart: the installed table, else the embedded one.
 fn load_neutrals() -> HashMap<String, Vec<String>> {
-    if let Some(root) = ccp_detect::find_ccp_new_ui_root() {
+    if let Some(root) = ccp_detect::paths::find_ccp_new_ui_root() {
         let path = root.join("refs").join("neutrals.json");
         if let Ok(table) = load_neutrals_table(Some(&path)) {
             return table;

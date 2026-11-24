@@ -10,7 +10,7 @@ use std::time::SystemTime;
 
 use ccp_core::ffc::{compute_multiplier, FfcFitParams};
 use ccp_core::sample::{load_image, RgbImage};
-use ccp_detect::plane::{detect_plane, detect_plane_or_full, parse_crop_rect};
+use ccp_detect::plane::{detect_plane, parse_crop_rect};
 use ndarray::Array2;
 
 use crate::error::{Error, ErrorCode, Result};
@@ -113,9 +113,13 @@ fn plane(white: &RgbImage, crop_rect: Option<&str>) -> Result<([i32; 4], &'stati
     if let Some(r) = detected.filter(|r| r.width > 0 && r.height > 0) {
         return Ok(([r.x, r.y, r.width, r.height], "detected"));
     }
-    let full = detect_plane_or_full(&rgb8, white.width, white.height, None, None);
     Ok((
-        [full.x, full.y, full.width.max(1), full.height.max(1)],
+        [
+            0,
+            0,
+            (white.width as i32).max(1),
+            (white.height as i32).max(1),
+        ],
         "full",
     ))
 }

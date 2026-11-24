@@ -4,11 +4,11 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-pub const PRIMARY_ONNX: &str = "best_assemble_fp32_1280.onnx";
-pub const RECALL_ONNX: &str = "best_assemble_fp32_1536.onnx";
-pub const PLANE_ONNX: &str = "plane_det_model_YOLO_512_n.onnx";
+pub(crate) const PRIMARY_ONNX: &str = "best_assemble_fp32_1280.onnx";
+pub(crate) const RECALL_ONNX: &str = "best_assemble_fp32_1536.onnx";
+pub(crate) const PLANE_ONNX: &str = "plane_det_model_YOLO_512_n.onnx";
 
-pub fn looks_like_ccp_root(path: &Path) -> bool {
+pub(crate) fn looks_like_ccp_root(path: &Path) -> bool {
     path.join("models").join("opt2").is_dir() && path.join("refs").join("neutrals.json").is_file()
 }
 
@@ -50,7 +50,7 @@ pub fn find_ccp_new_ui_root() -> Option<PathBuf> {
     None
 }
 
-pub fn deploy_dir_from_root(root: &Path) -> PathBuf {
+pub(crate) fn deploy_dir_from_root(root: &Path) -> PathBuf {
     root.join("models").join("opt2")
 }
 
