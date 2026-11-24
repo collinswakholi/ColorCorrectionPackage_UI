@@ -1090,9 +1090,7 @@ fn requested_ffc_method(req: &Value) -> Result<FfcFitMethod> {
         Some(Value::Object(map)) => Some(map),
         _ => return Err(Error::Message("ffc must be an object".into())),
     };
-    let selector = fields
-        .and_then(|m| m.get("method").or_else(|| m.get("fit_method")))
-        .or_else(|| req.get("ffc_method"));
+    let selector = fields.and_then(|m| m.get("method"));
     match selector {
         None => Ok(FfcFitMethod::Poly),
         Some(value) => match value.as_str().map(str::to_ascii_lowercase).as_deref() {
@@ -1146,30 +1144,22 @@ fn ffc_params_from_req(req: &Value, method: FfcFitMethod) -> Result<FfcFitParams
         upsample: Upsample::Cubic,
         nn_max_iter: nn_max_iter as usize,
         tol: {
-            let v = json_f64(&ffc, &["tol"], json_f64(req, &["ffc_tol"], 1e-8));
+            let v = json_f64(&ffc, &["tol"], 1e-8);
             if v.is_finite() && v > 0.0 {
                 v
             } else {
                 1e-8
             }
         },
-        cut_off: json_f64(
-            &ffc,
-            &["cut_off", "ffc_cut_off"],
-            json_f64(req, &["ffc_cut_off"], 1.3),
-        ) as f32,
-        max_val: json_f64(
-            &ffc,
-            &["max_val", "ffc_max_val"],
-            json_f64(req, &["ffc_max_val"], 1.8),
-        ) as f32,
+        cut_off: json_f64(&ffc, &["cut_off"], 1.3) as f32,
+        max_val: json_f64(&ffc, &["max_val"], 1.8) as f32,
     })
 }
 
 fn mapping_from_req(req: &Value) -> MappingOptions {
     let defaults = MappingOptions::default();
     let include_combinations = json_bool(req, &["include_combinations"], true);
-    let poly_degree = json_i64(req, &["degree", "poly_degree", "fit_samples_degree"], 2) as i32;
+    let poly_degree = json_i64(req, &["degree"], 2) as i32;
     let pls = req.get("pls").cloned().unwrap_or(Value::Null);
     let pls_components = json_i64(
         &pls,
@@ -1199,15 +1189,11 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         .to_ascii_lowercase();
     let nn_batch_norm = json_bool(
         &nn,
-        &["batch_norm", "batch_normalization"],
-        json_bool(req, &["nn_batch_norm", "nn_batch_normalization"], false),
+        &["batch_norm"],
+        json_bool(req, &["nn_batch_norm"], false),
     );
-    let nn_dropout = json_f64(
-        &nn,
-        &["dropout", "drop_rate"],
-        json_f64(req, &["nn_dropout", "drop_rate"], 0.0),
-    )
-    .clamp(0.0, 0.8);
+    let nn_dropout =
+        json_f64(&nn, &["dropout"], json_f64(req, &["nn_dropout"], 0.0)).clamp(0.0, 0.8);
     let nn_epochs = json_i64(
         &nn,
         &["epochs", "nn_epochs"],
@@ -1223,11 +1209,7 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         &["lr", "learning_rate"],
         json_f64(req, &["nn_lr"], 0.001),
     );
-    let tol = json_f64(
-        &nn,
-        &["tol", "nn_tol"],
-        json_f64(req, &["tol", "nn_tol"], 1e-6),
-    );
+    let tol = json_f64(&nn, &["tol"], json_f64(req, &["tol"], 1e-6));
     let tol = if tol.is_finite() && tol > 0.0 {
         tol
     } else {
@@ -1248,8 +1230,8 @@ fn mapping_from_req(req: &Value) -> MappingOptions {
         nn_patience,
         learning_rate,
         tol,
-        clip_lo: json_f64(req, &["clip_lo", "rgb_clip_lo"], -0.2),
-        clip_hi: json_f64(req, &["clip_hi", "rgb_clip_hi"], 1.3),
+        clip_lo: json_f64(req, &["clip_lo"], -0.2),
+        clip_hi: json_f64(req, &["clip_hi"], 1.3),
     }
 }
 
@@ -1960,13 +1942,13 @@ pub fn run_from_json_ex(
     let handshake = load_handshake_value(req)?;
     let crop = json_f64(req, &["crop"], 0.75);
     let face = json_i64(req, &["face"], 0).max(0) as usize;
-    let use_all = json_bool(req, &["use_all", "chart_all"], false);
+    let use_all = json_bool(req, &["use_all"], false);
     let faces = parse_handshake(&handshake, face, use_all, crop)?;
     let reference_context = resolve_request_references(req, &faces)?;
 
-    let white_path = json_str(req, &["white", "white_image", "white_image_path"]);
+    let white_path = json_str(req, &["white"]);
     let stages = StageConfig {
-        do_sat_extrapolate: json_bool(req, &["do_sat", "do_sat_extrapolate"], true),
+        do_sat_extrapolate: json_bool(req, &["do_sat"], true),
         do_gc: json_bool(req, &["do_gc"], true),
         do_wb: json_bool(req, &["do_wb"], true),
         do_cc: json_bool(req, &["do_cc"], true),
@@ -2560,7 +2542,7 @@ impl ApplyOptions {
         saved: &SavedPipeline,
         method: FfcFitMethod,
     ) -> Result<FfcFitParams> {
-        if req.get("ffc").is_some() || req.get("ffc_method").is_some() {
+        if req.get("ffc").is_some() {
             ffc_params_from_req(req, method)
         } else {
             Ok(saved.ffc_params.clone().unwrap_or_default())
@@ -2574,7 +2556,7 @@ impl ApplyOptions {
             do_gc: json_bool(req, &["do_gc"], saved.do_gc),
             do_wb: json_bool(req, &["do_wb"], saved.do_wb),
             do_cc: json_bool(req, &["do_cc"], saved.do_cc),
-            white: json_str(req, &["white", "white_image", "white_image_path"])
+            white: json_str(req, &["white"])
                 .filter(|s| !s.is_empty())
                 .map(PathBuf::from),
             crop_rect: json_str(req, &["crop_rect"]).map(str::to_string),
@@ -3619,7 +3601,12 @@ mod tests {
             assert!(ApplyOptions::try_from_req(&req, &saved).is_ok());
         }
         assert_eq!(
-            requested_ffc_method(&json!({"ffc_method":"Polynomial"})).unwrap(),
+            requested_ffc_method(&json!({"ffc":{"method":"Polynomial"}})).unwrap(),
+            FfcFitMethod::Poly
+        );
+        // Undocumented pre-0.2 spellings are no longer read.
+        assert_eq!(
+            requested_ffc_method(&json!({"ffc_method":"nn","ffc":{"fit_method":"pls"}})).unwrap(),
             FfcFitMethod::Poly
         );
     }

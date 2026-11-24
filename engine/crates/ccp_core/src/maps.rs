@@ -1228,7 +1228,10 @@ mod tests {
             ..CorrectionModel::default()
         };
         let error = legacy.validate().expect_err("pre-Studio single-layer NN");
-        assert!(error.to_string().contains("fit a new calibration"), "{error}");
+        assert!(
+            error.to_string().contains("fit a new calibration"),
+            "{error}"
+        );
         legacy.nn_residual = true;
         assert!(legacy.validate().is_err(), "w1..b2 alone are not applied");
     }

@@ -346,9 +346,8 @@ public sealed class CorrectionClient
             ["nn_lr"] = options.NnLr,
             ["nn_epochs"] = options.NnEpochs,
             ["nn_patience"] = options.NnPatience,
-            ["nn_tol"] = options.NnTol,
             ["tol"] = options.NnTol,
-            ["poly_degree"] = options.Degree,
+            ["degree"] = options.Degree,
         };
     }
 
