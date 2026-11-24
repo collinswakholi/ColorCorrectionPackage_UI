@@ -242,24 +242,6 @@ public partial class MainWindowViewModel
         ScheduleSave();
     }
 
-    [RelayCommand]
-    private void UseCatalogWhite(CatalogItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            UseWhitePath(item.Path);
-        }
-    }
-
-    [RelayCommand]
-    private void UseSessionWhite(SessionItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            UseWhitePath(item.Path);
-        }
-    }
-
     [RelayCommand(CanExecute = nameof(CanRestartWorker))]
     private async Task ForceCpuRestartAsync()
     {
@@ -966,10 +948,6 @@ public partial class MainWindowViewModel
         if (s.Equals("planned", StringComparison.OrdinalIgnoreCase)) return "Planned";
         return char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
     }
-
-    private static bool ActiveIs(JsonElement report, string kind) =>
-        report.TryGetProperty("active", out var active) &&
-        string.Equals(active.ToString(), kind, StringComparison.OrdinalIgnoreCase);
 
     private static string Str(JsonElement el, string name) =>
         el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";

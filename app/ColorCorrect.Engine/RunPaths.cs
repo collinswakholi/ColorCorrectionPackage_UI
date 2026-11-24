@@ -63,19 +63,4 @@ public static class RunPaths
 
         File.Copy(src, dest, overwrite: true);
     }
-
-    public static bool IsUnderRepo(string path, string repoRoot)
-    {
-        try
-        {
-            var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var root = Path.GetFullPath(repoRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return full.StartsWith(root + Path.DirectorySeparatorChar, PathIdentity.Comparison)
-                   || PathIdentity.Equal(full, root);
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

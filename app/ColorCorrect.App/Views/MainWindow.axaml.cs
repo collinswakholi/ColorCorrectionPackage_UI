@@ -521,16 +521,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void OnSessionWhiteClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { Tag: SessionItemViewModel item } && DataContext is MainWindowViewModel vm)
-        {
-            vm.UseWhitePath(item.Path);
-        }
-
-        e.Handled = true;
-    }
-
     private void OnRemoveCatalogFolderClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { Tag: CatalogFolderViewModel folder } && DataContext is MainWindowViewModel vm)

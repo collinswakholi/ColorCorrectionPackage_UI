@@ -22,7 +22,6 @@ public partial class ComputeViewModel : ViewModelBase
     [ObservableProperty] private bool _phase2Teacher = true;
     [ObservableProperty] private string _accelJson = "";
     [ObservableProperty] private string _accelHint = "Checking graphics hardware…";
-    [ObservableProperty] private string _lutNote = "LUT does not include flat-field.";
     [ObservableProperty] private string _detectSummary = "Waiting for detect";
     [ObservableProperty] private NamedValue _selectedSetupMode = new("recommended", "Recommended");
     [ObservableProperty] private bool _setupWebGpu = true;

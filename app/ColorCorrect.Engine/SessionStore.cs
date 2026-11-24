@@ -64,23 +64,9 @@ public static class SessionStore
         return dir;
     }
 
-    public static string FilePath() => Path.Combine(AppDataDir(), "session.json");
-
     public static string SettingsPath() => Path.Combine(AppDataDir(), "settings.json");
 
-    public static SessionState Load() => TryLoad().State;
-
-    public static (SessionState State, string? Error) TryLoad() => TryLoadSettings();
-
-    public static (SessionState State, string? Error) TryLoadSettings()
-    {
-        if (File.Exists(SettingsPath()))
-        {
-            return TryLoadFrom(SettingsPath());
-        }
-
-        return TryLoadFrom(FilePath());
-    }
+    public static (SessionState State, string? Error) TryLoad() => TryLoadFrom(SettingsPath());
 
     public static bool SaveSettings(SessionState state) => Write(SettingsPath(), state);
 
@@ -130,8 +116,6 @@ public static class SessionStore
             return (new SessionState(), ex.Message);
         }
     }
-
-    public static bool Save(SessionState state) => Write(FilePath(), state);
 
     public static bool Write(string path, SessionState state)
     {

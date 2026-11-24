@@ -57,22 +57,6 @@ public partial class ColorHoverState : ObservableObject
         IsVisible = false;
     }
 
-    public void ShowPixel(PickedColor picked)
-    {
-        Title = picked.Pixel;
-        Context = "Pixel";
-        IsCompare = false;
-        SampleLabel = "";
-        ApplyChannels(picked.R, picked.G, picked.B, picked.L, picked.A, picked.LabB);
-        ClearDeltas();
-        Extra = "";
-        Swatch2 = null;
-        Swatch2Label = "";
-        IsVisible = true;
-        OnPropertyChanged(nameof(HasExtra));
-        OnPropertyChanged(nameof(HasSwatch2));
-    }
-
     public void ShowPatch(PatchRow row, bool corrected)
     {
         var sample = corrected && row.Corrected.Length >= 3 ? row.Corrected : row.Measured;
@@ -177,16 +161,5 @@ public partial class ColorHoverState : ObservableObject
         var b = Ch(2);
         var lab = PixelSampler.SrgbToLab(r, g, b);
         return (r, g, b, lab.L, lab.A, lab.B);
-    }
-
-    private static IBrush BrushFrom(double[] rgb)
-    {
-        if (rgb.Length < 3)
-        {
-            return Brushes.Gray;
-        }
-
-        byte Ch(double v) => (byte)Math.Clamp((int)Math.Round(v * 255), 0, 255);
-        return new SolidColorBrush(Color.FromRgb(Ch(rgb[0]), Ch(rgb[1]), Ch(rgb[2])));
     }
 }

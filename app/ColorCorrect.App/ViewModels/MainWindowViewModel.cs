@@ -104,7 +104,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         HookWorkerProgress();
         if (_persistenceEnabled)
         {
-            var hasSavedSettings = File.Exists(SessionStore.SettingsPath()) || File.Exists(SessionStore.FilePath());
+            var hasSavedSettings = File.Exists(SessionStore.SettingsPath());
             RestoreSession();
             if (!hasSavedSettings)
             {
@@ -877,15 +877,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         Log("Output", $"Opened {dir}.");
     }
 
-    [RelayCommand]
-    private void SelectItem(SessionItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            HandleSessionClick(item, toggle: false, range: false);
-        }
-    }
-
     [RelayCommand(CanExecute = nameof(CanNavigatePrevious))]
     private void PreviousSession() => NavigateSession(-1);
 
@@ -904,15 +895,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         if (next >= 0 && next < Session.Count)
         {
             HandleSessionClick(Session[next], toggle: false, range: false);
-        }
-    }
-
-    [RelayCommand]
-    private void AddSample(CatalogItemViewModel? item)
-    {
-        if (item is not null)
-        {
-            AddPaths([item.Path], collapseLibrary: false);
         }
     }
 
@@ -1024,32 +1006,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         File.Copy(Output.LoadedModelPath, dest, overwrite: true);
         Output.ModelIoStatus = $"Saved {Path.GetFileName(dest)}";
         Log("Model", $"Saved {Path.GetFileName(dest)}.", LogLevel.Success, [dest]);
-    }
-
-    [RelayCommand]
-    private async Task SaveItemAsync(SessionItemViewModel? item)
-    {
-        if (item is null || Dialogs is null)
-        {
-            return;
-        }
-
-        if (!File.Exists(item.CorrectedPath) && !await MaterializeCorrectedAsync(item))
-        {
-            Job.Status = "Could not write a full-resolution corrected still.";
-            ToastService.ShowWarning(Job.Status);
-            return;
-        }
-
-        var dest = await Dialogs.SaveImageAsync(Path.GetFileNameWithoutExtension(item.Path) + "_corrected" + Path.GetExtension(item.CorrectedPath));
-        if (string.IsNullOrWhiteSpace(dest))
-        {
-            return;
-        }
-
-        File.Copy(item.CorrectedPath, dest, overwrite: true);
-        Job.Status = $"Saved {Path.GetFileName(dest)}";
-        Log("Save", dest);
     }
 
     [RelayCommand]
@@ -2224,16 +2180,6 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         Stage.OverlayScaleX = Stage.NaturalWidth / Math.Max(1, _sourceWidth);
         Stage.OverlayScaleY = Stage.NaturalHeight / Math.Max(1, _sourceHeight);
-    }
-
-    private static int MapSourceToPreview(int source, int sourceExtent, int previewExtent)
-    {
-        if (sourceExtent <= 1 || previewExtent <= 1 || sourceExtent == previewExtent)
-        {
-            return source;
-        }
-
-        return (int)Math.Clamp((long)source * previewExtent / sourceExtent, 0, previewExtent - 1);
     }
 
     private static int MapPreviewToSource(int preview, int previewExtent, int sourceExtent)
