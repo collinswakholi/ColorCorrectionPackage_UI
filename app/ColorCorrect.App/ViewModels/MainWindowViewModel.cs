@@ -158,8 +158,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
     private void OnSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        // Same side effects as the former generated On*Changed hooks. Views bind through
-        // Settings.*, so the shell does not re-raise sub-view-model property names.
+        // Views bind through Settings.*, so the shell does not re-raise sub-view-model property names.
         switch (e.PropertyName)
         {
             case nameof(CorrectionSettingsViewModel.DoFfc): OnDoFfcChanged(Settings.DoFfc); break;

@@ -145,7 +145,7 @@ public partial class CorrectionSettingsViewModel : ViewModelBase
             ?? NumberError(nameof(NnPatience), NnPatience, "Patience", 1, 5000, true);
     }
 
-    // ---- moved from MainWindowViewModel ----
+    // Visibility, labels and the summary the shell derives from the selected methods.
     [ObservableProperty] private bool _showDegree = true;
     [ObservableProperty] private bool _showPolyCombinations = true;
     [ObservableProperty] private bool _showPls;

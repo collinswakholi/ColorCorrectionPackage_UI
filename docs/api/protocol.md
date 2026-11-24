@@ -142,6 +142,7 @@ For contributor checks, see the
 | `preview(model, image, stage, preview_dir, **options)` | Compute a selected cumulative stage | model, image, stage, destination |
 | `export_cube(model, path, size=33)` | Export global transform | explicit model and .cube path |
 | `request(command, **parameters)` | Complete native protocol escape hatch | command + documented JSON fields |
+| `start()` | Start the worker now instead of on the first request (`with Engine(...)` does this) | none |
 | `close()` | Stop worker and release pipes | none |
 
 Always use `with Engine(...) as engine:` or `try/finally: engine.close()`. An Engine that is garbage-collected or still open at interpreter exit asks its worker to shut down and then terminates it, but explicit closing is the supported way to flush deferred work. `Engine.protocol_version` reports the worker's protocol (`None` until the worker starts). A ready event without one (a Studio 0.1.x worker) and versions other than 2 and 3 are refused at startup. One client serializes requests; multiple clients mean independent processes/caches and multiply memory usage. Progress callbacks run on the caller thread and must not call the same client recursively. `EngineError.reply` preserves the native reply (including its `code`; typed-SDK errors expose it as `ColorCorrectError.code`); `request(..., check=False)` opts into manual inspection, including every batch row. The native `ok` on a batch means **at least one** succeeded, whereas the Python default raises for **any** failed row.
