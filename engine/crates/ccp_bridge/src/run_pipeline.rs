@@ -49,7 +49,7 @@ use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::error_code::ErrorCode;
+use crate::error::{Error, ErrorCode, Result};
 
 pub mod fast_lut;
 use fast_lut::apply_combined;
@@ -263,45 +263,6 @@ fn join_pending_preview_png(path: &Path) -> Result<()> {
 /// Finish all pending preview PNGs (worker shutdown), reporting the first failure.
 pub fn flush_preview_encodes() -> Result<()> {
     pending_preview_pngs().flush()
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    Message(String),
-    /// A message with an explicit protocol error code.
-    #[error("{message}")]
-    Coded { code: ErrorCode, message: String },
-    #[error(transparent)]
-    Core(#[from] ccp_core::Error),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Json(#[from] serde_json::Error),
-    #[error(transparent)]
-    Image(#[from] image::ImageError),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-impl Error {
-    pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self::Coded {
-            code,
-            message: message.into(),
-        }
-    }
-
-    /// Stable protocol-3 code for this error.
-    pub fn code(&self) -> ErrorCode {
-        crate::error_code::classify(self)
-    }
-}
-
-/// Tag an input-image load failure (message unchanged).
-fn image_load_error(error: ccp_core::Error) -> Error {
-    let code = crate::error_code::classify_image_load(&error);
-    Error::coded(code, error.to_string())
 }
 
 // Request-local diagnostics must not be overwritten by concurrent callers of
@@ -1658,7 +1619,7 @@ pub struct CachedFfc {
 
 impl CachedFfc {
     pub fn compute(white: &Path, crop: Option<&str>, params: &FfcFitParams) -> Result<Self> {
-        let white_img = load_image(white).map_err(|error|Error::coded(crate::error_code::classify_image_load(&error), format!("Cannot load FFC white image {}: {error}. Provide a readable blank white-field image from the same capture setup.",white.display())))?;
+        let white_img = load_image(white).map_err(|error|Error::image_load(&error, format!("Cannot load FFC white image {}: {error}. Provide a readable blank white-field image from the same capture setup.",white.display())))?;
         let (rect, source) = ffc_plane_info(&white_img, crop)?;
         let white_size = [white_img.width as i32, white_img.height as i32];
         let white_arr = rgb_image_into_array3(white_img)?;
@@ -2007,8 +1968,8 @@ pub fn run_from_json_ex(
 
     progress("Loading image");
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
-    let loaded =
-        ccp_core::sample::load_image_with_icc(image_path, honor_icc).map_err(image_load_error)?;
+    let loaded = ccp_core::sample::load_image_with_icc(image_path, honor_icc)
+        .map_err(|e| Error::image_load(&e, e.to_string()))?;
     let (spec, before_patches, chart_type) =
         sample_faces(loaded.view(), &faces, sampling, reference_context.as_ref())?;
     let mut work = rgb_image_into_array3(loaded)?;
@@ -2660,8 +2621,8 @@ pub fn apply_saved_to_image_ex_with_progress(
     let honor_icc = settings.input_space.id == "srgb" && settings.input_space.white.id == "d65";
     progress("Loading image");
     let started = Instant::now();
-    let loaded =
-        ccp_core::sample::load_image_with_icc(image, honor_icc).map_err(image_load_error)?;
+    let loaded = ccp_core::sample::load_image_with_icc(image, honor_icc)
+        .map_err(|e| Error::image_load(&e, e.to_string()))?;
     let mut work = rgb_image_into_array3(loaded)?;
     let decoded = Instant::now();
     let ffc_skipped = None;

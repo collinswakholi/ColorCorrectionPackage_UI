@@ -1,9 +1,7 @@
-//! Stable machine-readable `code` values for protocol-3 `ok:false` replies.
+//! The engine's error type and the stable protocol-3 `code` each error maps to.
 //!
 //! The human-readable `error` string is unchanged from protocol 2; clients
 //! should branch on `code` and display `error`.
-
-use crate::run_pipeline::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
@@ -32,7 +30,7 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [ErrorCode; 11] = [
+    const ALL: [ErrorCode; 11] = [
         Self::InvalidRequest,
         Self::UnsupportedCommand,
         Self::UnsupportedCapability,
@@ -68,24 +66,56 @@ impl ErrorCode {
     }
 }
 
-impl std::fmt::Display for ErrorCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Message(String),
+    /// A message with an explicit protocol error code.
+    #[error("{message}")]
+    Coded { code: ErrorCode, message: String },
+    #[error(transparent)]
+    Core(#[from] ccp_core::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Image(#[from] image::ImageError),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    pub fn coded(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self::Coded {
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// An image load failure, described by `message`: anything that is not an
+    /// I/O failure or the pixel cap means the file could not be decoded.
+    pub fn image_load(error: &ccp_core::Error, message: impl Into<String>) -> Self {
+        let code = match core_code(error) {
+            code @ (ErrorCode::IoError | ErrorCode::ImageTooLarge) => code,
+            _ => ErrorCode::ImageDecodeFailed,
+        };
+        Self::coded(code, message)
+    }
+
+    /// Stable protocol-3 code for this error.
+    pub fn code(&self) -> ErrorCode {
+        match self {
+            Self::Coded { code, .. } => *code,
+            Self::Message(_) | Self::Json(_) => ErrorCode::InvalidRequest,
+            Self::Core(core) => core_code(core),
+            Self::Io(_) => ErrorCode::IoError,
+            Self::Image(image) => image_code(image),
+        }
     }
 }
 
-pub fn classify(error: &Error) -> ErrorCode {
-    match error {
-        Error::Coded { code, .. } => *code,
-        Error::Message(_) => ErrorCode::InvalidRequest,
-        Error::Core(core) => classify_core(core),
-        Error::Io(_) => ErrorCode::IoError,
-        Error::Json(_) => ErrorCode::InvalidRequest,
-        Error::Image(image) => classify_image(image),
-    }
-}
-
-pub fn classify_core(error: &ccp_core::Error) -> ErrorCode {
+fn core_code(error: &ccp_core::Error) -> ErrorCode {
     use ccp_core::Error as Core;
     match error {
         Core::InvalidArgument(_) => ErrorCode::InvalidRequest,
@@ -96,26 +126,17 @@ pub fn classify_core(error: &ccp_core::Error) -> ErrorCode {
         | Core::Unsupported16Bit { .. } => ErrorCode::ImageDecodeFailed,
         Core::ImageTooLarge { .. } => ErrorCode::ImageTooLarge,
         Core::Io(_) => ErrorCode::IoError,
-        Core::Image(image) => classify_image(image),
+        Core::Image(image) => image_code(image),
         Core::Json(_) => ErrorCode::InvalidRequest,
     }
 }
 
-pub fn classify_image(error: &image::ImageError) -> ErrorCode {
+fn image_code(error: &image::ImageError) -> ErrorCode {
     use image::ImageError;
     match error {
         ImageError::Decoding(_) | ImageError::Unsupported(_) => ErrorCode::ImageDecodeFailed,
         ImageError::Limits(_) => ErrorCode::ImageTooLarge,
         ImageError::IoError(_) => ErrorCode::IoError,
         ImageError::Encoding(_) | ImageError::Parameter(_) => ErrorCode::ProcessingFailed,
-    }
-}
-
-/// Classify an error from loading an input image: anything that is not an
-/// I/O failure or the pixel cap means the file could not be decoded.
-pub fn classify_image_load(error: &ccp_core::Error) -> ErrorCode {
-    match classify_core(error) {
-        code @ (ErrorCode::IoError | ErrorCode::ImageTooLarge) => code,
-        _ => ErrorCode::ImageDecodeFailed,
     }
 }

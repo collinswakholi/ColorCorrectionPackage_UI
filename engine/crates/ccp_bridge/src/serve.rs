@@ -14,7 +14,7 @@ use ccp_detect::{
 };
 use serde_json::{json, Value};
 
-use crate::error_code::ErrorCode;
+use crate::error::{Error, ErrorCode};
 use crate::run_pipeline::{
     apply_saved_to_image_ex_with_progress, export_cube_from_saved, json_bool, json_f64, json_str,
     last_apply_backend, load_saved, run_from_json_ex, ApplyOptions, FfcGainCache, PreviewMode,
@@ -81,7 +81,7 @@ fn fail(code: ErrorCode, message: impl Into<String>) -> Value {
     json!({"ok": false, "code": code.as_str(), "error": message.into()})
 }
 
-fn fail_with(error: &crate::run_pipeline::Error) -> Value {
+fn fail_with(error: &Error) -> Value {
     fail(error.code(), error.to_string())
 }
 
