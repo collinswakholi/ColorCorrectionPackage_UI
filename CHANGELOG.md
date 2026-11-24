@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-11-24
 
 - Show an error notice instead of closing the app when a settings, help, reference-editor or plot-save dialog fails to open.
 - Confirmation prompts: Escape and Cancel dismiss, Enter confirms only non-destructive prompts, and screen readers announce the question.
