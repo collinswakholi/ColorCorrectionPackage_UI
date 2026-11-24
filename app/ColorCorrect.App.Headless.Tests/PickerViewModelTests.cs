@@ -1,6 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using ColorCorrect.App.Controls;
+using ColorCorrect.App.Services;
 using ColorCorrect.App.ViewModels;
 using Xunit;
 

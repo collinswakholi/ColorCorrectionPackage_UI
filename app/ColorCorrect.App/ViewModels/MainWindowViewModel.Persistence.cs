@@ -15,7 +15,6 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using ColorCorrect.App.Controls;
 using ColorCorrect.App.Models;
 using ColorCorrect.App.Services;
 using ColorCorrect.Engine;

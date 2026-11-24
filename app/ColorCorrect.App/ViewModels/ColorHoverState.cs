@@ -1,6 +1,6 @@
 using System.Linq;
 using Avalonia.Media;
-using ColorCorrect.App.Controls;
+using ColorCorrect.App.Services;
 using ColorCorrect.Engine;
 using CommunityToolkit.Mvvm.ComponentModel;
 

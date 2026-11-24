@@ -5,7 +5,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
-namespace ColorCorrect.App.Controls;
+namespace ColorCorrect.App.Services;
 
 public readonly record struct PickedColor(int X, int Y, byte R, byte G, byte B, double L, double A, double LabB)
 {
