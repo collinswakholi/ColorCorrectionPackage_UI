@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -20,4 +21,20 @@ public static class TestAppBuilder
             UseHeadlessDrawing = false,
         })
         .WithInterFont());
+}
+
+internal static class TestDataDirectory
+{
+    // Keep settings, sessions and preview caches out of the real user profile. Tests used to
+    // write into %LOCALAPPDATA%\CCP-New and evict the user's own preview cache entries.
+    [ModuleInitializer]
+    internal static void Isolate()
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COLORCORRECT_DATA_DIR")))
+        {
+            return;
+        }
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-headless-tests", Environment.ProcessId.ToString());
+        Environment.SetEnvironmentVariable("COLORCORRECT_DATA_DIR", dir);
+    }
 }
