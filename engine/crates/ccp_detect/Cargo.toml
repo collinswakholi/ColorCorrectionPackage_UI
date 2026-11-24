@@ -28,11 +28,3 @@ ccp_wgpu_infer = { path = "../ccp_wgpu_infer", optional = true }
 [dev-dependencies]
 ndarray = "0.16"
 rayon = "1.10"
-
-[[example]]
-name = "gpu_inference_check"
-required-features = ["ort-plane"]
-
-[[example]]
-name = "decode_inference"
-required-features = ["ort-plane"]
