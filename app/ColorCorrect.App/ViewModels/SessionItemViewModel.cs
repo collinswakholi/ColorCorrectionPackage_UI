@@ -120,6 +120,21 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SessionTip));
     }
 
+    /// <summary>Adopt a successful fit or apply: its outputs, model and the context that produced them.</summary>
+    public void RecordCompletion(CorrectionOutcome outcome)
+    {
+        CorrectedPath = outcome.OutputPath;
+        ReportPath = outcome.ReportPath;
+        if (Directory.Exists(outcome.PreviewDir)) PreviewDir = outcome.PreviewDir;
+        IsCorrected = true;
+        ModelPath = outcome.ModelPath;
+        CompletedContext = outcome.CompletedContext;
+        PreviewSuppressed = outcome.CompletedContext?.Options().PreviewMode == "none";
+        SourceIdentity = outcome.CompletedContext?.Source ?? SourceIdentity;
+        IncludeInSave = true;
+        NotifyOutputs();
+    }
+
     /// <summary>Detach stale results while preserving their saved files on disk.</summary>
     public void InvalidateCalibration()
     {

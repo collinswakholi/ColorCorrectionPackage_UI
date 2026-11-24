@@ -686,16 +686,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        item.CorrectedPath = outcome.OutputPath;
-        item.ReportPath = outcome.ReportPath;
-        item.PreviewDir = Directory.Exists(outcome.PreviewDir) ? outcome.PreviewDir : item.PreviewDir;
-        item.IsCorrected = true;
-        item.ModelPath = outcome.ModelPath;
-        item.CompletedContext = outcome.CompletedContext;
-        item.PreviewSuppressed = outcome.CompletedContext?.Options().PreviewMode == "none";
-        item.SourceIdentity = outcome.CompletedContext?.Source ?? item.SourceIdentity;
-        item.IncludeInSave = true;
-        item.NotifyOutputs();
+        item.RecordCompletion(outcome);
         if (fitted)
         {
             if (item.Handshake is { Ok: true } handshake)
