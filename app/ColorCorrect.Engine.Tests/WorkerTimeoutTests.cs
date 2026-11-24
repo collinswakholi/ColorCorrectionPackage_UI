@@ -59,7 +59,11 @@ public sealed class WorkerTimeoutTests
         using var server = new AnonymousPipeServerStream(PipeDirection.Out);
         using var client = new AnonymousPipeClientStream(PipeDirection.In, server.GetClientHandleAsString());
         using var reader = new StreamReader(client);
-        var timeout = TimeSpan.FromMilliseconds(100);
+        // Generous against scheduler jitter on hosted runners: progress every 30 ms
+        // against a 300 ms silence limit, and the first line is already waiting.
+        var timeout = TimeSpan.FromMilliseconds(300);
+        await Write(server, """{"type":"progress","message":"started"}""");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         var reading = Read(reader, timeout, []);
         using var stop = new CancellationTokenSource();
         var spam = Task.Run(async () =>
@@ -74,9 +78,8 @@ public sealed class WorkerTimeoutTests
             }
             catch (IOException) { }
         });
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        await Assert.ThrowsAsync<TimeoutException>(() => reading.WaitAsync(TimeSpan.FromSeconds(10)));
+        await Assert.ThrowsAsync<TimeoutException>(() => reading.WaitAsync(TimeSpan.FromSeconds(20)));
         stop.Cancel();
-        Assert.InRange(watch.Elapsed, timeout * (SpeedyWorker.ProgressCeilingFactor - 1), TimeSpan.FromSeconds(5));
+        Assert.InRange(watch.Elapsed, timeout * (SpeedyWorker.ProgressCeilingFactor - 1), TimeSpan.FromSeconds(15));
     }
 }

@@ -142,7 +142,20 @@ public sealed class WorkerRestartProgressTests
             if (restart is not null) await restart.WaitAsync(TimeSpan.FromSeconds(12));
             foreach (var observer in observers) observer.Dispose();
             Dispatcher.UIThread.RunJobs();
-            Directory.Delete(folder, true);
+            await DeleteFolderAsync(folder);
+        }
+    }
+
+    /// <summary>Windows keeps an exiting process image locked briefly after the process ends.</summary>
+    private static async Task DeleteFolderAsync(string folder)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { Directory.Delete(folder, true); return; }
+            catch (Exception exception) when (attempt < 50 && exception is UnauthorizedAccessException or IOException)
+            {
+                await Task.Delay(100);
+            }
         }
     }
 
