@@ -2445,12 +2445,12 @@ pub fn load_saved(path: impl AsRef<Path>) -> Result<SavedPipeline> {
         && v.get("gc_model").is_none()
         && v.get("wb_diag").is_none()
     {
-        // Bare correction models predate the saved-pipeline format.
-        return Err(if v.get("feature_count").is_some() {
-            unsupported()
-        } else {
-            invalid(&"not a ColorCorrect Studio saved model")
-        });
+        // Bare correction models predate the saved-pipeline format; no
+        // tagged release wrote them.
+        return Err(invalid(&format!(
+            "Not a ColorCorrect saved pipeline: {}. Bare correction models from releases older than ColorCorrect Studio 0.1 are no longer supported. Fit a new calibration.",
+            path.display()
+        )));
     }
     let saved: SavedPipeline = serde_json::from_value(v).map_err(|e| invalid(&e))?;
     match &saved.gc_model {
@@ -4466,13 +4466,15 @@ mod tests {
         ];
         for (index, text) in cases.iter().enumerate() {
             let path = dir.join(format!("legacy-{index}.json"));
+            let bare = index == 0;
             std::fs::write(&path, text).unwrap();
             let error = load_saved(&path).expect_err("pre-Studio model must be rejected");
             assert_eq!(error.code(), ErrorCode::InvalidModel, "{error}");
             let message = error.to_string();
             assert!(
                 message.contains("older than ColorCorrect Studio 0.1")
-                    && message.contains("Fit a new calibration"),
+                    && message.contains("Fit a new calibration")
+                    && (!bare || message.contains("Not a ColorCorrect saved pipeline")),
                 "{message}"
             );
         }
