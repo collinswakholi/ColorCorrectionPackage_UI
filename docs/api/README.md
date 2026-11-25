@@ -145,7 +145,7 @@ Use a new calibration when changing the intended fitting pipeline.
 | `do_gc`, `do_wb`, `do_cc` | `True` at calibration | Fit/apply the respective stage |
 | `Config.check_saturation` / `CalibrationOptions.do_sat` | `True` | Enable chart saturation handling |
 | `skip_saturated` | `False` | Exclude saturated chart observations when fitting |
-| `fast_mode` | `True` | Render combined GC/WB/CC through a 65³ LUT; spatial FFC remains separate |
+| `fast_mode` | `True` | Render combined GC/WB/CC through a 65³ LUT, with FFC in the same pass |
 | `write_output` | `True` | Write a full-resolution corrected image; `False` retains model/report, without an output-image path |
 | `cross_validate` | `True` | Request **CC-only** held-out chart validation; earlier stages remain fitted from the full chart |
 | `phase2_teacher` | `False` | Request advanced teacher diagnostics; not needed for ordinary correction |

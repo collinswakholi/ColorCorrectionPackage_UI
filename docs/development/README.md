@@ -78,24 +78,20 @@ The runner starts fresh kernels on its own interpreter, checks that the SDK
 modules come from the installed wheel, and writes executed copies outside the
 source notebooks. Keep the public notebook outputs cleared.
 
-## Automated builds and documentation edits
+## Automated builds
 
 Application, API, packaging and bundled-documentation changes on `main` and pull
-requests run native Windows/Linux x64 and ARM64 builds and Apple-silicon macOS
-application packaging. Manual runs and version tags retain the full native workflow.
-Main-branch and pull-request builds do not publish releases.
+requests run the five native jobs (Windows and Linux x64/ARM64, Apple-silicon
+macOS); Linux jobs run on Ubuntu 22.04 and then install each package on bare
+Ubuntu 24.04/22.04 and Debian 13/12 images. A change that touches only the root
+`README.md` or `docs/images/demo/` runs the offline documentation job alone;
+mixed changes and unrecognized paths keep native validation. The documentation
+job checks local links, citations, example syntax and media offline, so a network
+failure is never reported as a broken local link.
 
-Root `README.md` and dedicated demo-only changes run the lightweight documentation
-job without rebuilding applications. Mixed changes, other documents, application
-code and unrecognized paths retain native validation. The documentation job checks
-local links, citations, example syntax and media metadata offline. A failed network
-request is not treated as a broken local documentation link.
-
-The aggregate result includes every applicable job. A later documentation-only
-push does not cancel an earlier native build. Publishing requires an exact version
-tag and successful native jobs; see the [release guide](../releasing.md).
-Apple-silicon CI produces native app archives and accompanying evidence. Hardware
-GPU and interactive Mac desktop acceptance remain separate.
+The aggregate result includes every applicable job, and a later documentation-only
+push does not cancel an earlier native build. Main and pull-request builds never
+publish; see the [release guide](../releasing.md) for tags and publication.
 
 ## Validation records
 
@@ -111,29 +107,22 @@ installation checks do not establish interactive UI, hardware GPU or high-DPI
 support for every target. Preserve unavailable configurations, failures and
 omitted fixtures explicitly rather than inheriting results from an older build.
 
-## Historical compute measurements
+## Compute measurements
 
-Earlier single-host 24 MP measurements recorded about **0.737 s GPU** and
-**0.764 s CPU** for combined-LUT processing, versus **1.628 s** for the previous
-GPU method. Identical LUT arithmetic differed by at most **5.96e-8** normalized
-RGB; LUT approximation was assessed separately. These observations describe that
-machine and configuration, not a cross-platform speed guarantee.
+In fast mode with FFC, processing one 24 MP photograph (eight-photo run, RTX 4070
+Ti SUPER host) took about 1.07 s in 0.4.0 and takes 0.08–0.14 s in 0.5.0 on the
+GPU, where FFC runs fused with the combined LUT. On the CPU it went from 0.90 s
+to 0.73 s. The fused output differs from 0.4.0 by at most 1/255 on 0.003% of
+pixels. With the device on Auto, the engine times each kernel once against the
+CPU on a 2 MP synthetic image and reports the timings in the reply's
+`execution.measured`.
 
-Windows DirectML was faster on the recorded NVIDIA hardware than the native
-WebGPU/D3D12 and Vulkan alternatives. The WSL Rust/wgpu route avoids a required
-drawing feature missing from the recorded Dawn/Dozen combination. Fusion and
-autotuning were disabled after incorrect photographic detections were found.
-A subsequent WSL comparison matched canonical cells within **0.0001 model pixel**
-over **36** reordered-photo detections and completed installed app/API workflows.
-The Dozen version, host driver and hardware are part of those results; they are
-not a claim about every Linux driver or independent detector ground truth.
+These numbers describe one machine and configuration, not a cross-platform
+guarantee. New measurements need their own source, package, model and driver
+identities. The [processing guide](../compute/README.md) describes the
+user-facing behavior.
 
-Raw timing blocks, commands, rejected trials and historical runtime comparisons
-remain in the local research archive. New measurements need their own source,
-package, model and driver identities. See the [processing guide](../compute/README.md)
-for current user-facing behavior.
-
-## Source exports and history
+## Source exports
 
 ```text
 python scripts/export_source.py --output _implementation/release-readiness/source-export
@@ -162,7 +151,7 @@ python scripts/fetch_gpu_runtime.py --rid win-x64 --output artifacts/runtime --v
 ./scripts/package_windows.ps1 -Rid win-x64 -Runtime artifacts/runtime -VcRedist artifacts/prerequisites/vc_redist.x64.exe -InnoCompiler 'C:\Path\To\ISCC.exe' -FetchNotices
 ```
 
-On native Ubuntu 24.04 x64 or ARM64:
+On native Ubuntu 22.04 x64 or ARM64 (the oldest supported glibc, as in CI):
 
 ```sh
 python3 scripts/fetch_gpu_runtime.py --rid linux-x64 --output artifacts/runtime
@@ -185,9 +174,6 @@ source hashes, build settings, dependencies and notices. WSL host components
 Rebuild reproducibility and hardware correctness belong to the add-on's own
 versioned record. Official Linux release assets do not include it.
 
-The [release guide](../releasing.md) specifies distribution filenames, manifests,
-checksums and tag-only publication rules. A main-branch build produces unsigned
-development downloads, not a published release. The optional hardware workflow
-requires a provisioned runner and explicit dispatch. Apple-silicon jobs package
-`ColorCorrect Studio.app` into versioned ZIP and tar archives. Bundles are ad-hoc
-signed, without Developer ID signing or notarization.
+The [release guide](../releasing.md) specifies filenames, manifests, checksums
+and tag-only publication. The optional hardware workflow needs a provisioned
+runner and an explicit dispatch.

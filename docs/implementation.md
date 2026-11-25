@@ -38,8 +38,10 @@ of silently substituting the next operation's controls.
 
 ## Compute and color evaluation
 
-Inference uses DirectML or WebGPU/Vulkan. Image correction uses Rust CPU or wgpu
-with CPU recovery; spatial FFC is separate from the combined GC/WB/CC LUT.
+Inference uses DirectML or WebGPU (Vulkan, Metal). Image correction uses Rust on
+the CPU or wgpu with CPU recovery. In fast mode, spatial FFC runs in the same pass
+as the combined GC/WB/CC LUT (`ccp_core::fused` on the CPU,
+`ccp_detect::ffc_lut_wgpu` on the GPU); Auto times both once and uses the faster.
 [Processing options](compute/README.md) describes the user-facing choices.
 
 Existing fold validation measures CC conditional on prior preprocessing and is
@@ -60,7 +62,7 @@ The worker is a Cargo workspace under `engine/crates`:
   correction maps and the FFC, GC and WB stages. Its `mlp`, `pls` and
   `linalg` modules are private implementation details of the maps and FFC.
 - `ccp_detect`: chart and white-plane inference, chart assembly, the
-  accelerator probe and the wgpu LUT. `ccp_wgpu_infer` is its Linux Rust
+  accelerator probe, and the wgpu LUT and fused FFC + LUT kernels. `ccp_wgpu_infer` is its Linux Rust
   inference fallback.
 - `ccp_bridge`: the `ccp-engine` binary. Its library exposes only `run()`,
   the [NDJSON loop](api/protocol.md). Its modules form layers, each using

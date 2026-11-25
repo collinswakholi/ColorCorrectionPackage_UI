@@ -26,16 +26,16 @@ cargo build --manifest-path engine/Cargo.toml --locked --release -p ccp_bridge
 dotnet build app/ColorCorrect.sln -c Release
 ```
 
-Use `linux-arm64` on native ARM64. See the [installer guide](../installer/README.md) for portable archives, Debian packages and system dependencies. ARM64 graphics and desktop workflows remain experimental; see the [platform notes](compatibility.md).
+Use `linux-arm64` on native ARM64. Build packages on Ubuntu 22.04, as CI does: the binaries then need only glibc 2.35 and run on Ubuntu 24.04/22.04 and Debian 13/12. Packaging fails if a shipped binary needs a newer glibc than that minimum, so a package built on a newer distribution is rejected. See the [installer guide](../installer/README.md) for portable archives, Debian packages and system dependencies, and the [platform notes](compatibility.md) for ARM64 status.
 
 <a id="apple-silicon-macos-source-only"></a>
 
 ## Apple-silicon macOS: source build
 
-Use macOS 14 or later on Apple silicon. For the downloadable application, follow
-the [Mac installation guide](macos-install.md); no build toolchain is needed to use
-that package. The steps below build from source locally. Mac graphics and desktop
-workflows remain experimental; see the [platform notes](compatibility.md).
+Use macOS 14 or later on Apple silicon; Intel Macs are not supported. To use the
+downloadable app instead, follow the [Mac installation guide](macos-install.md).
+Mac graphics and desktop workflows are experimental; see the
+[platform notes](compatibility.md).
 
 Install [Apple's command-line tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/), the **Arm64 .NET SDK 10.0.402** using [Microsoft's macOS instructions](https://learn.microsoft.com/en-us/dotnet/core/install/macos), [Rust through rustup](https://rust-lang.github.io/rustup/installation/), and a native Python 3.10+ interpreter from [Python's macOS downloads](https://www.python.org/downloads/macos/). The Python universal2 distribution can run natively on Apple silicon. Open a native Terminal rather than a Rosetta shell. From the source checkout, verify:
 
@@ -60,7 +60,7 @@ bash scripts/build_macos.sh "$PWD/dist/local-macos"
 "$PWD/dist/local-macos/launch"
 ```
 
-The helper creates a self-contained local application and a launch script. Its private build root contains the worker, verified runtime, and model/reference snapshots, so both the GUI launcher and an explicit SDK root use the same files. A later build in the source checkout cannot replace this build's worker. The desktop application does not need Python after building. Mac graphics and desktop workflows remain experimental. Intel macOS is outside scope. This local build does not apply Developer ID signing or notarization.
+The helper creates a self-contained local application and a launch script. Its private build root holds the worker, the verified runtime and model/reference snapshots, so the GUI launcher and an explicit SDK root use the same files, and a later build in the checkout cannot replace this build's worker. The app does not need Python after building. The local build is not Developer ID signed or notarized.
 
 Install the Python API in a local virtual environment and point it at that local build:
 
@@ -100,13 +100,8 @@ Use `Client(root=...)` or `ColorCorrection(..., root=...)` to select an intact
 native application folder. The SDK never downloads graphics drivers and needs no
 server or Python ML packages. See the [API guide](../api/README.md) for examples.
 
-## Distribution and development
+## Packages and releases
 
-Windows and Linux have installers and portable packages. Apple-silicon macOS has
-a relocatable app bundle in ZIP and tar archives. Release assets include checksums
-and package manifests. Windows/Linux packages lack publisher signatures; Mac
-bundles are ad-hoc signed and are not Developer ID signed or notarized. See [installation details](../installer/README.md) for
-prerequisites and [release procedures](releasing.md) for maintainers.
-
-The [developer guide](development/README.md) covers automated builds, component
-checks and manifest-based source exports.
+Packaging commands are in the [developer guide](development/README.md#packaging),
+which also covers the checks and source exports. Release filenames, checksums and
+publication rules are in the [release guide](releasing.md).

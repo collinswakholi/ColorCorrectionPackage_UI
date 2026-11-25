@@ -1,77 +1,93 @@
 # ColorCorrect Studio
 
 ColorCorrect Studio builds a color correction from a photograph of a color chart
-and applies it to other still images taken with the same camera and lighting. It
+and applies it to other photographs taken with the same camera and lighting. It
 corrects in four stages: flat-field correction (FFC) for uneven lighting, tone
 response (GC), white balance (WB) and color correction (CC). It runs locally on
-Windows, Ubuntu and Apple-silicon macOS, and includes an optional Python SDK that
-uses the same native engine.
+Windows, Linux and Apple-silicon macOS, and has an optional Python SDK that uses
+the same native engine.
 
-![ColorCorrect Studio in dark mode: load a photograph, detect its chart, choose correction options, compare stage previews, and inspect analysis figures.](docs/images/demo/studio-dark.png)
+![ColorCorrect Studio: load a photograph, detect its chart, choose correction options, compare stage previews and inspect the analysis figures.](docs/images/demo/studio.png)
 
-[Screenshot gallery](docs/images/demo/README.md)
+[GIF version](docs/images/demo/studio.gif) · [Screenshot gallery](docs/images/demo/README.md)
 
-## Download and install
+## Download
 
-Version **0.4.0**. Each download includes the app, the correction engine and the
-detection models. You do not need Python, .NET or Rust to use the app.
+Version **0.5.0**. Each download contains the app, the correction engine and the
+detection models; you do not need Python, .NET or Rust.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
-| Windows 11 x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-win-x64.zip) |
-| Windows 11 ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-win-arm64.zip) |
-| Ubuntu 24.04 x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/colorcorrect-studio_0.4.0_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-linux-x64.tar.gz) |
-| Ubuntu 24.04 ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/colorcorrect-studio_0.4.0_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-linux-arm64.tar.gz) |
-| macOS 14+ (Apple silicon) | — | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-osx-arm64.zip) · [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.4.0/ColorCorrect-Studio-0.4.0-osx-arm64.tar.gz) |
+| Windows 11 x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-x64.zip) |
+| Windows 11 ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-arm64.zip) |
+| Ubuntu 24.04/22.04, Debian 13/12 x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/colorcorrect-studio_0.5.0_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-linux-x64.tar.gz) |
+| Ubuntu 24.04/22.04, Debian 13/12 ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/colorcorrect-studio_0.5.0_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-linux-arm64.tar.gz) |
+| macOS 14+ (Apple silicon) | — | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.zip) · [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.tar.gz) |
 
-Choose **x64** for 64-bit Intel/AMD and **ARM64** for 64-bit Arm. ARM64 and macOS
-builds are experimental; see [compatibility](docs/compatibility.md). Checksums
-and manifests for each platform are on the
-[release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.4.0).
+Choose **x64** for Intel/AMD processors and **ARM64** for Arm. ARM64 and macOS
+builds are experimental; see [compatibility](docs/compatibility.md). Checksums and
+package manifests are on the
+[release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.0).
 
 > **The downloads are not signed with a publisher certificate.** The Mac app is
-> ad-hoc signed and not notarized, so macOS blocks its first launch. The
+> ad-hoc signed and not notarized, so macOS blocks its first launch; the
 > [Mac installation guide](docs/macos-install.md) explains how to open it.
+
+## Install
 
 - **Windows:** run Setup, then open **ColorCorrect Studio**. For the portable
   version, extract the whole ZIP and run `ColorCorrect-Studio.cmd`.
-- **Ubuntu:** install the package, then start the app from the application menu
-  or a terminal:
+- **Linux:** one `.deb` installs on Ubuntu 24.04 and 22.04 and Debian 13 and 12:
 
   ```sh
-  sudo apt install ./colorcorrect-studio_0.4.0_amd64.deb   # ARM64: _arm64.deb
+  sudo apt install ./colorcorrect-studio_0.5.0_amd64.deb   # ARM64: _arm64.deb
   colorcorrect-studio
   ```
 
-  For the portable archive, extract it, run `./check-system` (it lists
-  anything missing), `./install-dependencies --install` if needed, then
+  For the portable archive, extract it and run `./check-system`. If it reports
+  missing libraries, run `./install-dependencies --install`, then
   `./ColorCorrect-Studio`.
 - **macOS:** extract the ZIP, move **ColorCorrect Studio.app** to Applications
   and open it from there.
 
-Keep the installed or extracted folder intact. A GPU is optional: detection and
-correction fall back to the CPU. Prerequisites, verification and the experimental
-WSL GPU setup are covered in the [installation guide](installer/README.md).
+A GPU is optional; detection and correction fall back to the CPU. The
+[installation guide](installer/README.md) covers prerequisites, checksums and
+the experimental WSL GPU setup.
 
-## Your first correction
+## Quick start
 
 1. Add a photograph that contains the chart and press **Detect**. Check the patch
    overlay; if several charts are found, pick the right **Chart face**.
-2. Keep the built-in reference values, or enter your own measured values under
+2. Keep the built-in reference values, or enter your own under
    **Correction settings → Chart references…**.
 3. If the lighting is uneven, load a blank white-field photograph taken with the
-   same setup in the FFC section. Leave the other settings at their defaults.
+   same setup in the FFC section.
 4. Choose **Fit + apply**. Compare the stage previews and check the per-patch
-   ΔE00 and held-out validation, not only the training error.
+   ΔE00 and the held-out validation, not only the training error.
 5. Press **Ctrl+S** to save the corrected images and the model JSON. Previews are
-   not saved until you do this.
+   not saved until you do.
 6. To correct more photographs from the same setup, choose **Model → Use loaded**,
    select the images and run **Apply model**.
 
-Press **F1** in the app for the offline guide. The [user guide](docs/user-guide.md)
-covers custom references, batches, outputs and
-[color interpretation](docs/user-guide.md#color-interpretation-matters) (start
-with sRGB images).
+Press **F1** for the offline in-app guide. Start with sRGB images; the
+[user guide](docs/user-guide.md) explains custom references, batches, outputs and
+[color interpretation](docs/user-guide.md#color-interpretation-matters).
+
+## What's new in 0.5.0
+
+- **Linux:** packages now install on Ubuntu 24.04 and 22.04 and Debian 13 and 12.
+  `check-system` finds every missing library, including those loaded at runtime,
+  and `install-dependencies` installs them.
+- **Faster processing:** in fast mode, FFC runs in the same pass as the combined
+  LUT, on the GPU when that is faster. A 24 MP photo takes 0.08–0.14 s instead of
+  about 1.07 s on an RTX 4070 Ti SUPER, and the CPU path is faster too.
+- **Fixes:** saving to a read-only folder no longer closes the app, moved photos
+  can be relinked, right-click **Copy RGB / Lab / hex** works, and error messages
+  are clearer. An idle window uses about 2% of a CPU core instead of 30%.
+- **Guide:** the F1 guide is rewritten as task-first topics with figures from
+  real fits.
+
+The SDK stays at 3.0.0. See the [changelog](CHANGELOG.md) for every change.
 
 ## Python SDK
 
@@ -103,18 +119,16 @@ Next: the [SDK guide](api/README.md), the
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): the desktop workflow in detail
-- [Installation](installer/README.md) and [macOS installation](docs/macos-install.md)
-- [Compatibility](docs/compatibility.md) and [processing and GPU options](docs/compute/README.md)
-- [Python SDK](api/README.md) and [API reference](docs/api/README.md)
-- [Migration notes](docs/migration.md) for models and sessions from older versions
-- [Changelog](CHANGELOG.md)
+| Topic | Guide |
+| --- | --- |
+| Using the app | [User guide](docs/user-guide.md) |
+| Installing | [Installation](installer/README.md) · [macOS](docs/macos-install.md) · [Compatibility](docs/compatibility.md) |
+| GPU and processing options | [Processing and graphics](docs/compute/README.md) |
+| Python | [SDK guide](api/README.md) · [API reference](docs/api/README.md) · [NDJSON protocol](docs/api/protocol.md) |
+| Older models and sessions | [Migration notes](docs/migration.md) |
+| Building and contributing | [Building](docs/building.md) · [Developer guide](docs/development/README.md) · [Contributing](CONTRIBUTING.md) |
+| Release history | [Changelog](CHANGELOG.md) |
 
-## Build from source
-
-Building needs .NET SDK 10.0.402 and Rust 1.95.0; see
-[building from source](docs/building.md), the
-[developer guide](docs/development/README.md) and [contributing](CONTRIBUTING.md).
 Unsigned development builds are on the
 [Actions page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/actions/workflows/native-builds.yml).
 

@@ -14,12 +14,12 @@ application package available. The notebooks can run from any directory.
 ## Install the kernel environment
 
 Use Python 3.10+ and the wheel included in the installed/extracted app's `python/`
-folder. The SDK is independently versioned 2.3.0; use the wheel from your application package.
+folder. The SDK is versioned independently (3.0.0 in Studio 0.5.0); use the wheel from your application package.
 
 ```sh
 python -m venv .venv
 # Activate this environment, then:
-python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-2.3.0-py3-none-any.whl
+python -m pip install /path/to/ColorCorrectStudio/python/colorcorrect_studio-3.0.0-py3-none-any.whl
 python -m pip install jupyterlab ipykernel Pillow
 ```
 
@@ -67,7 +67,7 @@ their transforms automatically; there are no manual gamma or white-temperature
 parameters. Notebook 2 shows polynomial degree, PLS components, and CC neural
 settings. FFC neural settings are separate.
 
-With the 0.2.2 engine, Auto chart and white-plane detection try an
+Auto chart and white-plane detection try an
 eligible GPU and recover to CPU when needed. `backend="cpu-inference"` selects
 CPU detection explicitly and requires the `cpu_inference_v1` worker capability.
 `backend="cpu"` selects CPU image correction while detection follows
