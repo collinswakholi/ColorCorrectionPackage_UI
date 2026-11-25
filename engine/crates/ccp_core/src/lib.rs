@@ -6,6 +6,7 @@
 pub mod color;
 mod error;
 pub mod ffc;
+pub mod fused;
 pub mod honest;
 mod linalg;
 pub mod lut;

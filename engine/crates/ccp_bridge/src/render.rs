@@ -2,12 +2,18 @@
 //!
 //! CC alone uses a 33³ encoded LUT (exact per-pixel math for small images);
 //! the optional fast mode folds the active GC/WB/CC stages into one 65³ LUT.
-//! Spatial FFC is never part of a LUT. The backend that actually ran is kept
-//! per thread so the request that rendered can report it.
+//! Spatial FFC is never part of a LUT; in fast mode it runs in the same pass
+//! as the combined LUT. The backend that actually ran is kept per thread so
+//! the request that rendered can report it. With `lut_device: auto`, the
+//! first large image times each kernel once on the CPU and the GPU and the
+//! faster is used for the rest of the process.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 
+use ccp_core::fused::{apply_ffc_lut_rows, GainGrid};
 use ccp_core::lut::LutPipeline;
 use ccp_core::maps::{
     apply_correction_pixel, build_encoded_lut, CorrectionModel, CorrectionSettings,
@@ -18,7 +24,7 @@ use ccp_core::stages::{
     apply_wb_inplace, apply_wb_pixel,
 };
 use ccp_detect::probe::{gpu_correction_enabled, runtime_policy, DevicePolicy};
-use ndarray::Array3;
+use ndarray::{Array2, Array3};
 use rayon::prelude::*;
 use serde_json::{json, Value};
 
@@ -238,48 +244,269 @@ fn cached_lut(key: Vec<u8>, build: impl FnOnce() -> Result<Vec<f32>>) -> Result<
     Ok(built)
 }
 
-// Small images do not amortize GPU startup and transfer overhead. This is a
-// conservative size policy, not a claim to benchmark the user's hardware.
+// Small images do not amortize GPU startup and transfer overhead.
 fn auto_uses_cpu(pixels: usize) -> bool {
     pixels < 1_048_576
 }
 
-/// Run a LUT on the GPU unless the policy, the request or the image size keeps
-/// it on the CPU, recording which backend ran and why.
-fn apply_lut(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Result<()> {
+/// The two GPU kernels whose speed relative to the CPU is measured separately.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Kernel {
+    Lut,
+    FfcLut,
+}
+
+/// One-time timing of a kernel on a 2 MP synthetic image, in milliseconds.
+#[derive(Clone, Debug)]
+struct Measured {
+    cpu_ms: f64,
+    gpu_ms: Option<f64>,
+    gpu: String,
+}
+
+impl Measured {
+    fn gpu_faster(&self) -> bool {
+        self.gpu_ms.is_some_and(|gpu| gpu < self.cpu_ms)
+    }
+
+    fn json(&self) -> Value {
+        let round = |ms: f64| (ms * 100.0).round() / 100.0;
+        json!({"cpu_ms": round(self.cpu_ms), "gpu_ms": self.gpu_ms.map(round), "gpu": self.gpu})
+    }
+}
+
+/// The fastest of `runs` timed calls; `None` as soon as one fails.
+fn best_of(runs: usize, mut f: impl FnMut() -> bool) -> Option<f64> {
+    let mut best = f64::INFINITY;
+    for _ in 0..runs {
+        let started = Instant::now();
+        if !f() {
+            return None;
+        }
+        best = best.min(started.elapsed().as_secs_f64() * 1000.0);
+    }
+    Some(best)
+}
+
+/// Time `kernel` on the CPU and on the GPU the LUT backend would use. A GPU
+/// that cannot run the whole synthetic image counts as unavailable.
+fn measure(kernel: Kernel) -> Measured {
+    let (w, h, gs) = (2048usize, 1024usize, FAST_LUT_SIZE);
+    let source: Vec<f32> = (0..w * h * 3)
+        .map(|i| (i.wrapping_mul(2_654_435_761) % 1021) as f32 / 1020.0)
+        .collect();
+    let lut: Vec<f32> = (0..gs * gs * gs * 3)
+        .map(|i| {
+            let p = i / 3;
+            let v = [p % gs, (p / gs) % gs, p / gs / gs][i % 3] as f32 / (gs - 1) as f32;
+            v.powf(1.08)
+        })
+        .collect();
+    let gain: Vec<f32> = (0..w * h)
+        .map(|i| 0.9 + 0.2 * (i % w) as f32 / w as f32)
+        .collect();
+    let grid = GainGrid {
+        values: &gain,
+        width: w,
+        height: h,
+    };
+    let mut gpu = String::new();
+    let mut work = source.clone();
+    let mut gpu_run = || {
+        work.copy_from_slice(&source);
+        let result = match kernel {
+            Kernel::Lut => ccp_detect::lut_wgpu::apply(&mut work, &lut, gs),
+            Kernel::FfcLut => {
+                ccp_detect::ffc_lut_wgpu::apply(&mut work, w, h, grid, u64::MAX, Some((&lut, gs)))
+            }
+        };
+        match result {
+            Ok(execution) if execution.chunks.cpu_pixels == 0 => {
+                gpu = execution.backend;
+                true
+            }
+            _ => false,
+        }
+    };
+    // The first run creates the device and uploads tables; time the next two.
+    let gpu_ms = if gpu_run() {
+        best_of(2, &mut gpu_run)
+    } else {
+        None
+    };
+    let mut image = Array3::from_shape_vec((h, w, 3), source.clone()).expect("synthetic shape");
+    let cpu_ms = best_of(2, || {
+        let slice = image.as_slice_mut().expect("contiguous");
+        slice.copy_from_slice(&source);
+        match kernel {
+            Kernel::Lut => apply_encoded_lut_inplace(&mut image, &lut, gs),
+            Kernel::FfcLut => apply_ffc_lut_rows(slice, w, h, 0, grid, Some((&lut, gs))),
+        }
+        true
+    })
+    .unwrap_or(f64::INFINITY);
+    Measured {
+        cpu_ms,
+        gpu_ms,
+        gpu,
+    }
+}
+
+/// The process's measurement of `kernel`, taken on first use.
+fn measured(kernel: Kernel) -> Measured {
+    static MEASURED: OnceLock<Mutex<HashMap<Kernel, Measured>>> = OnceLock::new();
+    let mut cache = MEASURED
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    cache
+        .entry(kernel)
+        .or_insert_with(|| measure(kernel))
+        .clone()
+}
+
+/// Whether `kernel` runs on the GPU for an image of `pixels`, and why.
+fn choose_gpu(kernel: Kernel, pixels: usize) -> (bool, &'static str, Option<Measured>) {
     let request = LUT_REQUEST.get();
-    let small_auto = request.auto && auto_uses_cpu(img.len() / 3);
-    if runtime_policy() != DevicePolicy::Cpu
-        && gpu_correction_enabled()
-        && !request.force_cpu
-        && !small_auto
-    {
+    if request.auto && auto_uses_cpu(pixels) {
+        return (false, "auto_small_image", None);
+    }
+    if runtime_policy() == DevicePolicy::Cpu || !gpu_correction_enabled() || request.force_cpu {
+        return (false, "cpu_requested", None);
+    }
+    if !request.auto {
+        return (true, "gpu_requested", None);
+    }
+    let timing = measured(kernel);
+    let reason = if timing.gpu_faster() {
+        "auto_measured_gpu_faster"
+    } else {
+        "auto_measured_cpu_faster"
+    };
+    (timing.gpu_faster(), reason, Some(timing))
+}
+
+/// Run a LUT on the GPU unless the policy, the request, the image size or a
+/// measurement keeps it on the CPU, recording which backend ran and why.
+fn apply_lut(img: &mut Array3<f32>, lut: &[f32], gs: usize, method: &str) -> Result<()> {
+    let (gpu, reason, timing) = choose_gpu(Kernel::Lut, img.len() / 3);
+    if gpu {
         work::make_contiguous(img)?;
         let slice = img.as_slice_mut().expect("contiguous");
         let execution = ccp_detect::lut_wgpu::apply(slice, lut, gs)
             .map_err(|e| Error::coded(ErrorCode::ProcessingFailed, e))?;
-        if let Some(reason) = &execution.chunks.fallback_reason {
-            eprintln!(
-                "LUT fallback: {reason}; accelerated_pixels={}, cpu_pixels={}",
-                execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels
-            );
-        }
-        remember_backend(&execution.backend);
-        remember_execution(json!({
-            "backend": execution.backend, "method": method, "grid": gs,
-            "accelerated_pixels": execution.chunks.accelerated_pixels,
-            "cpu_pixels": execution.chunks.cpu_pixels,
-            "fallback_reason": execution.chunks.fallback_reason,
-        }));
+        record(&execution, method, gs, reason, timing);
         return Ok(());
     }
     apply_encoded_lut_inplace(img, lut, gs);
+    record_cpu(img.len() / 3, method, gs, reason, timing);
+    Ok(())
+}
+
+fn record(
+    execution: &ccp_detect::lut_wgpu::LutExecution,
+    method: &str,
+    gs: usize,
+    reason: &str,
+    timing: Option<Measured>,
+) {
+    if let Some(fallback) = &execution.chunks.fallback_reason {
+        eprintln!(
+            "LUT fallback: {fallback}; accelerated_pixels={}, cpu_pixels={}",
+            execution.chunks.accelerated_pixels, execution.chunks.cpu_pixels
+        );
+    }
+    remember_backend(&execution.backend);
+    remember_execution(json!({
+        "backend": execution.backend, "method": method, "grid": gs,
+        "accelerated_pixels": execution.chunks.accelerated_pixels,
+        "cpu_pixels": execution.chunks.cpu_pixels,
+        "fallback_reason": execution.chunks.fallback_reason,
+        "selection_reason": reason,
+        "measured": timing.map(|t| t.json()),
+    }));
+}
+
+fn record_cpu(pixels: usize, method: &str, gs: usize, reason: &str, timing: Option<Measured>) {
     remember_backend("cpu");
     remember_execution(json!({
         "backend":"cpu", "method":method, "grid":gs,
-        "accelerated_pixels":0, "cpu_pixels":img.len()/3, "fallback_reason":null,
-        "selection_reason": if small_auto { "auto_small_image" } else { "cpu_requested" }
+        "accelerated_pixels":0, "cpu_pixels":pixels, "fallback_reason":null,
+        "selection_reason": reason,
+        "measured": timing.map(|t| t.json()),
     }));
+}
+
+/// A fingerprint of a gain map's contents, so the GPU keeps one upload per
+/// white field across a batch and never reuses a stale map.
+fn gain_fingerprint(values: &[f32]) -> u64 {
+    fn mix(h: u64) -> u64 {
+        let h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        let h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        h ^ (h >> 31)
+    }
+    values
+        .par_chunks(1 << 16)
+        .enumerate()
+        .map(|(i, chunk)| {
+            let seed = mix(i as u64 + 1);
+            chunk
+                .iter()
+                .fold(seed, |h, v| mix(h ^ u64::from(v.to_bits())))
+        })
+        .reduce(|| 0, |a, b| a ^ b)
+        ^ mix(values.len() as u64)
+}
+
+/// Fast mode with FFC: FFC and the combined LUT of `stages` in one pass, on
+/// the GPU or the CPU. Nonfinite input fails unchanged, as in
+/// [`apply_combined`]; FFC clips its input and output to [0,1], so the LUT
+/// domain always holds.
+pub(crate) fn apply_ffc_combined(
+    work: &mut Array3<f32>,
+    gain: &Array2<f32>,
+    stages: &LutPipeline,
+) -> Result<()> {
+    work::make_contiguous(work)?;
+    let (height, width) = (work.shape()[0], work.shape()[1]);
+    let finite = work
+        .as_slice()
+        .expect("contiguous")
+        .par_iter()
+        .with_min_len(65_536)
+        .all(|v| v.is_finite());
+    if !finite {
+        return Err(Error::Message(
+            "Fast mode requires finite image values".into(),
+        ));
+    }
+    let packed;
+    let gain = if gain.as_slice().is_some() {
+        gain
+    } else {
+        packed = gain.as_standard_layout().to_owned();
+        &packed
+    };
+    let grid = GainGrid::new(gain).ok_or_else(|| Error::Message("FFC gain map is empty".into()))?;
+    let active = stages.gc.is_some() || stages.wb.is_some() || stages.cc.is_some();
+    let table = if active {
+        Some(combined_lut(stages)?)
+    } else {
+        None
+    };
+    let lut = table.as_deref().map(|t| (t.as_slice(), FAST_LUT_SIZE));
+    let method = if active { "ffc+combined-lut65" } else { "ffc" };
+    let slice = work.as_slice_mut().expect("contiguous");
+    let (gpu, reason, timing) = choose_gpu(Kernel::FfcLut, width * height);
+    if gpu {
+        let id = gain_fingerprint(grid.values);
+        let execution = ccp_detect::ffc_lut_wgpu::apply(slice, width, height, grid, id, lut)
+            .map_err(|e| Error::coded(ErrorCode::ProcessingFailed, e))?;
+        record(&execution, method, FAST_LUT_SIZE, reason, timing);
+    } else {
+        apply_ffc_lut_rows(slice, width, height, 0, grid, lut);
+        record_cpu(width * height, method, FAST_LUT_SIZE, reason, timing);
+    }
     Ok(())
 }
 
@@ -330,6 +557,46 @@ mod tests {
         assert_eq!(info["method"], "combined-lut65");
         assert_eq!(info["selection_reason"], "auto_small_image");
         assert!(info["fallback_reason"].is_null());
+        set_lut_request(false, false);
+    }
+
+    #[test]
+    fn auto_measures_large_ffc_images_once_and_matches_the_cpu_result() {
+        let (h, w) = (1024, 1100);
+        let source = Array3::from_shape_fn((h, w, 3), |(y, x, c)| {
+            ((x * 7 + y * 13 + c * 5) % 251) as f32 / 250.
+        });
+        let gain = Array2::from_shape_fn((h / 4, w / 4), |(y, x)| 0.9 + (x + y) as f32 / 2000.);
+        let stages = fixture();
+        set_lut_request(true, false);
+        let mut expected = source.clone();
+        apply_ffc_combined(&mut expected, &gain, &stages).unwrap();
+        assert_eq!(
+            last_execution().unwrap()["selection_reason"],
+            "cpu_requested"
+        );
+        set_lut_request(false, true);
+        for _ in 0..2 {
+            let mut image = source.clone();
+            apply_ffc_combined(&mut image, &gain, &stages).unwrap();
+            let info = last_execution().unwrap();
+            eprintln!("auto FFC + LUT: {info}");
+            let reason = info["selection_reason"].as_str().unwrap().to_owned();
+            if reason != "cpu_requested" {
+                assert!(reason.starts_with("auto_measured"), "{info}");
+                assert!(info["measured"]["cpu_ms"].as_f64().unwrap() > 0.0, "{info}");
+            }
+            assert_eq!(
+                info["accelerated_pixels"].as_u64().unwrap() + info["cpu_pixels"].as_u64().unwrap(),
+                (h * w) as u64
+            );
+            let worst = image
+                .iter()
+                .zip(expected.iter())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0f32, f32::max);
+            assert!(worst < 2e-3, "{info}: GPU and CPU differ by {worst}");
+        }
         set_lut_request(false, false);
     }
 
