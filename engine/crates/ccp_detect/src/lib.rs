@@ -23,6 +23,8 @@ pub mod paths;
 #[cfg_attr(not(feature = "ort-plane"), allow(dead_code))]
 pub mod plane;
 pub mod probe;
+#[cfg(any(feature = "wgpu-lut", feature = "ort-plane"))]
+mod wgpu_instance;
 
 use std::path::Path;
 

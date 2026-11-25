@@ -789,11 +789,10 @@ fn require_hardware_backend(ep: GpuEp) -> Result<(), String> {
     } else {
         wgpu::Backends::DX12
     };
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    // Explicit WGPU_* opt-ins are useful for non-conformant VM translation
-    // drivers. Hardware filtering below still rejects CPU/software adapters.
-    descriptor.flags = descriptor.flags.with_env();
-    let instance = wgpu::Instance::new(descriptor);
+    // Shared, never dropped: dropping an instance unloads Vulkan drivers and can
+    // crash exiting threads (see wgpu_instance.rs). Hardware filtering below
+    // still rejects CPU/software adapters.
+    let instance = crate::wgpu_instance::shared();
     let mut future = pin!(instance.enumerate_adapters(backend));
     let waker = Waker::from(Arc::new(ThreadWake(std::thread::current())));
     let mut context = Context::from_waker(&waker);

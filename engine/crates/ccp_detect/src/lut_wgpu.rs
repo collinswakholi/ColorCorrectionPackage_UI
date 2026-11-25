@@ -107,9 +107,9 @@ mod native {
                 "metal" => wgpu::Backends::METAL,
                 _ => return Err("CCP_LUT_BACKEND must be auto, cpu, dx12, vulkan, or metal".into()),
             };
-            let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-            descriptor.flags = descriptor.flags.with_env();
-            let instance = wgpu::Instance::new(descriptor);
+            // A process-lifetime instance: dropping one unloads Vulkan drivers and
+            // can crash exiting threads (see wgpu_instance.rs).
+            let instance = crate::wgpu_instance::shared();
             let mut adapters = block_on(instance.enumerate_adapters(backends));
             adapters.retain(|a| {
                 let i = a.get_info();
