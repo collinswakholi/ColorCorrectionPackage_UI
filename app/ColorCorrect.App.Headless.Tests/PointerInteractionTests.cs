@@ -147,6 +147,38 @@ public sealed class PointerInteractionTests
     }
 
     [AvaloniaFact]
+    public void RightClickOnTheImageOpensTheCopyMenuAndRightDragPansWithoutIt()
+    {
+        // 0.4.0: the stage captured the pointer on every right press, so the release never
+        // reached the stage and "Right-click a point to copy" opened nothing.
+        var (window, vm) = Show();
+        vm.AddPaths([Image("ColorCard_Big.JPG")]);
+        Pump(() => vm.Workspace.HasImage);
+        var stage = window.GetVisualDescendants().OfType<ZoomPanView>().First(z => z.IsEffectivelyVisible);
+        Pump(() => stage.Bounds.Height > 0 && vm.Stage.Preview is not null, 8000);
+        var menu = window.GetVisualDescendants().OfType<Grid>().Select(g => g.ContextMenu).First(m => m is not null)!;
+        var at = Centre(stage, window);
+        window.MouseMove(at, RawInputModifiers.None);
+        window.MouseDown(at, MouseButton.Right, RawInputModifiers.None);
+        window.MouseUp(at, MouseButton.Right, RawInputModifiers.None);
+        Pump(() => menu.IsOpen, 2000);
+        Assert.True(menu.IsOpen, "right-click must open the Copy RGB / Lab / hex menu");
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        var before = stage.Scale;
+        window.MouseWheel(at, new Vector(0, 3), RawInputModifiers.None);
+        Pump(() => stage.Scale > before * 1.05);
+        window.MouseDown(at, MouseButton.Right, RawInputModifiers.None);
+        window.MouseMove(new Point(at.X + 80, at.Y + 40), RawInputModifiers.RightMouseButton);
+        window.MouseUp(new Point(at.X + 80, at.Y + 40), MouseButton.Right, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(stage.DidPan, "a right-drag still pans");
+        Assert.False(menu.IsOpen, "a pan must not open the menu");
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void WheelZoomsTheStageAndTheFitButtonFitsItAgain()
     {
         var (window, vm) = Show();

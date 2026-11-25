@@ -157,7 +157,7 @@ public sealed class ZoomPanView : Panel
     {
         var point = e.GetCurrentPoint(this);
         DidPan = false;
-        if (point.Properties.IsMiddleButtonPressed || point.Properties.IsRightButtonPressed)
+        if (point.Properties.IsMiddleButtonPressed)
         {
             _panning = true;
             _last = point.Position;
@@ -166,7 +166,10 @@ public sealed class ZoomPanView : Panel
             return;
         }
 
-        if (point.Properties.IsLeftButtonPressed)
+        // The right button pans only once the pointer moves (OnMove captures it then).
+        // Capturing on press sent the release to this view instead of the stage, so the
+        // Copy RGB / Lab / hex menu never opened on a plain right-click.
+        if (point.Properties.IsLeftButtonPressed || point.Properties.IsRightButtonPressed)
         {
             _panning = true;
             _last = point.Position;
