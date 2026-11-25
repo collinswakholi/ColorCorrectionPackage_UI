@@ -303,7 +303,8 @@
                                     <Button DockPanel.Dock="Right" Content="Browse" Theme="{StaticResource SecondaryButton}"
                                             Command="{Binding BrowseOutputCommand}" Padding="8,5" Margin="4,0,0,0"
                                             AutomationProperties.Name="Browse save folder"/>
-                                    <TextBox Text="{Binding Output.OutputDir}" Classes="config"/>
+                                    <TextBox x:Name="OutputFolderBox" Text="{Binding Output.OutputDir}" Classes="config"
+                                             AutomationProperties.Name="Output folder"/>
                                 </DockPanel>
                                 <StackPanel Margin="0,0,0,10" IsVisible="{Binding Output.ShowSaveProgress}">
                                     <DockPanel>
@@ -367,10 +368,6 @@
                         <StackPanel>
                             <DockPanel Classes="sidebarHeader" LastChildFill="False">
                                 <TextBlock Text="Add media" Classes="sectionLabel" VerticalAlignment="Center"/>
-                                <Border Classes="countBadge" DockPanel.Dock="Right" Margin="8,0,0,0"
-                                        ToolTip.Tip="Images available in Catalog">
-                                    <TextBlock x:Name="SampleCount" Text="{Binding Workspace.SampleCountLabel}" Classes="caption"/>
-                                </Border>
                             </DockPanel>
                             <Border x:Name="DropZone" Classes="dropZone" PointerPressed="OnDropZonePressed"
                                     AutomationProperties.Name="Drop JPEG, PNG, or TIFF files">
@@ -589,7 +586,8 @@
                                                  AutomationProperties.Name="Filter catalog by name"/>
                                         <Border Grid.Column="1" Classes="countBadge" VerticalAlignment="Center"
                                                 ToolTip.Tip="Visible catalog images">
-                                            <TextBlock Text="{Binding Workspace.SampleCountLabel}" Classes="caption"/>
+                                            <TextBlock x:Name="SampleCount" Text="{Binding Workspace.SampleCountLabel}" Classes="caption"
+                                                       AutomationProperties.Name="Visible catalog images"/>
                                         </Border>
                                     </Grid>
                                     <ComboBox x:Name="SampleGroupFilter" Classes="config"
@@ -710,6 +708,7 @@
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Content="×" Theme="{StaticResource IconButton}"
                                                     Command="{Binding ClearWhiteCommand}"
+                                                    IsVisible="{Binding Workspace.HasWhiteRef}"
                                                     MinWidth="32" MinHeight="32"
                                                     ToolTip.Tip="Clear white reference"
                                                     AutomationProperties.Name="Clear white reference"/>
@@ -1017,40 +1016,6 @@
                                 </controls:FitWrapPanel>
                             </Border>
                         </DockPanel>
-                        <Border x:Name="ColorPickerReadout" Grid.Row="1" Classes="pickerReadout" Margin="0,8,0,0"
-                                IsVisible="{Binding Picker.HasPick}"
-                                AutomationProperties.Name="Color hover readout">
-                            <Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                                    <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="{DynamicResource RadiusMd}"
-                                            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
-                                            Background="{Binding Picker.Brush}" VerticalAlignment="Center"/>
-                                    <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,16,2">
-                                            <TextBlock Text="xy" Classes="pickerLabel"/>
-                                            <TextBlock x:Name="PickerPixel" Text="{Binding Picker.Pixel}" Classes="pickerValue"/>
-                                            <Border Classes="hoverHex" VerticalAlignment="Center">
-                                                <TextBlock x:Name="PickerRgb" Text="{Binding Picker.Hex}" Classes="pickerValue"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="R" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding Picker.R}" Classes="pickerValue"/>
-                                            <TextBlock Text="G" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding Picker.G}" Classes="pickerValue"/>
-                                            <TextBlock Text="B" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding Picker.B}" Classes="pickerValue"/>
-                                            <TextBlock Text="L" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding Picker.L}" Classes="pickerValue"/>
-                                            <TextBlock Text="a" Classes="pickerLabel"/>
-                                            <TextBlock Text="{Binding Picker.A}" Classes="pickerValue"/>
-                                            <TextBlock Text="b" Classes="pickerLabel"/>
-                                            <TextBlock x:Name="PickerLab" Text="{Binding Picker.LabB}" Classes="pickerValue"/>
-                                        </StackPanel>
-                                    </WrapPanel>
-                                </Grid>
-                            </Grid>
-                        </Border>
                         <Grid Grid.Row="2">
                             <Border x:Name="StageFrame" Classes="stageFrame"
                                     ToolTip.Tip="Hover for RGB / Lab. Right-click a point to copy. Esc clears.">
@@ -1227,11 +1192,50 @@
                                     </Border>
                                 </Grid>
                             </Border>
+                            <!-- An overlay inside the stage: as a layout row it appeared on hover and pushed the
+                                 stage 48 px shorter, so the fitted image jumped from 30% to 27%. -->
+                            <Border x:Name="ColorPickerReadout" Classes="pickerReadout overlay" Margin="12"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                    IsHitTestVisible="False"
+                                    IsVisible="{Binding Picker.HasPick}"
+                                    AutomationProperties.Name="Color hover readout">
+                            <Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <Border x:Name="PickerSwatch" Width="28" Height="28" CornerRadius="{DynamicResource RadiusMd}"
+                                            BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                                            Background="{Binding Picker.Brush}" VerticalAlignment="Center"/>
+                                    <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,16,2">
+                                            <TextBlock Text="xy" Classes="pickerLabel"/>
+                                            <TextBlock x:Name="PickerPixel" Text="{Binding Picker.Pixel}" Classes="pickerValue"/>
+                                            <Border Classes="hoverHex" VerticalAlignment="Center">
+                                                <TextBlock x:Name="PickerRgb" Text="{Binding Picker.Hex}" Classes="pickerValue"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="R" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding Picker.R}" Classes="pickerValue"/>
+                                            <TextBlock Text="G" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding Picker.G}" Classes="pickerValue"/>
+                                            <TextBlock Text="B" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding Picker.B}" Classes="pickerValue"/>
+                                            <TextBlock Text="L" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding Picker.L}" Classes="pickerValue"/>
+                                            <TextBlock Text="a" Classes="pickerLabel"/>
+                                            <TextBlock Text="{Binding Picker.A}" Classes="pickerValue"/>
+                                            <TextBlock Text="b" Classes="pickerLabel"/>
+                                            <TextBlock x:Name="PickerLab" Text="{Binding Picker.LabB}" Classes="pickerValue"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
                         </Grid>
                     </Grid>
                 </Border>
 
-                <GridSplitter x:Name="AnalysisResize" Grid.Row="1" Height="8" Background="Transparent" ResizeDirection="Rows"/>
+                <GridSplitter x:Name="AnalysisResize" Grid.Row="1" Height="8" Background="Transparent" ResizeDirection="Rows"
+                              AutomationProperties.Name="Resize analysis panel"/>
 
                 <Border x:Name="AnalysisPanel" Grid.Row="2" Classes="analysisPanel" MinHeight="220">
                 <TabControl x:Name="AnalysisTabs" SelectedIndex="{Binding Analysis.Tab}"

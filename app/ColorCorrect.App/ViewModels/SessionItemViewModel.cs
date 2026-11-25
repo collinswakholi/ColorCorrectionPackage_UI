@@ -44,6 +44,16 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
     public string Path { get; private set; }
     public string Name { get; private set; }
     public bool IsMissing => !File.Exists(Path);
+
+    /// <summary>
+    /// Re-check the file on disk and notify bindings. IsMissing is computed, so
+    /// without this a photo deleted or moved after loading kept looking present.
+    /// </summary>
+    public void RefreshAvailability()
+    {
+        foreach (var property in new[] { nameof(IsMissing), nameof(SessionTip), nameof(SessionAutomationName) })
+            OnPropertyChanged(property);
+    }
     public CompletedResultContext? CompletedContext { get; set; }
     public AssetIdentity? SourceIdentity { get; set; }
     public string SessionAutomationName => $"Session still {Name}";

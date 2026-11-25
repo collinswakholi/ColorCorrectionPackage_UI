@@ -1,93 +1,357 @@
 [
   {
-    "Title": "Start here",
-    "Paragraphs": [
-      "1 · Capture a chart and a blank white field with the same camera, exposure, lighting, focus, and image dimensions as your samples. Avoid clipped patches, glare, deep shadows, and automatic camera adjustments.",
-      "2 · Add your images to the session. Select the chart image and press Detect. Verify its detected type and patch overlay; if several faces are found, choose the intended Chart face. A wrong chart, orientation, or patch order invalidates calibration.",
-      "3 · Add the blank white image in the FFC area, not as a color chart. Enable the stages you need, then Fit + apply. Inspect stage previews, patch errors, and held-out validation before applying the model.",
-      "4 · Expand Model and choose Use loaded, then select a sample and run Apply model. A successful fit makes the model available but does not switch this mode automatically. Use matching capture conditions; save model JSON, reports, and corrected images."
+    "Title": "Get started",
+    "Summary": "From a chart photo to corrected images in eight steps.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You have photos taken under fixed lighting, and one of them shows a color chart. You want every photo's colors to match what the chart says they should be."] },
+      { "Kind": "visual", "Items": ["chart-split", "A real result. Left: ColorCard_Big.JPG as photographed. Right: the same chart after FFC, GC, WB and the default Root polynomial CC, with Blank.JPG as the white reference. The mean ΔE00 fell from 7.05 to 1.26."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "**Add photos.** Drag JPEG, PNG or TIFF files onto the window, or choose **Files** or **Folder** under Add media (`Ctrl+O`, `Ctrl+Shift+O`). They join the **Session**.",
+        "**Select the chart photo.** The app looks for a chart when you select a photo. Press **Detect** in the Chart section to run it again. If the photo holds more than one chart, choose one under **Chart face**.",
+        "**Check the overlay.** The outline should sit on the chart, with one cell per patch. Turn on **Lattice** or **Sample** in the strip on the preview for a closer look.",
+        "**Optional: add a white reference** for flat-field correction. See “Flat-field correction (FFC)”.",
+        "**Choose stages.** Under **Process**, tick FFC, GC, WB and CC. Turn off any stage you do not need.",
+        "**Press Fit + apply** (`F5`). The app learns a model from the chart and corrects this photo.",
+        "**Check the result.** Compare the Original and Corrected tabs above the preview, then read the **ΔE Analysis** below it.",
+        "**Save.** Press `Ctrl+S`, tick the photos and outputs you want, choose a folder under Save to, and press **Save selected**."
+      ] },
+      { "Kind": "visual", "Items": ["run-mock", "The run area at the bottom of the left panel. The main button says Fit + apply when it will learn a new model, and Apply model when it will reuse the loaded one."] },
+      { "Kind": "see", "Heading": "What you will see", "Items": [
+        "The stage chips above the run button light up one after another: FFC, SAT (saturation), GC, WB, CC and Save result. Stages you turned off stay dim.",
+        "The session tile shows what was detected, for example a chart type, or “no chart”.",
+        "The status bar shows the fitted mean ΔE00. Lower is better.",
+        "A finished preview is not a saved file. Nothing is written to your folder until you press **Save selected**."
+      ] },
+      { "Kind": "steps", "Heading": "Correct more photos with the same model", "Items": [
+        "Open **Model** in the left panel and choose **Use loaded**. The main button changes to **Apply model**.",
+        "Select a photo from the same setup and press **Apply model**. That photo does not need a chart.",
+        "For many photos at once, use **Batch** (`Ctrl+B`)."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "Fit + apply is greyed out|Read the hint under the button. It names what is missing, for example “Detect the chart, then Fit + apply.”",
+        "The tile says “no chart”|See “Troubleshooting”. The blank white photo is never a chart; select a photo that shows the chart.",
+        "Colors look worse after correction|Check that the photo and the chart were taken under the same light and exposure, then read “Reading the ΔE analysis”."
+      ] }
     ]
   },
   {
-    "Title": "FFC · illumination",
-    "Paragraphs": [
-      "Flat-field correction compensates for spatial brightness variation. Use a clean, matte blank white field captured in the same setup. For the sample photographs, use Blank.JPG as the FFC reference.",
-      "Inspect the chosen white-field region: it should exclude objects, edges, dirt, glare, and saturated areas. Surface degree and smoothing describe the illumination field; increasing complexity is not automatically more accurate.",
-      "FFC is spatial and cannot be represented by a 3D cube LUT. Reuse it only when camera geometry, framing, lighting, and image dimensions match.",
-      "FFC, GC, and WB currently require encoded sRGB input with D65 white. For other input RGB spaces, convert the image first or use CC alone; unsupported combinations are rejected rather than interpreted silently."
+    "Title": "How correction works",
+    "Summary": "Five stages, in a fixed order, each with its own input.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You want to know what each stage does, so you can decide which ones to turn on."] },
+      { "Kind": "visual", "Items": ["pipeline", "Stages always run in this order. Each stage sees the result of the stages before it."] },
+      { "Kind": "see", "Heading": "The stages", "Items": [
+        "**FFC · Flat field** evens out lighting across the frame. It multiplies lightness (L*) by a smooth gain map learned from a blank white photo.",
+        "**Saturation** estimates the true color of chart patches that the camera clipped. **Skip saturated patches** under Process turns this step off.",
+        "**GC · Tone response** fits a lightness curve from the chart's grey patches.",
+        "**WB · White balance** scales the red, green and blue channels so the grey patches come out neutral.",
+        "**CC · Color fit** maps the remaining color errors with the model you choose under CC settings."
+      ] },
+      { "Kind": "visual", "Items": ["stage-bars", "Mean ΔE00 on the chart after each stage, from the ColorCard_Big.JPG fit. GC and CC did most of the work here; your setup may differ."] },
+      { "Kind": "text", "Items": [
+        "In the default fast mode, GC, WB and CC are folded into one 65×65×65 lookup table and FFC runs in the same pass. The GPU is used when it is faster. See “Speed: devices and modes”.",
+        "A saved model stores GC, WB and CC. FFC is spatial: when it is on, Apply model recomputes it from the white reference, so it needs the blank white photo and the same framing."
+      ] }
     ]
   },
   {
-    "Title": "GC & white balance",
-    "Paragraphs": [
-      "Yes, GC uses the detected chart: it compares measured lightness from named neutral patches (after FFC when enabled) with the matching reference lightness. At least two usable named neutrals are required. It fits a monotonic curve anchored at black and white, not a fixed gamma exponent. There is no GC degree setting.",
-      "Apply model reuses the saved GC curve on every pixel; new sample images need no chart. A new fit, however, needs a detected chart with usable neutral patches. The stage order remains FFC → GC → WB → CC.",
-      "White balance adjusts the channel gains using neutral reference patches. Check that those patches are not clipped, occluded, or reflecting glare. A color-mapping model cannot recover information that the camera did not record.",
-      "Turn off stages you do not need, but evaluate the complete pipeline you intend to apply. Changing capture conditions requires recalibration; a low fitting error is not evidence that a model transfers to another setup."
+    "Title": "Flat-field correction (FFC)",
+    "Summary": "Remove uneven lighting with a blank white photo.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["The center of your photos is brighter than the corners, so the same color reads differently across the frame. You want even lighting before color correction."] },
+      { "Kind": "visual", "Items": ["ffc", "Top left: the white area of Blank.JPG, with its contrast stretched so the fall-off shows. Faint marks on the surface show too. Top right: the smooth gain map that flattens it, up to ×1.09 at the corners. Below: lightness across the middle of the frame, before and after the gain."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "**Take a white reference.** Photograph a clean, matte, blank white surface that fills the frame. Use the same camera position, lens, exposure, lighting and image size as your other photos.",
+        "**Add it to the app.** Add it to the Session or a Catalog folder like any other photo.",
+        "**Make it the white reference.** Drag it onto the white well under **FFC · Flat field**, click the **W** badge on its Catalog tile, or press **White file**.",
+        "**Tick FFC · Flat field** and press **Fit + apply**.",
+        "**Check the area used.** Turn on **Plane** in the strip on the preview to see which part of the white photo the app used."
+      ] },
+      { "Kind": "see", "Heading": "Choosing a good white reference", "Items": [
+        "Good: the same setup and framing, a uniform matte surface, nothing clipped to pure white.",
+        "Avoid: the chart photo itself, objects or labels in the frame, dust, glare, or a different zoom or crop.",
+        "One white reference serves every photo taken in that setup. Take a new one when the lights, the camera or the framing change."
+      ] },
+      { "Kind": "text", "Heading": "FFC settings", "Items": [
+        "The gear button next to FFC opens **FFC settings**. **Fit method** is Linear, Polynomial (the default), PLS or Neural net. You can also set **Sampling grid** (4–200), **Smoothing window** (odd, 1–51) and **Polynomial degree** (1–7). A higher degree is not automatically more accurate; start with the defaults."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "Rings, blotches or dark corners after FFC|The white photo probably has marks, objects or edges in it, or a different framing. Retake it, or compare with FFC turned off.",
+        "FFC is rejected for your input|FFC, GC and WB need sRGB/D65 input. Convert other inputs first, or run CC alone."
+      ] }
     ]
   },
   {
-    "Title": "CC & neural networks",
-    "Paragraphs": [
-      "Start with a simple fit and compare held-out error before increasing polynomial degree or model complexity. Linear and PLS fits provide useful baselines; NN is flexible but can overfit a small chart.",
-      "NN hidden layers accept a single width or one to four widths. Examples: ‘100’ or ‘100, 30’ or ‘[64, 32]’ or ‘[128, 64, 32]’. A comma-separated sequence specifies successive layers, not candidate models.",
-      "Choose Adam, SGD with momentum, or RMSProp. Batch normalization is optional and uses full-chart statistics for small datasets. Dropout ranges from 0 to 0.8; zero disables it. Keep a record of the optimizer, architecture, normalization, dropout, and training settings when comparing fits.",
-      "New NN models learn an identity-safe residual and keep their best non-regressing training checkpoint. That safeguards training, but does not guarantee low error on unseen images. Compare held-out results and inspect saturated colors, neutrals, shadows, and highlights."
+    "Title": "Tone (GC) and white balance",
+    "Summary": "Learned automatically from the chart's grey patches.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["Your photos are too dark, too flat or tinted, and you want the greys of the chart to come out at the right lightness and perfectly neutral."] },
+      { "Kind": "visual", "Items": ["gc", "The six grey patches of ColorCard_Big.JPG. Hollow dots are their lightness as photographed; filled dots are after correction. Points on the diagonal match the chart's reference values. The swatches show the same greys before and after: note the blue tint that WB removes."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Tick **GC · Tone response** and **WB · White balance** under Process.",
+        "Press **Fit + apply**.",
+        "Open the GC and WB tabs above the preview to see each stage's effect."
+      ] },
+      { "Kind": "see", "Heading": "What the app does", "Items": [
+        "**GC** compares the measured lightness of the chart's named grey patches (after FFC, if it is on) with their reference lightness. It fits a smooth curve that only rises, anchored at black and white. It is not a single gamma number, and it has no settings. The ⓘ button next to GC explains this.",
+        "GC needs at least two usable grey patches.",
+        "**WB** sets one gain each for red, green and blue so that those grey patches become neutral.",
+        "**Apply model** reuses the saved curve and gains. New photos do not need a chart."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "The light grey patches are clipped or show glare|Retake the chart with less exposure or without the reflection. Correction cannot recover detail the camera did not record.",
+        "Highlights look flat after GC|Check the Patch ΔE table. A clipped white patch is marked in the Sat column."
+      ] }
     ]
   },
   {
-    "Title": "Color spaces & ΔE",
-    "Paragraphs": [
-      "Input RGB space and white must describe the numeric pixels being supplied. Output RGB space describes the corrected pixel encoding. These are not cosmetic labels. Standard sRGB uses D65; selecting another white with the same primaries describes a custom variant.",
-      "With sRGB/D65 input, embedded ICC profiles are converted to working sRGB before correction. EXIF rotation is applied consistently to detection, sampling, thumbnails and exports. Explicit non-sRGB or custom-white input selections bypass ICC conversion and use the declared pixel encoding. Original previews honor ICC profiles for display. Corrected and stage previews are converted to display sRGB independently of exported bytes. Non-sRGB exports still need a downstream workflow that interprets their declared encoding correctly.",
-      "CIEDE2000 (ΔE00) measures perceptual distance in CIELAB with a common reference white. Lower is better, but a single mean hides outliers. Inspect the per-patch values, worst patches, and held-out validation as well as the mean.",
-      "A fitting score measures the calibration chart. Held-out error tests the CC mapping after GC/WB have been fitted; it is not validation of the whole pipeline on independent photographs. Low training error with high held-out error signals overfitting or an unsuitable chart reference. Apply-only images have no measured chart error. The app must not fabricate ΔE for them.",
-      "Reference values depend on chart type, patch order, illuminant, observer, and the physical chart. Published nominal values cannot certify your individual chart: aging, dirt, printing variation, glare, and illumination spectra remain sources of uncertainty. See the bundled color-science validation document for independent numerical fixtures and the exact tested scope."
+    "Title": "Choosing a color model (CC)",
+    "Summary": "Simple models generalise; flexible models can overfit.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You want the most accurate colors on new photos, not only on the chart you fitted."] },
+      { "Kind": "visual", "Items": ["cc-models", "How the CC methods compare. Flexibility helps on hard lighting but needs more patches to stay honest. Ratings are guidance, not measurements."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Press the gear button next to **CC · Color fit**. This opens **Correction settings**.",
+        "Choose a **Method**. Start with **Root polynomial** (the default) at degree 2.",
+        "Press **Fit + apply**, then note the CC-only validation line in the ΔE Analysis tab.",
+        "Try one step more and one step less flexible. Keep the simplest method whose validation ΔE is close to the best."
+      ] },
+      { "Kind": "see", "Heading": "The methods, honestly", "Items": [
+        "**3x3 CCM**: nine numbers. Very stable and predictable, but it cannot fix errors that bend differently in shadows and highlights.",
+        "**Root polynomial** (root degree 2 or 3): the default. Its terms scale with brightness, so it copes well when exposure varies a little. A good first choice.",
+        "**Polynomial regression** (degree 1–7, optional combination terms): flexible. High degrees can fit 24 patches almost perfectly and still fail on new photos.",
+        "**PLS** (N components, 0 = auto): a regularised regression that copes with many related terms. Fewer components means a smoother fit.",
+        "**Neural net**: the most flexible and the slowest to fit. It overfits a 24-patch chart easily. Hidden layers takes one width or up to four, such as `100`, `100, 30` or `[128, 64, 32]` (each 4–512). Optimizer is Adam, SGD · momentum or RMSProp. Dropout runs from 0 to 0.8; 0 turns it off."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "Fit mean is tiny but validation is much higher|The model is memorising the chart. Choose a simpler method or a lower degree.",
+        "Vivid colors clip or shift after a flexible fit|Compare with Root polynomial. Check saturated patches in the Patch ΔE table."
+      ] },
+      { "Kind": "note", "Items": ["Correction settings also hold the color spaces, the output format, Export training data, Chart references… and Reset all processing settings."] }
     ]
   },
   {
-    "Title": "Session & catalog",
-    "Paragraphs": [
-      "The catalog organizes available files; the session is your current working set. Select a session tile to make it active. The left and right preview arrows, or Alt+Left / Alt+Right, browse different session images—not the correction-stage previews.",
-      "Scroll the session and catalog areas to reach longer collections. Inspect the active filename before running, saving, or removing an item. Delete removes the selected item from the working session; it is not a command to erase your original image file.",
-      "Ctrl+O adds files; Ctrl+Shift+O adds a folder. Ctrl+Shift+S saves the session, and Ctrl+Alt+O loads it. Session persistence is separate from exporting corrected image files or reusable model JSON."
+    "Title": "Reading the ΔE analysis",
+    "Summary": "How close the corrected chart is to its reference, and how far to trust it.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You want to know whether a correction is good enough, and which colors are still off."] },
+      { "Kind": "visual", "Items": ["de-scale", "The words the app shows next to a ΔE00 value. The swatch pairs differ by exactly the ΔE00 shown, so you can see roughly what each step looks like."] },
+      { "Kind": "visual", "Items": ["metric-mock", "The summary cards from the ColorCard_Big.JPG fit. The large number is after correction; the small number is before."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Open **ΔE Analysis** below the preview. Drag the divider above it upward for more room.",
+        "Read **Fit mean ΔE**, **Median ΔE** and **Max ΔE**. A low mean with a high max means a few patches are still wrong.",
+        "Read the validation line, for example “CC-only validation · 5-fold mean 2.21”. It holds patches out of the fit, so it is a fairer estimate than the fit mean.",
+        "Open **Chart rendition** to compare each patch with its reference, and open **Patch ΔE table** for the numbers.",
+        "Use **Export** on any plot card to save it as an image."
+      ] },
+      { "Kind": "visual", "Items": ["rendition", "Each tile: left half as photographed, right half corrected, bottom strip the reference color. Taken from the same fit."] },
+      { "Kind": "see", "Heading": "What the numbers mean", "Items": [
+        "ΔE00 (CIEDE2000) is a perceptual color difference in CIELAB. Around 1 is barely visible side by side; above 5 is clearly different.",
+        "**Per stage** and **CIEDE2000 by stage** show how much each stage helped.",
+        "Validation tests the CC fit only: GC and WB are fitted before the folds. It is not a test on an independent photo. To test the whole pipeline, photograph a second chart and evaluate it.",
+        "Photos corrected with Apply model have no chart to measure, so the app shows no ΔE for them."
+      ] },
+      { "Kind": "note", "Items": ["Published reference values cannot certify your individual chart. Aging, dirt, printing variation, glare and the light's spectrum still add uncertainty."] }
     ]
   },
   {
-    "Title": "Apply & save",
-    "Paragraphs": [
-      "To apply an existing fit, expand Model and select Use loaded; load model JSON first if needed. Select the sample image and run Apply model. Fit from image is a different mode. No chart is needed on an apply-only image, but capture conditions must match. In Batch, choose Apply current model to reuse the model; Fit from chart calibrates each chart image separately.",
-      "Batch shows the active filename and its applicable FFC, GC, WB, CC and Save result indicators. Turn Preview results off to avoid generating previews for the batch; full-resolution output is still written. Existing completed results keep their captured model and settings when you change controls for the next operation. Drag the divider above the analysis section upward to enlarge the figures before inspecting or capturing them.",
-      "A completed GUI preview does not mean full-resolution files have been exported. Press Ctrl+S and choose Corrected (full size) for a full-resolution corrected image. FFC, GC, WB, and CC stage exports are preview-resolution images for inspection. Reports contain the chart measurements. Choose an output folder and Save selected; existing files require replacement confirmation. Model JSON preserves the reusable correction; a cube LUT contains only the non-spatial color mapping and excludes FFC.",
-      "Keep the source files unchanged and store outputs separately. Compare corrected results in a color-managed viewer before downstream measurement or publication."
+    "Title": "Models: save, load, .cube",
+    "Summary": "Reuse a correction without a chart, or take it to other software.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You fitted a good model and want to use it again later, on another computer, or in an editor that reads 3D LUTs."] },
+      { "Kind": "visual", "Items": ["model-mock", "The Model section of the left panel."] },
+      { "Kind": "steps", "Heading": "Save and load", "Items": [
+        "After **Fit + apply**, the new model is loaded. The Model section shows its summary.",
+        "Press **Save** and choose a file name. The model is saved as JSON, together with the chart reference values it used.",
+        "Later, press **Load** and pick the JSON. The app switches to **Use loaded**, and the main button becomes **Apply model**.",
+        "Choosing **Fit from image** and pressing **Fit + apply** trains a new model, which replaces the loaded one. Save first if you want to keep it."
+      ] },
+      { "Kind": "steps", "Heading": "Export a .cube LUT", "Items": [
+        "With a model loaded, press **.cube** and choose where to save it.",
+        "The app writes a 33-point 3D LUT with GC, WB and CC. The status bar confirms: “Exported .cube (LUT does not include flat-field).”",
+        "Load the .cube in software that reads 3D LUTs. Feed it photos in the same encoding the model was fitted on."
+      ] },
+      { "Kind": "see", "Heading": "Good to know", "Items": [
+        "A LUT cannot hold FFC, because FFC changes with position in the frame. For FFC, apply the model in this app with the white reference.",
+        "A model only transfers to photos from the same camera, lighting, exposure and settings. If any of these change, fit again."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "“Could not save … Choose another folder.”|The folder is read-only or full. Save to a folder you can write to.",
+        "Load, Save or .cube is greyed out|Wait for the current operation to finish. Save and .cube need a fitted or loaded model."
+      ] }
     ]
   },
   {
-    "Title": "API & notebooks",
-    "Paragraphs": [
-      "The same Rust worker used by the GUI accepts sequential newline-delimited JSON commands without opening a window. The bundled Python SDK and command-line interface provide a friendlier route for scripts, automation, and Jupyter notebooks; Python is optional for the desktop app.",
-      "Install the bundled wheel from python/ into your Python environment. Read api/README.md or docs/api/README.md beside the application. Pass root=the installed application folder to ColorCorrection or Client. Run the notebooks from https://github.com/collinswakholi/ColorCorrectionPackage_UI/tree/main/notebooks; the notebook files and photograph fixtures are supplied with the source, not the installer.",
-      "Start with ColorCorrection(Config(save_path=\"results\"), root=app_folder), then run(Image=\"chart.jpg\", White_Image=\"Blank.JPG\") and predict_images(images=[\"sample.jpg\"]). Config controls do_ffc, do_gc, do_wb and do_cc; options=CalibrationOptions(ffc=FFCOptions(...)) configures fitting. Config stage switches override the matching nested switches. GC and WB are fitted automatically; their public controls enable or disable those stages. The API guide shows editable FFC, CC and application options, typed results and model reload.",
-      "Use a separate worker per independent session and send one request at a time. Treat model state as belonging to that worker. A timeout must terminate the worker before another request, so a late reply cannot be mistaken for the next operation.",
-      "The API is a local process interface, not an internet server. The app does not open a network listener by default. Use explicit output directories and retain your model, configuration, chart reference, and reports for reproducibility."
+    "Title": "Batch processing",
+    "Summary": "Correct many photos in one run.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You have many photos from the same setup and want them all corrected, without pressing Apply model on each one."] },
+      { "Kind": "visual", "Items": ["sample-split", "Sample_3572.JPG corrected with the model fitted on ColorCard_Big.JPG. Left half as photographed, right half corrected."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Add the photos to the Session. A session holds up to 80 photos.",
+        "Press **Batch** next to the run button (`Ctrl+B`).",
+        "Tick the photos to process. White references and files ending in _corrected start unticked.",
+        "Leave **Preview results** on to see each result as it finishes. Turn it off to skip the previews and go faster.",
+        "Press **Apply current model** to reuse the loaded model; these photos need no chart. Or press **Fit from chart** to detect a chart and fit a separate model for each selected photo.",
+        "When the batch ends, press `Ctrl+S` and **Save selected** to export the results."
+      ] },
+      { "Kind": "visual", "Items": ["batch-mock", "The Batch panel."] },
+      { "Kind": "see", "Heading": "What you will see", "Items": [
+        "The stage chips follow the current photo. **Batch progress** below them follows the whole queue.",
+        "The percentage counts finished work, not time. Some stages take longer than others.",
+        "In fast mode, GC, WB and CC run together in one pass, so their chips light up together.",
+        "With previews off, a finished photo shows “Result ready · Preview off”. **Show preview** opens just that one."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "You need to stop|Press **Cancel**. Finished photos keep their results.",
+        "One photo fails|The others still finish. The Log tab names the photo and the reason.",
+        "Batch is greyed out|Add photos to the Session first, and wait for any running operation to finish."
+      ] }
+    ]
+  },
+  {
+    "Title": "Speed: devices and modes",
+    "Summary": "Auto device choice, the detection engine, and fast vs compatibility mode.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You want faster processing, or you need results that match an older version exactly."] },
+      { "Kind": "visual", "Items": ["device-mock", "Processing settings, with Advanced expanded."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Click **Processing settings** under the app name at the top left (`Ctrl+Alt+A`).",
+        "**Image correction** is Auto (recommended), CPU or GPU. Auto chooses for you, and the CPU takes over if needed.",
+        "Under **Advanced**, **Detection engine** chooses how charts are found: Auto (recommended), CPU, WebGPU, DirectML (Windows only) or Vulkan. Press **Apply engine change** afterwards. This restarts the engine.",
+        "Tick **Compatibility mode** only to reproduce older results.",
+        "Under **Device details**, **Check setup** rescans your hardware. **Use CPU** sets both detection and correction to the CPU."
+      ] },
+      { "Kind": "visual", "Items": ["modes", "Fast mode (the default) builds one lookup table and corrects every pixel in a single pass. Compatibility mode runs each stage separately: slower, and results may differ very slightly."] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "A forced GPU engine reports an error|Choose Auto or CPU and press Apply engine change. Auto recovers on the CPU; a forced engine reports the problem instead.",
+        "Acceleration is missing|Under Device details choose a setup mode (Recommended, CPU only or Custom) and press **Install optional support**. Graphics drivers come from your system or GPU vendor, not from this app."
+      ] }
+    ]
+  },
+  {
+    "Title": "Sessions and files",
+    "Summary": "The working set, the catalog, saved sessions and moved photos.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["You want to organise your photos, come back to the work later, and recover when files move."] },
+      { "Kind": "see", "Heading": "Session and Catalog", "Items": [
+        "The **Session** is your working set, up to 80 photos. When it is full, extra photos are not added and the Log says so.",
+        "The **Catalog** lists folders you keep an eye on. Press **Watch folder** to add one. Click a tile to add it to the Session, or drag it in. Use **Filter by name…** to search.",
+        "Ctrl-click selects several tiles, Shift-click selects a range. The **W** badge marks the FFC white reference.",
+        "The large arrows beside the preview, or `Alt+Left` and `Alt+Right`, move between photos. The tabs above the preview switch stages, not photos.",
+        "Hover the preview to read RGB and Lab under the pointer. Right-click to copy them, and press `Esc` to clear."
+      ] },
+      { "Kind": "steps", "Heading": "Save and reopen your work", "Items": [
+        "Press `Ctrl+Shift+S` (or the save icon by Session) to save the session.",
+        "Press `Ctrl+Alt+O` (or the load icon) to open it again. Its photos, chart detections and results come back with it.",
+        "`Delete` removes the selected photos from the Session. It never deletes your files."
+      ] },
+      { "Kind": "fix", "Heading": "If something goes wrong", "Items": [
+        "A tile says the image is unavailable|The file was moved or deleted. Select the tile and press **Relink image…** (or right-click the tile) to find it. If the content matches, its detection and results are kept; a different file needs Detect again.",
+        "“Settings could not be saved”|The settings folder is not writable. Changes still apply until you close the app."
+      ] }
+    ]
+  },
+  {
+    "Title": "Keyboard shortcuts",
+    "Summary": "Every shortcut the main window understands.",
+    "Sections": [
+      { "Kind": "keys", "Heading": "Work", "Items": [
+        "F5|Fit + apply, or Apply model",
+        "Ctrl+O|Add photos",
+        "Ctrl+Shift+O|Add a folder",
+        "Ctrl+S|Save outputs (opens the Save panel)",
+        "Ctrl+B|Open Batch",
+        "Delete|Remove selected photos from the Session"
+      ] },
+      { "Kind": "keys", "Heading": "Sessions and view", "Items": [
+        "Ctrl+Shift+S|Save the session",
+        "Ctrl+Alt+O|Load a session",
+        "Alt+Left / Alt+Right|Previous or next photo",
+        "Ctrl+T|Switch light and dark theme",
+        "Ctrl+Alt+A|Processing settings",
+        "F1|Open this guide",
+        "Esc|Close a panel or dialog, or clear the picked color"
+      ] },
+      { "Kind": "keys", "Heading": "In this guide", "Items": [
+        "Type|Search titles and text",
+        "Down|Move from the search box to the topic list",
+        "Up / Down|Choose a topic",
+        "Tab|Move to the article; Page Down scrolls it",
+        "Esc|Close the guide"
+      ] },
+      { "Kind": "note", "Items": ["Shortcuts do not fire while you are typing in a text box, except F1 and Esc."] }
     ]
   },
   {
     "Title": "Troubleshooting",
-    "Paragraphs": [
-      "No chart found: check focus, exposure, framing, and patch visibility, then press Detect again. Verify the detected chart type and overlay. Do not use Blank.JPG as the chart. Try a clear chart-bearing image from the same setup.",
-      "Poor correction despite a good mean ΔE: inspect individual patches and held-out errors; reduce fit complexity, check reference selection, and look for clipping, glare, mismatched color spaces, or changed lighting.",
-      "FFC artifacts: check the white-field region and dimensions, exclude edges or objects, and verify exposure consistency. Compare with FFC disabled to isolate the cause.",
-      "Worker or native-library error: open Processing settings, inspect the error, and restart the worker. Auto chart and plane detection use a compatible GPU and recover to CPU when needed. Select CPU for detection without a GPU; a forced GPU engine reports an error if unavailable. Use Check setup under Device details to inspect prerequisites and repair optional support. LUT processing uses wgpu with CPU recovery, while NN fitting remains on CPU. Inspect actual backend fields in API replies. Keep the executable, ONNX models, references, and GPU runtime libraries together."
+    "Summary": "Common problems, what the app says, and what to do.",
+    "Sections": [
+      { "Kind": "fix", "Heading": "Detection", "Items": [
+        "No chart detected (“no chart”)|Make sure the whole chart is in the frame, in focus, evenly lit and free of glare. Then press **Retry**. If it still fails, set Detection engine to CPU, press Apply engine change, and try again.",
+        "The wrong chart or face is used|Pick the right one under **Chart face**. Turn on **Lattice** to check the patch order before fitting."
+      ] },
+      { "Kind": "fix", "Heading": "Files", "Items": [
+        "A photo was moved, renamed or deleted|Select its tile and press **Relink image…**. See “Sessions and files”.",
+        "“The image is … over the 200 MP limit”|Photos above 200 megapixels are refused. Downscale the photo and add it again.",
+        "“16-bit TIFF is not supported”|Export an 8-bit JPEG, PNG or TIFF first.",
+        "“The file is damaged or incomplete”|Copy or export the photo again."
+      ] },
+      { "Kind": "fix", "Heading": "Saving", "Items": [
+        "“Save failed: … could not be written”|The output folder is read-only, full or offline. Press **Browse** under Save to, pick a folder you can write to, and press Save selected again.",
+        "“Saved … ; … file(s) failed. Check the save log.”|Some files were written. The Log tab lists the ones that failed.",
+        "You are asked to replace files|Existing files are only replaced when you press **Replace files**. Cancel keeps them."
+      ] },
+      { "Kind": "fix", "Heading": "Engine", "Items": [
+        "“Engine unavailable”|Press **Retry** on the card at the bottom left. If it fails again, open Processing settings → Device details and press **Check setup**.",
+        "The engine restarted on its own|This happens after Cancel, or when a command times out, so the next operation starts clean. Results you already have are kept.",
+        "Slow or failing GPU work|Choose CPU in Processing settings, or press **Use CPU** under Device details."
+      ] },
+      { "Kind": "fix", "Heading": "Results", "Items": [
+        "Good mean ΔE, poor-looking photos|Check the Max ΔE and the validation line. Look for clipping, glare, mixed lighting, or a different input color space.",
+        "FFC artifacts|Check the white reference for objects or marks, and that it matches the framing. Compare with FFC off."
+      ] }
     ]
   },
   {
-    "Title": "Research & citation",
-    "Paragraphs": [
-      "This application builds on the stepwise workflow presented by Wakholi and colleagues: A systematic color correction pipeline for controlled-environment imaging. The Plant Phenome Journal 9, e70067 (2026). DOI: 10.1002/ppj2.70067. Published 11 March 2026.",
-      "The original ColorCorrectionPipeline Python package is available at https://pypi.org/project/ColorCorrectionPipeline/ with source at https://github.com/collinswakholi/ColorCorrectionPackage. Studio retains a familiar stepwise workflow and run/predict naming; its native implementation and typed results are not a drop-in replacement for the original package.",
-      "The research motivates evaluating the imaging setup together with correction, rather than treating a regression model as a substitute for controlled capture. The current application is an evolving implementation; its automatic GC and NN safeguards should not be assumed to reproduce every historical experimental setting.",
-      "Original research opens the publisher article. Study PDF opens your copy at docs/research/ppj2.70067.pdf; download the paper separately. The illustrated guide is available offline. Reference sources and interpretation limits are described in docs/color-science-validation.md."
+    "Title": "Color spaces and ICC",
+    "Summary": "Tell the app how your pixels are encoded.",
+    "Sections": [
+      { "Kind": "goal", "Items": ["Your photos are not plain sRGB, or you need output in another RGB space."] },
+      { "Kind": "steps", "Heading": "Steps", "Items": [
+        "Open **Correction settings** (gear next to CC) and find COLOR SPACES.",
+        "Set **Input space** and **Input white** to describe the pixels you supply. Set **Target space** and **Target white** for the output.",
+        "Leave both at sRGB / D65 unless you know otherwise."
+      ] },
+      { "Kind": "see", "Heading": "Good to know", "Items": [
+        "With sRGB/D65 input, embedded ICC profiles are converted to working sRGB before correction. Photos without a profile are treated as sRGB.",
+        "Other input choices use the stored pixels as they are and skip ICC conversion.",
+        "FFC, GC and WB need sRGB/D65 input. For other inputs, convert first or use CC alone. Unsupported combinations are refused, not guessed.",
+        "Previews are converted for display; exported files keep the encoding you chose. Non-sRGB exports need software that reads that encoding. EXIF rotation is applied everywhere."
+      ] }
+    ]
+  },
+  {
+    "Title": "Python and automation",
+    "Summary": "Run the same pipeline from scripts and notebooks.",
+    "Sections": [
+      { "Kind": "text", "Items": [
+        "The engine behind the app also accepts commands without a window. The Python SDK in the python/ folder wraps it; Python is optional for the desktop app. Read api/README.md beside the application.",
+        "A minimal run: ColorCorrection(Config(save_path=\"results\"), root=app_folder), then run(Image=\"chart.jpg\", White_Image=\"Blank.JPG\") and predict_images(images=[\"sample.jpg\"]).",
+        "Use one engine per independent session and send one request at a time.",
+        "The API is a local process interface, not an internet server. The app does not open a network listener by default."
+      ] }
+    ]
+  },
+  {
+    "Title": "About and research",
+    "Summary": "Where the method comes from.",
+    "Sections": [
+      { "Kind": "text", "Items": [
+        "This app builds on the stepwise workflow by Wakholi and colleagues: A systematic color correction pipeline for controlled-environment imaging. The Plant Phenome Journal 9, e70067 (2026). DOI: 10.1002/ppj2.70067.",
+        "The research argues for evaluating the imaging setup together with the correction, rather than treating a regression model as a substitute for controlled capture. The app's automatic GC and NN safeguards are later developments, not a reproduction of every setting in the study.",
+        "**Original research** opens the article in your browser. **Study PDF** opens docs/research/ppj2.70067.pdf if you have placed it there. **Documentation** opens the offline docs folder, including docs/color-science-validation.md."
+      ] }
     ]
   }
 ]

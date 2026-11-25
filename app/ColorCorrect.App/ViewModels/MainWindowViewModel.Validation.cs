@@ -41,7 +41,12 @@ public partial class MainWindowViewModel
     private string? OperationError(bool fit, LoadedFileState files) =>
         Settings.ValidationError(fit, files.ModelChanged, files.WhiteChanged,
             () => File.Exists(Settings.WhiteImagePath), Settings.ShowPls, Settings.ShowCcIterParams, Settings.ShowNn);
-    public string ValidationMessage => CachedOperationError(!WillUseLoadedModel) ?? "";
+    public string ValidationMessage => MissingActiveMessage() ?? CachedOperationError(!WillUseLoadedModel) ?? "";
+
+    private string? MissingActiveMessage() =>
+        Workspace.Active is { IsMissing: true } active
+            ? $"{active.Name} is no longer at {System.IO.Path.GetDirectoryName(active.Path)}. Relink it to its new location, or remove it from the session."
+            : null;
     public bool HasValidationError => !string.IsNullOrEmpty(ValidationMessage);
     private void RefreshValidation()
     {

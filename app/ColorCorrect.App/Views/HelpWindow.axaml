@@ -1,42 +1,73 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ColorCorrect.App.Views.HelpWindow"
-        Title="ColorCorrect Studio · Guide" Width="820" Height="600"
+        Title="ColorCorrect Studio · Guide" Width="900" Height="640"
         MinWidth="600" MinHeight="360" WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False" Background="{DynamicResource SidebarBrush}"
         FontFamily="{StaticResource DefaultFont}" Opened="OnOpened"
         KeyboardNavigation.TabNavigation="Cycle">
-    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,16">
-            <StackPanel Spacing="4">
-                <TextBlock Text="A field guide to better color" FontSize="{DynamicResource FontSizeTitle}" FontWeight="SemiBold"/>
-                <TextBlock Text="Capture carefully. Calibrate once. Validate before applying."
+    <Window.Styles>
+        <Style Selector="ListBox#TopicList ListBoxItem">
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBodySm}"/>
+        </Style>
+        <Style Selector="ListBox#TopicList ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PrimaryLightBrush}"/>
+        </Style>
+        <Style Selector="ListBox#TopicList ListBoxItem:selected">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </Window.Styles>
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20,18,20,16">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,14">
+            <Border Width="36" Height="36" CornerRadius="{DynamicResource RadiusMd}" Margin="0,0,12,0"
+                    Background="{DynamicResource PrimaryLightBrush}" VerticalAlignment="Center">
+                <Path Data="{StaticResource HelpIconGeometry}" Fill="{DynamicResource PrimaryBrush}"
+                      Stretch="Uniform" Width="18" Height="18"/>
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="Guide" FontSize="{DynamicResource FontSizeTitle}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                <TextBlock x:Name="Subtitle" Text="What to do, what you will see, and what to try when it goes wrong."
                            Classes="caption" TextWrapping="Wrap"/>
             </StackPanel>
-            <Button Grid.Column="1" Content="Close" Theme="{StaticResource SecondaryButton}"
+            <Button Grid.Column="2" Content="Close" Theme="{StaticResource SecondaryButton}"
                     Click="Close_Click" VerticalAlignment="Top" Margin="12,0,0,0"
                     AutomationProperties.Name="Close guide"/>
         </Grid>
-        <Grid Grid.Row="1" ColumnDefinitions="185,20,*">
+        <Grid x:Name="BodyGrid" Grid.Row="1" ColumnDefinitions="200,16,*">
             <Grid RowDefinitions="Auto,Auto,*">
-                <TextBlock Text="Find a topic" Classes="settingsLabel" Margin="0,0,0,6"/>
-                <TextBox x:Name="SearchBox" Grid.Row="1" PlaceholderText="Search the guide"
-                         TextChanged="Search_Changed" Margin="0,0,0,12"
-                         AutomationProperties.Name="Search help topics"/>
+                <TextBox x:Name="SearchBox" PlaceholderText="Search the guide"
+                         TextChanged="Search_Changed" Margin="0,0,0,6"
+                         AutomationProperties.Name="Search help topics"
+                         ToolTip.Tip="Searches topic titles and text. Down moves to the topic list."/>
+                <TextBlock x:Name="ResultCount" Grid.Row="1" Classes="caption" Margin="2,0,0,8"
+                           AutomationProperties.LiveSetting="Polite"/>
                 <ListBox x:Name="TopicList" Grid.Row="2" SelectionChanged="Topic_Changed"
                          Background="Transparent" BorderThickness="0"
-                         AutomationProperties.Name="Help topics"/>
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         AutomationProperties.Name="Help topics">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
             <Border Grid.Column="2" Background="{DynamicResource CardBrush}"
-                    CornerRadius="{DynamicResource RadiusLg}" Padding="20">
+                    BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"
+                    CornerRadius="{DynamicResource RadiusLg}" Padding="22,18,8,18">
                 <ScrollViewer x:Name="GuideScroll" HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Visible" AllowAutoHide="False"
+                              Focusable="True"
                               AutomationProperties.Name="Help article">
-                    <StackPanel x:Name="ArticlePanel" Spacing="14"/>
+                    <StackPanel x:Name="ArticlePanel" Spacing="16" Margin="0,0,14,0" Grid.IsSharedSizeScope="True"/>
                 </ScrollViewer>
             </Border>
         </Grid>
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,14,0,0">
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,12,0,0">
             <TextBlock x:Name="GuideStatus" Text="Available offline · F1 opens this guide · Esc closes it"
                        Classes="caption" TextWrapping="Wrap" VerticalAlignment="Center"/>
             <Button Grid.Column="1" Content="Documentation" Theme="{StaticResource SecondaryButton}"
@@ -44,7 +75,7 @@
                     ToolTip.Tip="Open offline API documentation and validation notes"
                     AutomationProperties.Name="Open documentation folder"/>
             <Button Grid.Column="2" Content="Original research ↗" Theme="{StaticResource SecondaryButton}"
-                    Margin="12,0,0,0" Click="Research_Click"
+                    Margin="8,0,0,0" Click="Research_Click"
                     AutomationProperties.Name="Open original research in browser"/>
             <Button Grid.Column="3" Content="Study PDF" Theme="{StaticResource SecondaryButton}"
                     Margin="8,0,0,0" Click="OfflineResearch_Click"

@@ -691,6 +691,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _rangeAnchor = null;
         Stage.LastPreviewDir = "";
         SetPreview(null, null);
+        ClearSourceSize();
         Stage.OverlayHandshake = null;
         ApplyReport(null);
         Compute.DetectSummary = "Waiting for detect";
@@ -840,7 +841,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        OpenOsPath(path);
+        try
+        {
+            OpenOsPath(path);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // No app is associated with .json files on many systems.
+            Job.Status = $"No app is set to open {Path.GetFileName(path)}. It is saved at {path}.";
+            Log("Report", Job.Status, LogLevel.Warning, [path]);
+            return;
+        }
         Log("Report", path);
     }
 
@@ -848,8 +859,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     private void OpenOutput()
     {
         var dir = ResolvedOutputDir();
-        Directory.CreateDirectory(dir);
-        OpenOsPath(dir);
+        try
+        {
+            Directory.CreateDirectory(dir);
+            OpenOsPath(dir);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            Job.Status = $"Could not open the output folder {dir}: {ex.Message}";
+            Log("Output", Job.Status, LogLevel.Error);
+            return;
+        }
         Log("Output", $"Opened {dir}.");
     }
 
@@ -979,7 +999,19 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        File.Copy(Output.LoadedModelPath, dest, overwrite: true);
+        try
+        {
+            File.Copy(Output.LoadedModelPath, dest, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 0.4.0 terminated here when the destination was read-only or full.
+            Output.ModelIoStatus = "Model not saved";
+            Job.Status = $"Could not save {Path.GetFileName(dest)}: {ex.Message} Choose another folder.";
+            Log("Model", Job.Status, LogLevel.Error, [dest]);
+            ToastService.ShowError(Job.Status);
+            return;
+        }
         Output.ModelIoStatus = $"Saved {Path.GetFileName(dest)}";
         Log("Model", $"Saved {Path.GetFileName(dest)}.", LogLevel.Success, [dest]);
     }
@@ -1358,8 +1390,17 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         foreach (var bitmap in cachedOriginals.Concat(new[] { original, corrected, displayed }).Distinct()) DisposeIfUnused(bitmap);
     }
 
+    /// <summary>Re-check every session photo on disk, e.g. when the window regains focus.</summary>
+    public void RefreshMissingFiles()
+    {
+        foreach (var item in Session) item.RefreshAvailability();
+        NotifyValidation();
+        NotifyRunCommands();
+    }
+
     private void Activate(SessionItemViewModel item)
     {
+        item.RefreshAvailability();
         foreach (var sessionItem in Session)
         {
             sessionItem.IsActive = sessionItem == item;
@@ -1837,7 +1878,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 
         if (Workspace.Active.Handshake is { Ok: true })
         {
-            Compute.DetectSummary = $"{Workspace.Active.DetectLabel} · {Math.Max(1, Workspace.Active.Handshake.ChartCount)} chart(s)";
+            Compute.DetectSummary = $"{Workspace.Active.DetectLabel} · {ChartCount(Math.Max(1, Workspace.Active.Handshake.ChartCount))}";
             return;
         }
 
@@ -1976,7 +2017,43 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         if (message.Contains("no detect execution provider", StringComparison.OrdinalIgnoreCase))
             return "Detection could not start. Choose Check setup to inspect the inference runtime and devices.";
         var first = message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Processing failed.";
+        first = FriendlyImageError(first);
         return first.Length > 280 ? first[..280] + "…" : first;
+    }
+
+    // "C:\…\folder\photo.jpg" or "/home/…/photo.jpg" -> "photo.jpg" (the full path is in the log details).
+    private static readonly System.Text.RegularExpressions.Regex AbsoluteFilePath = new(
+        @"(?:[A-Za-z]:\\|\\\\|/)(?:[^\s\\/:*?""<>|;]+[\\/])+(?<name>[^\s\\/:*?""<>|;]+\.[A-Za-z0-9]{2,5})",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex TooLarge = new(
+        @"Image is too large:.*?is (?<w>\d+)x(?<h>\d+) \((?<mp>[\d.]+) MP\); the limit is (?<limit>[\d.]+) MP.*",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+    /// <summary>
+    /// Plain-language versions of the engine's image errors: no developer settings,
+    /// no decoder internals, file names instead of full temp paths.
+    /// </summary>
+    internal static string FriendlyImageError(string message)
+    {
+        var tooLarge = TooLarge.Match(message);
+        if (tooLarge.Success)
+        {
+            var prefix = message[..tooLarge.Index];
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var mp = double.Parse(tooLarge.Groups["mp"].Value, inv);
+            var limit = double.Parse(tooLarge.Groups["limit"].Value, inv);
+            return $"{prefix}The image is {tooLarge.Groups["w"].Value}×{tooLarge.Groups["h"].Value} ({mp:0} MP), over the {limit:0} MP limit. Downscale it and try again.";
+        }
+        if (message.Contains("Format error decoding", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("Not enough bytes", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("unexpected end of file", StringComparison.OrdinalIgnoreCase))
+        {
+            var colon = message.IndexOf(": ", StringComparison.Ordinal);
+            var prefix = colon > 0 && message[..colon].Contains('.') ? message[..(colon + 2)] : "";
+            return $"{prefix}The file is damaged or incomplete and cannot be read. Copy or export it again.";
+        }
+        return AbsoluteFilePath.Replace(message, match => match.Groups["name"].Value);
     }
 
     private Task<bool> EnsureOutputAllowedAsync()
@@ -2112,6 +2189,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private const int PreviewMaxWidth = 2560;
+
+    /// <summary>An empty stage shows no image size (0.4.0 kept the last photo's).</summary>
+    private void ClearSourceSize()
+    {
+        _sourceWidth = 1;
+        _sourceHeight = 1;
+        Workspace.ImageMeta = "";
+    }
 
     private void SetSourceSize(int width, int height)
     {

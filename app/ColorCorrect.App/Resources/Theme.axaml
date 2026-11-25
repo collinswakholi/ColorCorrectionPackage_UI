@@ -1604,6 +1604,13 @@
         <Setter Property="MinHeight" Value="150" />
     </Style>
 
+    <!-- Floating over the image: opaque enough to read on any photo, sized to its content. -->
+    <Style Selector="Border.pickerReadout.overlay">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="MaxWidth" Value="560" />
+    </Style>
     <Style Selector="Window.narrow Border.pickerReadout">
         <Setter Property="Padding" Value="8,5" />
     </Style>
