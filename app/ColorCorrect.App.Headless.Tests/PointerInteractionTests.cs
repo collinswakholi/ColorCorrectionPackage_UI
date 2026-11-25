@@ -111,7 +111,15 @@ public sealed class PointerInteractionTests
         Assert.True(catalogTiles.Count >= 2, $"catalog tiles: {catalogTiles.Count}");
         Click(window, Centre(catalogTiles[0], window));
         Pump(() => vm.Session.Count == 1);
-        Click(window, Centre(catalogTiles[1], window));
+        // Adding a photo re-lays out the sidebar, so find the next tile again after layout
+        // settles (a slow runner clicked a stale position before) and pick one not yet added.
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        var next = window.GetVisualDescendants().OfType<StackPanel>()
+            .Where(p => p.Classes.Contains("thumbCell") && p.IsEffectivelyVisible)
+            .First(p => p.Tag is CatalogItemViewModel item &&
+                        !vm.Session.Any(s => string.Equals(s.Path, item.Path, StringComparison.OrdinalIgnoreCase)));
+        Click(window, Centre(next, window));
         Pump(() => vm.Session.Count == 2);
         Assert.Equal(2, vm.Session.Count);
 
@@ -186,6 +194,12 @@ public sealed class PointerInteractionTests
         Pump(() => vm.Workspace.HasImage);
         var stage = window.GetVisualDescendants().OfType<ZoomPanView>().First(z => z.IsEffectivelyVisible);
         Pump(() => stage.Bounds.Width > 0);
+        // Wait until the full image has replaced the quick preview: its fit scale differs,
+        // and a slow runner swapped it in between the two Fit clicks.
+        Pump(() => vm.Stage.Preview is not null, 8000);
+        var stable = 0;
+        var last = stage.Scale;
+        Pump(() => { stable = stage.Scale == last ? stable + 1 : 0; last = stage.Scale; return stable >= 15; }, 8000);
         var fit = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StageFitBtn");
         Click(window, Centre(fit, window));
         var fitted = stage.Scale;
