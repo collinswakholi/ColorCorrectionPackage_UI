@@ -137,6 +137,19 @@ impl ApplyOptions {
             Ok::<_, Error>(())
         };
         if self.fast_mode {
+            // Without intermediate previews, FFC runs in the combined LUT's pass.
+            if let Some(gain) = gain.filter(|_| !wants("ffc") && !wants("gc") && !wants("wb")) {
+                let combined = render::combined_label(stages);
+                if let Some(label) = &combined {
+                    progress(label);
+                }
+                render::apply_ffc_combined(work, gain, stages)?;
+                progress("FFC complete");
+                if combined.is_some() {
+                    progress("Combined LUT complete");
+                }
+                return Ok(());
+            }
             if let Some(gain) = gain {
                 apply_ffc_inplace(work, gain);
                 progress("FFC complete");
@@ -368,8 +381,9 @@ mod tests {
             [
                 "Loading image",
                 "FFC",
-                "FFC complete",
+                // FFC runs in the combined LUT's pass and completes with it.
                 "Combined LUT · GC + WB + CC",
+                "FFC complete",
                 "Combined LUT complete"
             ]
         );
@@ -879,7 +893,19 @@ mod tests {
         let table = render::combined_lut_table(&options.stages(&saved).unwrap());
         apply_encoded_lut_inplace(&mut expected, &table, 65);
         apply_to_work(&mut input, &saved, &options, Some(&gain)).unwrap();
-        assert_eq!(input, expected);
+        // Fast mode evaluates FFC in f32 in the LUT's pass: equal to the
+        // separate f64 FFC then LUT well within 1/255.
+        assert_eq!(input.shape(), expected.shape());
+        let worst = input
+            .iter()
+            .zip(expected.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0f32, f32::max);
+        assert!(worst < 1e-3, "fused FFC differs by {worst}");
+        assert_eq!(
+            render::last_execution().unwrap()["method"],
+            "ffc+combined-lut65"
+        );
         assert!(apply_to_work(&mut input, &saved, &options, None).is_err());
         render::set_lut_request(false, false);
     }

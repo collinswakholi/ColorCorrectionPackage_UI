@@ -43,7 +43,8 @@ and manifests for each platform are on the
   colorcorrect-studio
   ```
 
-  For the portable archive, extract it, run `./check-system`, then
+  For the portable archive, extract it, run `./check-system` (it lists
+  anything missing), `./install-dependencies --install` if needed, then
   `./ColorCorrect-Studio`.
 - **macOS:** extract the ZIP, move **ColorCorrect Studio.app** to Applications
   and open it from there.

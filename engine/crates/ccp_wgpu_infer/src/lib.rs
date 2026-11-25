@@ -88,12 +88,18 @@ fn runtime() -> Result<Runtime, String> {
         }
         return Ok(runtime.clone());
     }
-    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = wgpu::Backends::VULKAN;
-    // Non-conformant translation drivers require an explicit environment opt-in.
-    // This only permits enumeration; capabilities are never altered.
-    descriptor.flags = descriptor.flags.with_env();
-    let instance = wgpu::Instance::new(descriptor);
+    // Never dropped: dropping a wgpu instance unloads Vulkan drivers, and Mesa
+    // drivers' per-thread destructors then crash exiting threads (SIGSEGV seen
+    // on Ubuntu 22.04 when no hardware adapter matched).
+    static INSTANCE: OnceLock<wgpu::Instance> = OnceLock::new();
+    let instance = INSTANCE.get_or_init(|| {
+        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+        descriptor.backends = wgpu::Backends::VULKAN;
+        // Non-conformant translation drivers require an explicit environment opt-in.
+        // This only permits enumeration; capabilities are never altered.
+        descriptor.flags = descriptor.flags.with_env();
+        wgpu::Instance::new(descriptor)
+    });
     let mut adapters = block_on(instance.enumerate_adapters(wgpu::Backends::VULKAN));
     adapters.sort_by_key(|a| a.get_info().device_type != wgpu::DeviceType::DiscreteGpu);
     let adapter = adapters
@@ -126,7 +132,8 @@ fn runtime() -> Result<Runtime, String> {
     .map_err(|e| e.to_string())?;
     let device = Device::wgpu_options()
         .setup(WgpuSetup {
-            instance,
+            // A handle to the same never-dropped instance.
+            instance: instance.clone(),
             adapter,
             device,
             queue,

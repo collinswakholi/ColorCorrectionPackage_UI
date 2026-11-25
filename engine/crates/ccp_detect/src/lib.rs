@@ -7,6 +7,7 @@ pub mod cache_key;
 #[cfg(feature = "ort-plane")]
 mod decode;
 mod detection;
+pub mod ffc_lut_wgpu;
 // Detection geometry and plane post-processing run only with ONNX Runtime;
 // without it these modules contribute their result types alone.
 #[cfg_attr(not(feature = "ort-plane"), allow(dead_code))]
@@ -23,6 +24,8 @@ pub mod paths;
 #[cfg_attr(not(feature = "ort-plane"), allow(dead_code))]
 pub mod plane;
 pub mod probe;
+#[cfg(any(feature = "wgpu-lut", feature = "ort-plane"))]
+mod wgpu_instance;
 
 use std::path::Path;
 

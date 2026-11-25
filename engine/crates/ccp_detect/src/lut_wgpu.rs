@@ -45,7 +45,7 @@ pub fn apply(rgb: &mut [f32], lut: &[f32], gs: usize) -> Result<LutExecution, St
 }
 
 #[cfg(feature = "wgpu-lut")]
-mod native {
+pub(crate) mod native {
     use super::*;
     use rayon::prelude::*;
     use std::{
@@ -58,7 +58,7 @@ mod native {
     use wgpu::util::DeviceExt;
     const CHUNK: usize = 1_048_576;
 
-    fn block_on<F: Future>(future: F) -> F::Output {
+    pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
         struct ThreadWake(std::thread::Thread);
         impl Wake for ThreadWake {
             fn wake(self: Arc<Self>) {
@@ -76,9 +76,45 @@ mod native {
         }
     }
 
-    fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    pub(crate) fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
             .unwrap_or_else(|_| Err("wgpu execution panicked; chunk was not committed".into()))
+    }
+
+    /// The hardware adapter for a `(CCP_LUT_BACKEND, CCP_LUT_ADAPTER)` selection.
+    pub(crate) fn pick_adapter(selection: &(String, String)) -> Result<wgpu::Adapter, String> {
+        let backends = match selection.0.as_str() {
+            "auto" | "" => wgpu::Backends::DX12 | wgpu::Backends::VULKAN | wgpu::Backends::METAL,
+            "dx12" => wgpu::Backends::DX12,
+            "vulkan" => wgpu::Backends::VULKAN,
+            "metal" => wgpu::Backends::METAL,
+            _ => return Err("CCP_LUT_BACKEND must be auto, cpu, dx12, vulkan, or metal".into()),
+        };
+        // A process-lifetime instance: dropping one unloads Vulkan drivers and
+        // can crash exiting threads (see wgpu_instance.rs).
+        let instance = crate::wgpu_instance::shared();
+        let mut adapters = block_on(instance.enumerate_adapters(backends));
+        adapters.retain(|a| {
+            let i = a.get_info();
+            crate::probe::eligible_wgpu_adapter(&i)
+                && (selection.1.is_empty() || i.name.to_lowercase().contains(&selection.1))
+        });
+        // Discrete hardware first; on Windows the measured DX12 path wins.
+        // Other native platforms use Vulkan/Metal without translation layers.
+        adapters.sort_by_key(|a| {
+            let i = a.get_info();
+            (
+                i.device_type != wgpu::DeviceType::DiscreteGpu,
+                cfg!(target_os = "windows") && i.backend != wgpu::Backend::Dx12,
+                i.vendor,
+                i.device,
+                i.name,
+            )
+        });
+        adapters
+            .into_iter()
+            .next()
+            .ok_or_else(|| "no matching hardware wgpu adapter".to_string())
     }
 
     struct Gpu {
@@ -98,40 +134,7 @@ mod native {
     }
     impl Gpu {
         fn new(selection: &(String, String)) -> Result<Self, String> {
-            let backends = match selection.0.as_str() {
-                "auto" | "" => {
-                    wgpu::Backends::DX12 | wgpu::Backends::VULKAN | wgpu::Backends::METAL
-                }
-                "dx12" => wgpu::Backends::DX12,
-                "vulkan" => wgpu::Backends::VULKAN,
-                "metal" => wgpu::Backends::METAL,
-                _ => return Err("CCP_LUT_BACKEND must be auto, cpu, dx12, vulkan, or metal".into()),
-            };
-            let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-            descriptor.flags = descriptor.flags.with_env();
-            let instance = wgpu::Instance::new(descriptor);
-            let mut adapters = block_on(instance.enumerate_adapters(backends));
-            adapters.retain(|a| {
-                let i = a.get_info();
-                crate::probe::eligible_wgpu_adapter(&i)
-                    && (selection.1.is_empty() || i.name.to_lowercase().contains(&selection.1))
-            });
-            // Discrete hardware first; on Windows the measured DX12 path wins.
-            // Other native platforms use Vulkan/Metal without translation layers.
-            adapters.sort_by_key(|a| {
-                let i = a.get_info();
-                (
-                    i.device_type != wgpu::DeviceType::DiscreteGpu,
-                    cfg!(target_os = "windows") && i.backend != wgpu::Backend::Dx12,
-                    i.vendor,
-                    i.device,
-                    i.name,
-                )
-            });
-            let adapter = adapters
-                .into_iter()
-                .next()
-                .ok_or("no matching hardware wgpu adapter")?;
+            let adapter = pick_adapter(selection)?;
             let info = adapter.get_info();
             let profiling = std::env::var_os("CCP_LUT_PROFILE").is_some();
             let query_features =
@@ -402,17 +405,21 @@ mod native {
         }
     }
 
-    type Cached = Option<((String, String), Result<Gpu, String>)>;
-    pub(super) fn apply(rgb: &mut [f32], lut: &[f32], gs: usize) -> Result<LutExecution, String> {
-        static CACHE: OnceLock<Mutex<Cached>> = OnceLock::new();
-        let selection = (
+    pub(crate) fn selection() -> (String, String) {
+        (
             std::env::var("CCP_LUT_BACKEND")
                 .unwrap_or_else(|_| "auto".into())
                 .to_lowercase(),
             std::env::var("CCP_LUT_ADAPTER")
                 .unwrap_or_default()
                 .to_lowercase(),
-        );
+        )
+    }
+
+    type Cached = Option<((String, String), Result<Gpu, String>)>;
+    pub(super) fn apply(rgb: &mut [f32], lut: &[f32], gs: usize) -> Result<LutExecution, String> {
+        static CACHE: OnceLock<Mutex<Cached>> = OnceLock::new();
+        let selection = selection();
         let mut cache = CACHE
             .get_or_init(|| Mutex::new(None))
             .lock()

@@ -1,12 +1,10 @@
-"""Build a native Ubuntu 24.04 package from the same reviewed portable payload."""
+"""Build a native .deb (Ubuntu 24.04/22.04, Debian 13/12) from the same reviewed portable payload."""
 from pathlib import Path
 import re
 import shutil
 import subprocess
 
-DEPENDS = ("libc6 (>= 2.39)", "libgcc-s1", "libstdc++6", "libicu74", "libssl3t64", "libkrb5-3",
-           "zlib1g", "libfontconfig1", "libx11-6", "libice6", "libsm6", "libxrandr2", "libxi6",
-           "libgl1", "libvulkan1", "libgtk-3-0t64")
+from linux_runtime import deb_depends, payload_dependencies
 
 
 def build_deb(payload: Path, output: Path, version: str, rid: str) -> Path:
@@ -18,9 +16,8 @@ def build_deb(payload: Path, output: Path, version: str, rid: str) -> Path:
     shutil.copytree(payload, target)
     control = staging / "DEBIAN"
     control.mkdir()
-    depends = list(DEPENDS)
-    if (payload / "addons/wsl-gpu").exists():
-        depends.extend(("libdrm2", "libexpat1", "libzstd1"))
+    extra = ("libdrm2", "libexpat1", "libzstd1") if (payload / "addons/wsl-gpu").exists() else ()
+    depends = deb_depends(payload_dependencies(payload), extra)
     (control / "control").write_text(
         f"Package: colorcorrect-studio\nVersion: {version}\nArchitecture: {arch}\n"
         "Maintainer: ColorCorrect Studio contributors\nSection: graphics\nPriority: optional\n"

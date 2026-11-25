@@ -57,8 +57,11 @@ jobs:
         include:
           - {runner: windows-2025, rid: win-x64, architecture: x64, rust: x86_64-pc-windows-msvc}
           - {runner: windows-11-arm, rid: win-arm64, architecture: arm64, rust: aarch64-pc-windows-msvc}
-          - {runner: ubuntu-24.04, rid: linux-x64, architecture: x64, rust: x86_64-unknown-linux-gnu}
-          - {runner: ubuntu-24.04-arm, rid: linux-arm64, architecture: arm64, rust: aarch64-unknown-linux-gnu}
+          # Linux builds run on the oldest supported glibc (Ubuntu 22.04, 2.35) so one
+          # binary runs on Ubuntu 22.04/24.04 and Debian 12/13; package_support.py
+          # fails the build if any shipped binary needs a newer glibc.
+          - {runner: ubuntu-22.04, rid: linux-x64, architecture: x64, rust: x86_64-unknown-linux-gnu}
+          - {runner: ubuntu-22.04-arm, rid: linux-arm64, architecture: arm64, rust: aarch64-unknown-linux-gnu}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     env:
@@ -88,7 +91,7 @@ jobs:
         run: ./scripts/setup_ci_windows.ps1 -Output "${{ runner.temp }}/colorcorrect-build-tools"
       - name: Ubuntu build and desktop libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-0t64 libfontconfig1 libx11-6 libxrandr2 libxi6 libice6 libsm6 libgl1 libvulkan1 libicu74 libssl3t64 libkrb5-3 zlib1g xvfb
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-0 libfontconfig1 libx11-6 libxrandr2 libxi6 libice6 libsm6 libxcursor1 libxext6 libgl1 libvulkan1 libicu70 libssl3 zlib1g xvfb
       - name: Native package and installed SDK smoke (GPU gate remains separate)
         shell: bash
         env:
@@ -99,6 +102,21 @@ jobs:
           else
             python scripts/native_ci_acceptance.py --rid '${{ matrix.rid }}' --install-package
           fi
+      - name: Fresh-system install check (bare Ubuntu 24.04/22.04, Debian 13/12)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # The runner above has every library preinstalled, which hid the 0.4.0
+          # false pass. Each bare image must fail check-system, install with
+          # install-dependencies, reach 'Engine ready' and load no unlisted library.
+          package="artifacts/native-ci/${{ matrix.rid }}/package"
+          tarball=$(ls "$package"/*.tar.gz)
+          deb=$(ls "$package"/*.deb)
+          for image in ubuntu:24.04 ubuntu:22.04 debian:13 debian:12; do
+            echo "::group::$image"
+            docker run --rm -v "$PWD:/src:ro" "$image" sh /src/scripts/linux_clean_image_check.sh "/src/$tarball" "/src/$deb"
+            echo "::endgroup::"
+          done
       - name: Preserve build evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

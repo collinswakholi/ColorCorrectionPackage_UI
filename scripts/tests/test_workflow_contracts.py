@@ -74,8 +74,8 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(actual, {
             ("windows-2025", "win-x64", "x64", "x86_64-pc-windows-msvc"),
             ("windows-11-arm", "win-arm64", "arm64", "aarch64-pc-windows-msvc"),
-            ("ubuntu-24.04", "linux-x64", "x64", "x86_64-unknown-linux-gnu"),
-            ("ubuntu-24.04-arm", "linux-arm64", "arm64", "aarch64-unknown-linux-gnu"),
+            ("ubuntu-22.04", "linux-x64", "x64", "x86_64-unknown-linux-gnu"),
+            ("ubuntu-22.04-arm", "linux-arm64", "arm64", "aarch64-unknown-linux-gnu"),
         })
         self.assertEqual(workflow["env"]["CARGO_INCREMENTAL"], "0")
         # All PRs create the aggregate check; do not leave a required workflow pending.
@@ -92,6 +92,14 @@ class WorkflowContracts(unittest.TestCase):
                     self.assertEqual(step["with"]["python-version"], "3.12.10")
                 if step.get("uses", "").startswith("actions/setup-dotnet@"):
                     self.assertEqual(step["with"], {"global-json-file": "global.json"})
+
+    def test_linux_packages_are_checked_on_bare_images(self):
+        steps = load("native-builds.yml")["jobs"]["packages"]["steps"]
+        fresh = next(step for step in steps if step.get("name", "").startswith("Fresh-system install check"))
+        self.assertEqual(fresh["if"], "runner.os == 'Linux'")
+        for image in ("ubuntu:24.04", "ubuntu:22.04", "debian:13", "debian:12"):
+            self.assertIn(image, fresh["run"])
+        self.assertIn("scripts/linux_clean_image_check.sh", fresh["run"])
 
     def test_readonly_builds_full_action_pins_and_scoped_release_permissions(self):
         for name in ("native-builds.yml", "hardware-gpu-acceptance.yml"):

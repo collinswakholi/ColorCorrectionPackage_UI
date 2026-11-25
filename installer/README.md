@@ -34,7 +34,9 @@ Setup offers Recommended, CPU only, and Custom choices. CPU mode omits optional
 WebGPU files while retaining shared libraries needed to load CPU inference.
 Rerun the matching installer with Custom to add omitted acceleration components.
 
-## Ubuntu 24.04
+## Ubuntu and Debian
+
+Ubuntu 24.04 and 22.04 and Debian 13 and 12, x64 or ARM64 (glibc 2.35 or newer).
 
 Install the Debian package using its actual downloaded filename:
 
@@ -46,9 +48,11 @@ colorcorrect-studio
 Use the `_arm64.deb` file on ARM64. The package manager supplies required system
 libraries; offline installation needs those libraries already installed or cached.
 
-For a portable installation, extract the archive, run `./check-system`, then
-launch `./ColorCorrect-Studio`. To install missing Ubuntu libraries, inspect and
-run `./install-dependencies --install`. `./setup --diagnose --verify` checks device
+For a portable installation, extract the archive and run `./check-system`. It
+lists every missing library, including the ones the app loads at runtime, and
+the command that installs them: `./install-dependencies --install` (add `--yes`
+for unattended installs). Then launch `./ColorCorrect-Studio`. If the app cannot
+start from a desktop menu, the report is in `~/.config/colorcorrect/startup-error.txt`. `./setup --diagnose --verify` checks device
 inventory and actual engine execution. `./setup --mode cpu --install` chooses CPU
 operation; `--mode custom --components webgpu` selects optional support. Setup
 previews changes and asks for confirmation; package maintainer scripts do not

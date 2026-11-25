@@ -1,0 +1,54 @@
+# ColorCorrect Studio: Linux runtime dependencies, the single source of truth.
+# Read by check-system and install-dependencies (POSIX sh) and by
+# scripts/package_deb.py (the .deb Depends field). Keep this file plain
+# shell assignments: no commands, no expansions.
+#
+# The desktop app loads most of these libraries at runtime (Avalonia X11,
+# SkiaSharp and the .NET runtime use dlopen/P-Invoke), so `ldd` cannot see
+# them. check-system resolves each soname through the dynamic linker cache.
+#
+# One "soname|what it is for" entry per line. A trailing * matches any
+# version (ICU's soname carries its major version).
+CCP_REQUIRED_LIBS='
+libX11.so.6|X11 windowing
+libICE.so.6|X11 session management
+libSM.so.6|X11 session management
+libXrandr.so.2|monitor layout
+libXi.so.6|keyboard and mouse input
+libXcursor.so.1|mouse cursors
+libXext.so.6|X11 extensions
+libGL.so.1|OpenGL rendering
+libfontconfig.so.1|fonts
+libgtk-3.so.0|file dialogs
+libgdk-3.so.0|file dialogs
+libglib-2.0.so.0|file dialogs
+libgobject-2.0.so.0|file dialogs
+libicuuc.so.*|text and number formatting
+libssl.so.3|secure connections
+libz.so.1|compression
+libstdc++.so.6|C++ runtime
+libgcc_s.so.1|C runtime support
+'
+# Missing optional libraries only disable a feature; check-system reports them
+# without failing.
+CCP_OPTIONAL_LIBS='
+libvulkan.so.1|GPU acceleration through Vulkan (CPU processing works without it)
+'
+
+# Packages that provide the libraries above, per supported distribution.
+# Key: ID and VERSION_ID from /etc/os-release, with dots as underscores.
+CCP_SUPPORTED_DISTROS='ubuntu_24_04 ubuntu_22_04 debian_13 debian_12'
+CCP_PACKAGES_COMMON='libc6 libgcc-s1 libstdc++6 zlib1g libfontconfig1 libx11-6 libice6 libsm6 libxrandr2 libxi6 libxcursor1 libxext6 libgl1 libvulkan1'
+CCP_PACKAGES_ubuntu_24_04='libicu74 libssl3t64 libgtk-3-0t64 libglib2.0-0t64'
+CCP_PACKAGES_ubuntu_22_04='libicu70 libssl3 libgtk-3-0 libglib2.0-0'
+CCP_PACKAGES_debian_13='libicu76 libssl3t64 libgtk-3-0t64 libglib2.0-0t64'
+CCP_PACKAGES_debian_12='libicu72 libssl3 libgtk-3-0 libglib2.0-0'
+CCP_DISTRO_NAME_ubuntu_24_04='Ubuntu 24.04'
+CCP_DISTRO_NAME_ubuntu_22_04='Ubuntu 22.04'
+CCP_DISTRO_NAME_debian_13='Debian 13'
+CCP_DISTRO_NAME_debian_12='Debian 12'
+
+# The oldest glibc the bundled binaries need (the Linux build runs on
+# Ubuntu 22.04). scripts/package_support.py fails the build if any payload
+# binary needs a newer symbol version.
+CCP_GLIBC_MINIMUM='2.35'
