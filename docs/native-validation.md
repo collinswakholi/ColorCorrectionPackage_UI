@@ -14,7 +14,8 @@ Windows/Linux x64 and ARM64 and Apple-silicon macOS are packaging targets. Intel
 | Windows host | Unit/component/headless tests, source/package checks, isolated GPU benchmarks |
 | Windows Sandbox | Extracted/installed final app, native UI, clean Python wheel and end-to-end workflows |
 | WSL with GPU passthrough | Final Linux app/API and WSLg interactions, real adapter/backend evidence |
-| GitHub Actions Windows/Linux x64/ARM64 | Native architecture builds, package/install checks, unit/headless tests; usable hardware GPU coverage is separate |
+| GitHub Actions Windows/Linux x64/ARM64 | Native architecture builds (Linux on Ubuntu 22.04), package/install checks, unit/headless tests; usable hardware GPU coverage is separate |
+| Bare Ubuntu 24.04/22.04 and Debian 13/12 containers | Fresh-system Linux install: `check-system` fails, `install-dependencies` fixes it, the app reaches "Engine ready" loading only listed libraries |
 | Apple-silicon macOS CI | Native application packaging, architecture/runtime and CPU workflow checks; hardware GPU and interactive desktop acceptance remain separate |
 
 Hosted runners may not expose usable graphics hardware. Tests must distinguish unavailable hardware, software adapters and actual hardware execution. CPU correction fallback remains available. Auto records CPU inference recovery; forced GPU inference fails clearly.

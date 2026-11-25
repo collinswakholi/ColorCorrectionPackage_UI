@@ -1,19 +1,13 @@
 # ColorCorrect Studio guide
 
-Open **?** in the toolbar or press **F1** for the searchable, offline in-app guide.
-Escape closes it and returns focus to its trigger. The guide is bundled into the
-application, so it does not depend on a browser or internet connection. Choose
-**Original research** to open the article in your browser.
+This guide describes version 0.5.0.
 
-Each in-app topic starts from a task, then gives the steps, what you will see,
-and what to do when it goes wrong. Its figures come from the public sample
-photographs: a real before/after of `ColorCard_Big.JPG`, the gain map computed
-from `Blank.JPG`, and the measured patch colors and ΔE00 of that fit.
-`scripts/generate_guide_assets.py` regenerates them; screenshots of several
-topics in both themes are in [images/guide](images/guide/get-started-light.png).
-
-This guide describes version 0.4.0. Older 0.2.1 packages do not include the CPU
-detection and device-aware setup controls below.
+Press **F1** or open **?** in the toolbar for the searchable in-app guide. It is
+bundled with the app and works offline; Escape closes it. Each topic starts from
+a task and gives the steps, what you will see and what to do if it goes wrong.
+Its figures come from real fits of the public sample photographs
+(`ColorCard_Big.JPG` and `Blank.JPG`). Screenshots of several topics in both
+themes are in the [repository](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/images/guide/get-started-light.png).
 
 ## Your first correction
 
@@ -122,7 +116,7 @@ and **Apply engine change** again. **Use CPU** selects CPU detection and correct
 
 Keep system graphics drivers managed by your operating system or GPU vendor.
 Setup supplies application libraries and explains missing prerequisites; it does
-not replace a system graphics driver. See [installation details](../installer/README.md)
+not replace a system graphics driver. See [installation details](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md)
 for portable setup, Linux package-manager requirements, and experimental WSL GPU use.
 
 ## Navigation and outputs
@@ -140,6 +134,12 @@ scroll down to **Model** for loading, saving, and cube export. Disabled controls
 need an active image or fitted/loaded result. These captures show a completed
 RPCC2 calibration with FFC, GC and WB. Changing controls prepares the next
 operation; existing results and exports retain their captured settings.
+
+Hover over the photograph to read the color under the pointer; right-click it to
+**Copy RGB**, **Copy Lab** or **Copy hex**. If a photograph is moved or deleted
+after you add it, the session marks it as missing and explains why **Fit + apply**
+is unavailable. Choose **Relink image…** to point it at the new location; a file
+with matching content keeps its detection and references.
 
 The chart **Crop** slider changes the sampling inset inside each patch. The
 chart/plane overlay is read-only. Manual white-image crop rectangles are available
@@ -173,9 +173,8 @@ current image's completed stages. Different stages take different
 amounts of time, so the percentage is not an estimate of time remaining. A result
 reaches 100% only after its output and captured settings are accepted.
 
-Only applicable stages run. Spatial **FFC** runs separately. Fast mode applies the
-enabled **GC**, **WB** and **CC** transforms together through one combined LUT;
-their indicators run together during that pass. They are not three separate GPU
+Only applicable stages run. Fast mode applies **FFC** and the enabled **GC**,
+**WB** and **CC** transforms in one pass through a combined LUT; they are not separate GPU
 operations. Fitting can also show separate GC/WB/CC work while learning the model.
 **Save result** covers the output or preview actually being created. Cancellation keeps
 completed results, and a failed image does not erase earlier successes.
@@ -201,8 +200,9 @@ separate from the installed app and use its bundled SDK and native engine.
 
 ![Searchable offline in-app guide, open at Get started with a real before/after chart](images/in-app-guide.png)
 
-Search matches topic titles and article text; every word you type must appear.
-Down moves from the search box to the topic list. **Documentation** opens the
+Search matches topic titles and article text, ranks title matches first and
+needs every word you type. Down, Up and Enter move between the search box, the
+topic list and the article. **Documentation** opens the
 bundled offline docs folder; **Original research** opens the article in your browser.
 
 Wakholi, C., Hardigan, M. A., Lee, J., Lukas, S. B., Feldman, M. J., Altendorf,

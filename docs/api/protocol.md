@@ -54,10 +54,10 @@ skips detection. No chart-type or space settings are removed or inferred from fi
 
 `run`, `apply` and `preview_stage` accept `fast_mode: true | false` (default false).
 Every supported worker advertises `combined_lut65_v1`. It combines active GC/WB/CC stages
-in a cached 65³ LUT, with FFC applied separately. Fitting coefficients and
+in a cached 65³ LUT, applied in the same pass as FFC (`ffc+combined-lut65`, or `ffc` when no other stage is active). Fitting coefficients and
 intermediate previews keep their existing math. The final rendered metrics are
 computed from the selected output. `apply_execution.method` identifies
-`combined-lut65`, `cc-lut33`, `identity`, or a standard-domain fallback.
+`combined-lut65`, `ffc+combined-lut65`, `ffc`, `cc-lut33`, `identity`, or a standard-domain fallback.
 CPU/GPU chunk counts and recovery reasons are reported independently.
 The typed SDK exposes `CalibrationOptions(fast_mode=True)` and
 `ApplyOptions(fast_mode=True)`, both enabled by default. The raw protocol defaults
@@ -186,7 +186,7 @@ Command names are case-insensitive. Fields accepted by every request:
 |---|---|
 | `cmd` (alias `command`) | Command name (required) |
 | `policy` (alias `device`) | Inference/correction policy; see `devices`. When omitted, the policy from the last `warmup`, `detect` or `run` applies (initially `auto`) |
-| `lut_device` | `auto`, `cpu` or `gpu` LUT application for this request (`gpu` when omitted, subject to `policy`); `auto` uses CPU for images under about 1 MP |
+| `lut_device` | `auto`, `cpu` or `gpu` LUT application for this request (`gpu` when omitted, subject to `policy`); `auto` uses CPU for images under about 1 MP and otherwise times CPU against GPU once per process and uses the faster; `execution.measured` reports those timings and `execution.selection_reason` the choice |
 | `cpu_lut` | `true` forces CPU LUT application for this request (false) |
 | `fast_mode` | Boolean, `run`/`apply`/`preview_stage` only (false); rejected elsewhere |
 

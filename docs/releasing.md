@@ -7,11 +7,21 @@ native validation jobs pass.
 
 ## Automatic builds
 
-Five native jobs cover Windows 11 x64, Windows 11 ARM64, Ubuntu 24.04 x64,
-Ubuntu 24.04 ARM64 and Apple-silicon macOS 14+. Windows produces Setup installers
-and portable ZIPs. Linux produces Debian packages and portable tar archives.
-macOS produces ZIP and tar archives containing **ColorCorrect Studio.app**;
-there is no Intel Mac target.
+Five native jobs build the release targets:
+
+| Target | Runner | Outputs |
+| --- | --- | --- |
+| Windows 11 x64 | `windows-2025` | Setup installer, portable ZIP |
+| Windows 11 ARM64 | `windows-11-arm` | Setup installer, portable ZIP |
+| Linux x64 | `ubuntu-22.04` | `.deb`, portable `.tar.gz` |
+| Linux ARM64 | `ubuntu-22.04-arm` | `.deb`, portable `.tar.gz` |
+| macOS 14+ (Apple silicon) | `macos-15` | ZIP and `.tar.gz` of **ColorCorrect Studio.app** |
+
+Linux builds run on Ubuntu 22.04 so the binaries need only glibc 2.35. Each Linux
+package is then installed on bare Ubuntu 24.04 and 22.04 and Debian 13 and 12
+images: `check-system` must first fail, `install-dependencies` must fix it, and
+the app must reach "Engine ready" without loading a library outside its
+dependency list. There is no Intel Mac target.
 
 Each job verifies architecture, private runtimes, notices, model/resource hashes,
 package contents and version metadata. Installed Python workflows use the wheel
@@ -19,20 +29,23 @@ and worker belonging to that package. Application launch and CPU checks are
 separate from hardware GPU and interactive desktop acceptance.
 
 Main and pull-request jobs use read-only repository permissions and do not
-publish releases. Artifacts and their evidence are available from the Actions
-run. Root README/demo-only edits retain lightweight documentation checks;
-version tags and manual runs always use the complete native workflow.
+publish releases; their artifacts and evidence are on the Actions run. A change
+that touches only the root README or demo media runs the documentation checks
+alone. Version tags and manual runs always run the complete native workflow.
 
 ## Publish a version
 
-Publishing requires maintainer authorization. Application 0.4.0
-includes SDK **3.0.0** (0.3.0 shipped SDK 2.3.0). The desktop distributions carry the SDK wheel for use with their native worker.
+Publishing requires maintainer authorization. Application 0.5.0 includes SDK
+**3.0.0**, unchanged from 0.4.0. Each desktop package carries the SDK wheel for
+use with its own native worker.
 
 1. Update native versions together: shared .NET properties, application metadata,
    the four internal Rust packages and their Cargo lock entries. The SDK has its
    own version in `api/pyproject.toml` and `api/colorcorrect.py`. Give changed SDK
    bytes a new version; do not distribute them under an older wheel filename.
-   Update the citation, changelog and download instructions.
+   Update the citation, date the changelog heading (it reads "unreleased" until
+   then) and update the download links in `README.md`, `installer/README.md` and
+   `docs/macos-install.md`.
 2. Review and merge the intended revision into `main`. Preserve essential
    regressions, public fixtures, notices and source provenance. Exclude private
    sessions and reproducible build caches.
@@ -41,8 +54,8 @@ includes SDK **3.0.0** (0.3.0 shipped SDK 2.3.0). The desktop distributions carr
    ```sh
    git switch main
    git pull --ff-only
-   git tag -a v0.4.0 -m "ColorCorrect Studio 0.4.0"
-   git push origin v0.4.0
+   git tag -a v0.5.0 -m "ColorCorrect Studio 0.5.0"
+   git push origin v0.5.0
    ```
 
 4. The tag run repeats all five native jobs. The publishing job receives
@@ -66,7 +79,7 @@ investigation. A successfully verified existing release is left unchanged.
 
 ## Signing and platform status
 
-No publisher signing credentials have been supplied for 0.4.0. Windows/Linux
+No publisher signing credentials have been supplied for 0.5.0. Windows/Linux
 packages are unsigned. Mac bundles use ad-hoc signatures for native execution;
 they are **not Developer ID signed or notarized**. Follow the
 [Mac installation guide](macos-install.md) for the security prompt. Do not disable

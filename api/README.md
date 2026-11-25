@@ -14,7 +14,7 @@ Keep the installed/extracted application intact and set `root` to that folder.
 The native application and SDK are versioned independently; this SDK is 3.0.0.
 It requires a Studio 0.2.0 or later worker and refuses older ones at startup.
 
-Use **Studio 0.3.0** for exact seeded patch sampling. The SDK checks the worker capability before fitting. Studio 0.2.2 introduced CPU inference recovery and
+Exact seeded patch sampling needs **Studio 0.3.0 or later**. The SDK checks the worker capability before fitting. Studio 0.2.2 introduced CPU inference recovery and
 `backend="cpu-inference"`. Older 0.2.1 engines require GPU inference; installing
 this wheel alone does not replace their native engine. For the Mac bundle, set
 `root="/Applications/ColorCorrect Studio.app/Contents/Resources/runtime"`.
@@ -130,7 +130,7 @@ mapping/import formats, partial batch failures, results, and errors.
 ## Processing and compatibility
 
 Automatic inference and Fast correction are the defaults. The combined 65³
-GC/WB/CC LUT approximates the fitted transform; FFC remains separate.
+GC/WB/CC LUT approximates the fitted transform; FFC runs in the same pass.
 `fast_mode=False` uses separate stages and a 33³ CC LUT. This does not change the
 fitted coefficients. Both CPU application and GPU recovery use the selected LUT.
 
