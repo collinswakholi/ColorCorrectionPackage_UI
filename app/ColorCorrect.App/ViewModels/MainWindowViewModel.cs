@@ -691,6 +691,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
         _rangeAnchor = null;
         Stage.LastPreviewDir = "";
         SetPreview(null, null);
+        ClearSourceSize();
         Stage.OverlayHandshake = null;
         ApplyReport(null);
         Compute.DetectSummary = "Waiting for detect";
@@ -2187,6 +2188,14 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     }
 
     private const int PreviewMaxWidth = 2560;
+
+    /// <summary>An empty stage shows no image size (0.4.0 kept the last photo's).</summary>
+    private void ClearSourceSize()
+    {
+        _sourceWidth = 1;
+        _sourceHeight = 1;
+        Workspace.ImageMeta = "";
+    }
 
     private void SetSourceSize(int width, int height)
     {

@@ -178,6 +178,7 @@ public partial class MainWindowViewModel
         _rangeAnchor = null;
         Stage.LastPreviewDir = "";
         SetPreview(null, null);
+        ClearSourceSize();
         Stage.OverlayHandshake = null;
         Workspace.HasImage = false;
         Workspace.HasCorrected = false;

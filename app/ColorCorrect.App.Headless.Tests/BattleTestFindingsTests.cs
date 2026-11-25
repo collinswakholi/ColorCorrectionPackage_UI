@@ -48,6 +48,25 @@ public sealed class BattleTestFindingsTests
     }
 
     [AvaloniaFact]
+    public void ClearingTheSessionClearsTheImageSize()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var vm = new MainWindowViewModel(persistenceEnabled: false);
+        vm.AddPaths([Path.Combine(root, "test_images", "ColorCard_Big.JPG")]);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (string.IsNullOrEmpty(vm.Workspace.ImageMeta) && DateTime.UtcNow < deadline)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            System.Threading.Thread.Sleep(20);
+        }
+        Assert.Contains("×", vm.Workspace.ImageMeta);
+        vm.ClearSessionCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Empty(vm.Session);
+        Assert.Equal("", vm.Workspace.ImageMeta);
+    }
+
+    [AvaloniaFact]
     public void APhotoDeletedAfterLoadingIsReportedAndOffersRelink()
     {
         var folder = Path.Combine(Path.GetTempPath(), "ccp-battle-" + Guid.NewGuid().ToString("N"));
