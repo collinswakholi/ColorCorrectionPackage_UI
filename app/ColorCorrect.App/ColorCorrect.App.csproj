@@ -20,8 +20,6 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <AvaloniaResource Include="Resources\**" />
-    <AvaloniaResource Include="..\..\docs\images\session-workbench.png" Link="Resources\Guide\session-workbench.png" />
-    <AvaloniaResource Include="..\..\docs\images\process-controls.png" Link="Resources\Guide\process-controls.png" />
   </ItemGroup>
 
   <ItemGroup>

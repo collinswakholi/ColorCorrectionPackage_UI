@@ -48,6 +48,8 @@
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
                     <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
+                    <!-- Accent-colored text and thin marks; meets contrast on Card and PrimaryLight surfaces. -->
+                    <SolidColorBrush x:Key="AccentTextBrush" Color="#6DB8A8" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
                     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
@@ -137,6 +139,8 @@
                     <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}" />
                     <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightColor}" />
+                    <!-- Accent-colored text and thin marks; meets contrast on Card and PrimaryLight surfaces. -->
+                    <SolidColorBrush x:Key="AccentTextBrush" Color="#24574D" />
                     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
                     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
                     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />

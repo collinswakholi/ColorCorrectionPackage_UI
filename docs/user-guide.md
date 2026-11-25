@@ -5,6 +5,13 @@ Escape closes it and returns focus to its trigger. The guide is bundled into the
 application, so it does not depend on a browser or internet connection. Choose
 **Original research** to open the article in your browser.
 
+Each in-app topic starts from a task, then gives the steps, what you will see,
+and what to do when it goes wrong. Its figures come from the public sample
+photographs: a real before/after of `ColorCard_Big.JPG`, the gain map computed
+from `Blank.JPG`, and the measured patch colors and ΔE00 of that fit.
+`scripts/generate_guide_assets.py` regenerates them; screenshots of several
+topics in both themes are in [images/guide](images/guide/get-started-light.png).
+
 This guide describes version 0.4.0. Older 0.2.1 packages do not include the CPU
 detection and device-aware setup controls below.
 
@@ -192,9 +199,10 @@ separate from the installed app and use its bundled SDK and native engine.
 
 ## Research and attribution
 
-![Searchable offline in-app guide with a visual stage sequence](images/in-app-guide.png)
+![Searchable offline in-app guide, open at Get started with a real before/after chart](images/in-app-guide.png)
 
-Search matches both topic titles and article text. **Documentation** opens the
+Search matches topic titles and article text; every word you type must appear.
+Down moves from the search box to the topic list. **Documentation** opens the
 bundled offline docs folder; **Original research** opens the article in your browser.
 
 Wakholi, C., Hardigan, M. A., Lee, J., Lukas, S. B., Feldman, M. J., Altendorf,
