@@ -141,7 +141,7 @@ def main() -> int:
     parser.add_argument("--wsl-addon", type=Path, help="reviewed experimental x64 WSL add-on directory; never enabled automatically")
     parser.add_argument("--dependency-notices", type=Path, help="precollected complete license inventory for this target")
     parser.add_argument("--fetch-notices", action="store_true", help="explicitly fetch missing upstream license texts at pinned source commits")
-    parser.add_argument("--deb", action="store_true", help="also build an Ubuntu 24.04 Debian package")
+    parser.add_argument("--deb", action="store_true", help="also build a Debian package (Ubuntu 24.04/22.04, Debian 13/12)")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--no-archive", action="store_true", help="Stage and hash the payload without compressing an archive")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])

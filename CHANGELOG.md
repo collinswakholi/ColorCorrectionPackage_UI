@@ -9,6 +9,14 @@
 - Faster processing with flat-field correction (fast mode, the default): FFC now runs in the same pass as the combined color LUT, on the GPU when one is faster. On a 24 MP photo processing drops from 1.07 s to 0.14 s on an RTX 4070 Ti SUPER, and from 0.90 s to 0.73 s on the CPU. Results match the previous output to within 1/255 on 0.003% of pixels. Compatibility mode is unchanged.
 - With the processing device on Auto, the engine times each GPU kernel once against the CPU on its first large image and uses whichever is faster, so integrated GPUs that are slower than the CPU are no longer chosen. The reply's `execution.measured` reports the timings. One wgpu kernel serves NVIDIA, AMD, Intel and Apple GPUs through DirectX 12, Vulkan and Metal.
 - JPEG export uses SIMD encoding where the CPU supports it (about 15% faster).
+- Saving a model into a read-only or full folder shows an error instead of closing the app, and an unexpected error in any command is logged and shown without losing the session.
+- A photo that was moved or deleted after loading says where it was and offers **Relink**; the check repeats whenever the window is focused.
+- Hovering the photo no longer shrinks the stage: the color readout is an overlay, so the fitted image stays the same size.
+- Right-click on the photo opens **Copy RGB / Lab / hex** again; a right-drag still pans without opening it.
+- Error messages are in plain language: oversized images give their size and the limit, damaged files say so, and long temporary paths are shortened to file names.
+- Smaller fixes: an empty session no longer shows the last photo's size, chart counts use real plurals, the white-reference clear button appears only when there is one, the image file filter names TIFF, and the output folder box and analysis splitter have accessible names.
+- The idle app uses about 2% of one CPU core instead of about 30%: hidden spinners and progress-bar sheens no longer animate.
+- The in-app Guide (F1) is rewritten as 15 task-first topics with figures from a real correction, word-by-word search and full keyboard navigation.
 - CI: every Linux package is installed on bare Ubuntu 24.04 and 22.04 and Debian 13 and 12 images. On each image, `check-system` must first fail, `install-dependencies` must fix it, and the app must reach "Engine ready" without loading any library outside the dependency list.
 
 ## 0.4.0 — 2026-11-24

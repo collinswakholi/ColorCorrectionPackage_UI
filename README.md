@@ -7,9 +7,9 @@ response (GC), white balance (WB) and color correction (CC). It runs locally on
 Windows, Linux and Apple-silicon macOS, and has an optional Python SDK that uses
 the same native engine.
 
-![ColorCorrect Studio: load a photograph, detect its chart, choose correction options, compare stage previews and inspect the analysis figures.](docs/images/demo/studio.png)
+![ColorCorrect Studio 0.5.0 in nine steps: add photos, flat-field correction, choose the correction, fit and apply, inspect each stage, read any color, see the fit, batch, and the built-in Guide.](docs/images/demo/studio.png)
 
-[GIF version](docs/images/demo/studio.gif) · [Screenshot gallery](docs/images/demo/README.md)
+[GIF version](docs/images/demo/studio.gif) · [Full-size screenshots of each step](docs/images/demo/README.md)
 
 ## Download
 
