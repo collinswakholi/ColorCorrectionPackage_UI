@@ -1,13 +1,129 @@
 #!/bin/sh
-# Bootstrap check: requires only Ubuntu's shell/core utilities, never Python/.NET.
+# Pre-flight check for ColorCorrect Studio on Linux.
+# Needs only the shell and core utilities (no Python, no .NET), so it can run
+# on a freshly installed system before anything else is in place.
+#
+#   ./check-system           report every problem; exit 1 if the app cannot start
+#   ./check-system --quiet   print nothing when everything is in place
+#
+# It checks the libraries the binaries are linked against (ldd) AND the ones the
+# desktop app loads at runtime (Avalonia X11, SkiaSharp and .NET use dlopen, so
+# ldd cannot see them). The list lives in ./runtime-dependencies.
 set -eu
+quiet=0
+case "${1:-}" in --quiet) quiet=1 ;; '') ;; *) echo 'Usage: check-system [--quiet]' >&2; exit 64 ;; esac
 APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
-case "$(uname -m)" in x86_64) actual=x64 ;; aarch64) actual=arm64 ;; *) echo 'A 64-bit x64 or ARM64 Linux system is required.' >&2; exit 1 ;; esac
+
+case "$(uname -m)" in
+    x86_64) actual=x64; triplet=x86_64-linux-gnu; cache_tag='x86-64' ;;
+    aarch64) actual=arm64; triplet=aarch64-linux-gnu; cache_tag='AArch64' ;;
+    *) echo 'ColorCorrect Studio needs a 64-bit x64 or ARM64 Linux system.' >&2; exit 1 ;;
+esac
 expected=$(cat "$APP_DIR/package-architecture")
-[ "$actual" = "$expected" ] || { echo "This package requires $expected; this machine is $actual." >&2; exit 1; }
-for file in app/ColorCorrect.App app/libSkiaSharp.so libonnxruntime.so ccp-engine; do
-    [ -r "$APP_DIR/$file" ] || { echo "The application package is incomplete: $file is missing." >&2; exit 1; }
-    result=$(LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$APP_DIR/$file" 2>&1) || { echo "$result" >&2; exit 1; }
-    case "$result" in *'not found'*) printf '%s\n' "$result" >&2; echo 'Install the Ubuntu dependencies listed in INSTALL.txt, then retry.' >&2; exit 1 ;; esac
+[ "$actual" = "$expected" ] || { echo "This package is for $expected Linux; this machine is $actual. Download the $actual package." >&2; exit 1; }
+[ -r "$APP_DIR/runtime-dependencies" ] || { echo 'The application package is incomplete: runtime-dependencies is missing.' >&2; exit 1; }
+. "$APP_DIR/runtime-dependencies"
+os_release=${CCP_OS_RELEASE:-/etc/os-release}  # override for tests only
+
+problems=''      # one problem per line, shown to the user
+missing_libs=''  # sonames, for the install hint
+add_problem() { problems="${problems}  - $1
+"; }
+
+# 1. glibc version. The binaries need symbols from at least CCP_GLIBC_MINIMUM.
+glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}') || glibc=''
+version_at_least() { # $1 >= $2, dotted numeric versions
+    awk -v a="$1" -v b="$2" 'BEGIN { n = split(a, x, "."); m = split(b, y, ".");
+        for (i = 1; i <= (n > m ? n : m); i++) { p = x[i] + 0; q = y[i] + 0;
+            if (p > q) exit 0; if (p < q) exit 1 } exit 0 }'
+}
+if [ -n "$glibc" ] && ! version_at_least "$glibc" "$CCP_GLIBC_MINIMUM"; then
+    add_problem "This system has glibc $glibc; ColorCorrect Studio needs glibc $CCP_GLIBC_MINIMUM or newer (Ubuntu 22.04, Debian 12 or later)."
+fi
+
+# 2. Package contents and the libraries the binaries are linked against.
+for file in app/ColorCorrect.App app/libSkiaSharp.so app/libHarfBuzzSharp.so libonnxruntime.so ccp-engine; do
+    if [ ! -r "$APP_DIR/$file" ]; then
+        add_problem "The application package is incomplete: $file is missing. Extract the archive again."
+        continue
+    fi
+    result=$(LD_LIBRARY_PATH="$APP_DIR:$APP_DIR/app${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$APP_DIR/$file" 2>&1) || true
+    for lib in $(printf '%s\n' "$result" | awk '/=> not found/ {print $1}'); do
+        case " $missing_libs " in *" $lib "*) ;; *) missing_libs="$missing_libs $lib"; add_problem "$lib is missing (needed by $file)." ;; esac
+    done
+    if printf '%s\n' "$result" | grep -q "version .GLIBC_[0-9.]*' not found"; then
+        need=$(printf '%s\n' "$result" | grep -o "GLIBC_[0-9.]*' not found" | sed "s/GLIBC_//; s/' not found//" | sort -t. -k1,1n -k2,2n | tail -1)
+        add_problem "$file needs glibc $need, but this system has glibc ${glibc:-unknown}."
+    fi
 done
-echo 'Application libraries are present. Run ./setup --diagnose --verify to check CPU and optional GPU engines.'
+
+# 3. Libraries loaded at runtime, resolved through the dynamic linker cache.
+ldconfig_bin=$(command -v ldconfig 2>/dev/null || true)
+[ -n "$ldconfig_bin" ] || for candidate in /sbin/ldconfig /usr/sbin/ldconfig; do [ -x "$candidate" ] && ldconfig_bin=$candidate && break; done
+cache=''
+[ -n "$ldconfig_bin" ] && cache=$("$ldconfig_bin" -p 2>/dev/null | grep -F "$cache_tag" || true)
+have_lib() { # $1 = soname; a trailing * matches any version digits
+    regex=$(printf '%s' "$1" | sed 's/\./\\./g; s/\*$/[0-9][0-9.]*/')
+    if [ -n "$cache" ] && printf '%s\n' "$cache" | grep -Eq "^[[:space:]]*${regex}[[:space:]]"; then return 0; fi
+    for dir in "/lib/$triplet" "/usr/lib/$triplet" /lib64 /usr/lib64 /lib /usr/lib; do
+        for path in "$dir"/$1; do [ -e "$path" ] && return 0; done
+    done
+    return 1
+}
+old_ifs=$IFS
+IFS='
+'
+for entry in $CCP_REQUIRED_LIBS; do
+    [ -n "$entry" ] || continue
+    lib=${entry%%|*}; purpose=${entry#*|}
+    have_lib "$lib" && continue
+    case " $missing_libs " in *" $lib "*) continue ;; esac
+    missing_libs="$missing_libs $lib"
+    add_problem "$lib is missing ($purpose)."
+done
+notes=''
+for entry in $CCP_OPTIONAL_LIBS; do
+    [ -n "$entry" ] || continue
+    lib=${entry%%|*}; purpose=${entry#*|}
+    have_lib "$lib" || notes="${notes}  - $lib is not installed: $purpose.
+"
+done
+IFS=$old_ifs
+
+# 4. A graphical session (only a note: the Python API and the worker run without one).
+[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || notes="${notes}  - No graphical session was found (DISPLAY is not set). The desktop app needs X11 or XWayland; the Python API works without one.
+"
+
+if [ -z "$problems" ]; then
+    if [ "$quiet" = 0 ]; then
+        echo 'ColorCorrect Studio can start on this system.'
+        [ -z "$notes" ] || printf 'Notes:\n%s' "$notes"
+        echo 'Run ./setup --diagnose --verify to check CPU and optional GPU processing.'
+    fi
+    exit 0
+fi
+
+{
+    echo 'ColorCorrect Studio cannot start on this system yet:'
+    printf '%s' "$problems"
+    [ -z "$notes" ] || printf 'Also:\n%s' "$notes"
+    distro=''
+    if [ -r "$os_release" ]; then
+        distro=$(. "$os_release"; printf '%s_%s' "${ID:-}" "${VERSION_ID:-}" | tr '.-' '__')
+    fi
+    case " $CCP_SUPPORTED_DISTROS " in
+        *" $distro "*)
+            if [ -n "$missing_libs" ]; then
+                eval "packages=\"\$CCP_PACKAGES_COMMON \$CCP_PACKAGES_$distro\""
+                eval "name=\"\$CCP_DISTRO_NAME_$distro\""
+                echo "To install the missing libraries on $name, run:"
+                echo "  ./install-dependencies --install"
+                echo "or: sudo apt-get install $packages"
+            fi ;;
+        *)
+            echo 'Automatic installation supports Ubuntu 24.04 and 22.04 and Debian 13 and 12.'
+            [ -z "$missing_libs" ] || echo "Install the packages that provide:$missing_libs"
+            ;;
+    esac
+} >&2
+exit 1

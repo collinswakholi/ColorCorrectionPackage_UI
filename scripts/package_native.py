@@ -304,6 +304,9 @@ def main() -> int:
             destination = payload / name
             shutil.copy2(root / "installer/linux" / name, destination)
             destination.chmod(0o755)
+        # Data read by check-system, install-dependencies and package_deb.py.
+        shutil.copy2(root / "installer/linux/runtime-dependencies", payload / "runtime-dependencies")
+        (payload / "runtime-dependencies").chmod(0o644)
     instruction = root / "installer" / ("windows/INSTALL.txt" if expected[0] == "Windows" else "linux/INSTALL.txt")
     shutil.copy2(instruction, payload / "INSTALL.txt")
     from setup_components import component_manifest
@@ -325,7 +328,7 @@ def main() -> int:
         "schema": 1, "rid": args.rid, "version": version,
         "inference": "Auto GPU inference with explicit CPU recovery; CPU inference selectable", "correction_cpu_fallback": True,
         "wsl_addon": {"installed": bool(args.wsl_addon), "default_enabled": False, "status": "experimental; x64 only"},
-        "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 24.04",
+        "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 22.04 or Debian 12 (glibc 2.35)",
         "native_acceptance": "pending", "redistribution_review": model_manifest.get("redistribution_review", "pending")
     }, indent=2), encoding="utf-8")
     hashes = {}

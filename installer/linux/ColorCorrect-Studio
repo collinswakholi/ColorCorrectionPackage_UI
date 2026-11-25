@@ -1,7 +1,19 @@
 #!/bin/sh
 set -eu
 APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
-"$APP_DIR/check-system" >&2
+if ! report=$("$APP_DIR/check-system" --quiet 2>&1); then
+    printf '%s\n' "$report" >&2
+    # A desktop-menu launch has no terminal: keep the report and tell the user where it is.
+    state="${XDG_CONFIG_HOME:-$HOME/.config}/colorcorrect"
+    mkdir -p "$state" 2>/dev/null && printf '%s\n' "$report" > "$state/startup-error.txt" 2>/dev/null || true
+    if [ ! -t 2 ]; then
+        summary="ColorCorrect Studio cannot start. Details: $state/startup-error.txt"
+        if command -v notify-send >/dev/null 2>&1; then notify-send 'ColorCorrect Studio' "$summary" 2>/dev/null || true
+        elif command -v zenity >/dev/null 2>&1; then zenity --error --text="$summary" 2>/dev/null || true
+        fi
+    fi
+    exit 1
+fi
 export CCP_NEW_UI_ROOT="$APP_DIR" CCP_ENGINE_EXE="$APP_DIR/ccp-engine-launch"
 export ORT_DYLIB_PATH="$APP_DIR/libonnxruntime.so"
 export LD_LIBRARY_PATH="$APP_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"

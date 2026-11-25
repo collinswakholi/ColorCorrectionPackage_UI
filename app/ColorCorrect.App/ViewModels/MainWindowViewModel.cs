@@ -2086,6 +2086,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
                 Job.Status = "Ready.";
                 Job.CurrentStage = "";
                 Log("Engine", $"Ready · {LabelStage(readiness.Device)}", LogLevel.Info);
+                StartupRecord.WriteReady(LabelStage(readiness.Device));
                 // Status bar already shows ready. A toast here covers the viewer.
             }).ConfigureAwait(false);
             await RefreshAccelAsync().ConfigureAwait(false);
