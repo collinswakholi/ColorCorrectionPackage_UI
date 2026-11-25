@@ -72,6 +72,8 @@ public sealed class ThumbnailLoadingTests
     [Fact]
     public void ThumbnailGateBoundsConcurrentDecodes()
     {
-        Assert.InRange(StillImageDecoder.ThumbnailGate.CurrentCount, 2, 4);
+        // The gate's capacity, not its free count: other tests may be decoding thumbnails
+        // at the same moment (the free count read 1 on a CI run while they were).
+        Assert.InRange(StillImageDecoder.ThumbnailConcurrency, 2, 4);
     }
 }
