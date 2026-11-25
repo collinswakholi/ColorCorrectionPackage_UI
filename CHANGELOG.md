@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Linux: `check-system` now finds every missing library, including the X11, GTK, OpenGL, ICU and OpenSSL libraries the app loads at runtime, which `ldd` cannot see. On a fresh Ubuntu 24.04 the 0.4.0 check passed, and the app then aborted because `libICE.so.6` was missing. The check names each missing library and prints the install command for your distribution.
+- Linux: Ubuntu 22.04 and Debian 12 are supported, alongside Ubuntu 24.04 and Debian 13. The Linux build moves to Ubuntu 22.04 (glibc 2.35), because the 0.4.0 engine needed glibc 2.39. Packaging now fails if a shipped binary needs a newer glibc than the declared minimum.
+- Linux: `install-dependencies` installs the right packages on all four distributions. It refreshes the package index first and adds `--yes` for unattended installs. The `.deb` declares the same libraries, with alternatives, so one package installs on each of them.
+- Linux: a missing system library at start-up shows a readable message instead of a core dump. A launch from the desktop menu saves the report to `~/.config/colorcorrect/startup-error.txt` and shows a notification where one is available. When the engine becomes ready, the app records it in `diagnostics/startup.json`.
+- CI: every Linux package is installed on bare Ubuntu 24.04 and 22.04 and Debian 13 and 12 images. On each image, `check-system` must first fail, `install-dependencies` must fix it, and the app must reach "Engine ready" without loading any library outside the dependency list.
+
 ## 0.4.0 — 2026-11-24
 
 - Show an error notice instead of closing the app when a settings, help, reference-editor or plot-save dialog fails to open.

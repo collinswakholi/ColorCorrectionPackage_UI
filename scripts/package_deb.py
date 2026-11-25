@@ -4,7 +4,7 @@ import re
 import shutil
 import subprocess
 
-from linux_runtime import deb_depends, read_runtime_dependencies
+from linux_runtime import deb_depends, payload_dependencies
 
 
 def build_deb(payload: Path, output: Path, version: str, rid: str) -> Path:
@@ -17,7 +17,7 @@ def build_deb(payload: Path, output: Path, version: str, rid: str) -> Path:
     control = staging / "DEBIAN"
     control.mkdir()
     extra = ("libdrm2", "libexpat1", "libzstd1") if (payload / "addons/wsl-gpu").exists() else ()
-    depends = deb_depends(read_runtime_dependencies(payload / "runtime-dependencies"), extra)
+    depends = deb_depends(payload_dependencies(payload), extra)
     (control / "control").write_text(
         f"Package: colorcorrect-studio\nVersion: {version}\nArchitecture: {arch}\n"
         "Maintainer: ColorCorrect Studio contributors\nSection: graphics\nPriority: optional\n"

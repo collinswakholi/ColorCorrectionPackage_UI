@@ -198,8 +198,8 @@ def dependency_audit(payload: Path, system: str, require_architecture, expected:
                 report["missing"].append(f"Unable to inspect {record['path']}: {checked.stderr.strip()}")
         report["native_files"].append(record)
     if system == "Linux":
-        from linux_runtime import glibc_floor_violations, read_runtime_dependencies
-        minimum = read_runtime_dependencies(payload / "runtime-dependencies")["CCP_GLIBC_MINIMUM"]
+        from linux_runtime import glibc_floor_violations, payload_dependencies
+        minimum = payload_dependencies(payload)["CCP_GLIBC_MINIMUM"]
         report["glibc_minimum"] = minimum
         # Building on a newer system silently raises the floor (e.g. Rust std binds
         # GLIBC_2.39 pidfd symbols on Ubuntu 24.04), which breaks older distros.

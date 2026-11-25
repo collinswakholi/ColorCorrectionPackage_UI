@@ -47,10 +47,16 @@ def version_tuple(version: str) -> tuple[int, ...]:
 def glibc_requirements(path: Path) -> set[str]:
     """Non-weak GLIBC_x.y symbol versions an ELF file requires (from .gnu.version_r)."""
     data = path.read_bytes()
-    if data[:4] != b"\x7fELF":
+    # Only complete 64-bit ELF files carry a usable version table; ldd inspects the rest.
+    if data[:4] != b"\x7fELF" or len(data) < 64 or data[4] != 2:
         return set()
-    if data[4] != 2:
-        raise ValueError(f"{path}: only 64-bit ELF files are supported")
+    try:
+        return _verneed_glibc(data)
+    except (struct.error, IndexError, ValueError):
+        return set()
+
+
+def _verneed_glibc(data: bytes) -> set[str]:
     endian = "<" if data[5] == 1 else ">"
     shoff = struct.unpack_from(endian + "Q", data, 0x28)[0]
     shentsize, shnum = struct.unpack_from(endian + "HH", data, 0x3A)
@@ -79,6 +85,12 @@ def glibc_requirements(path: Path) -> set[str]:
                 break
             entry += following
     return needs
+
+
+def payload_dependencies(payload: Path) -> dict[str, str]:
+    """The payload's runtime-dependencies (packaging copies it in), else the repository copy."""
+    shipped = payload / "runtime-dependencies"
+    return read_runtime_dependencies(shipped if shipped.is_file() else RUNTIME_DEPENDENCIES)
 
 
 def glibc_floor_violations(payload: Path, minimum: str) -> list[str]:

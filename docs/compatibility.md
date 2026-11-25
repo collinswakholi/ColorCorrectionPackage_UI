@@ -11,9 +11,9 @@ a GPU. Installing a different Python wheel does not replace the native engine.
 | Platform | Availability | Graphics and desktop status |
 | --- | --- | --- |
 | Windows 11 x64 | Installer and portable ZIP | CPU inference and correction, with optional DirectML/WebGPU acceleration. |
-| Ubuntu 24.04 x64 | Debian package and portable archive | Native desktop and GPU compatibility remain experimental; WSL experience does not establish compatibility with every Ubuntu desktop. |
+| Ubuntu 24.04 and 22.04, Debian 13 and 12 (x64) | Debian package and portable archive | Native desktop and GPU compatibility remain experimental. Ubuntu 22.04 and Debian 12 need the next release: the 0.4.0 engine needs glibc 2.39. Each release is checked on bare images of all four. |
 | Windows 11 ARM64 | Installer and portable ZIP | Experimental; graphics and desktop workflows are not yet confirmed on representative ARM64 hardware. |
-| Ubuntu 24.04 ARM64 | Debian package and portable archive | Experimental; graphics and desktop workflows are not yet confirmed on representative ARM64 hardware. |
+| Ubuntu 24.04 and 22.04, Debian 13 and 12 (ARM64) | Debian package and portable archive | Experimental; graphics and desktop workflows are not yet confirmed on representative ARM64 hardware. |
 | Apple-silicon macOS 14+ | Application bundle in ZIP and tar archives | Experimental; native packaging and CPU checks are separate from hardware GPU and interactive desktop acceptance. |
 
 Choose the architecture used by your operating system: **x64** for 64-bit
