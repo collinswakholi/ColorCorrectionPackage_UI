@@ -159,7 +159,7 @@ public sealed class WindowDialogs : IAppDialogs
         }
     }
 
-    private static FilePickerFileType ImageType() => new("JPEG or PNG")
+    private static FilePickerFileType ImageType() => new("Images (JPEG, PNG, TIFF)")
     {
         Patterns = ["*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff", "*.JPG", "*.JPEG", "*.PNG", "*.TIF", "*.TIFF"],
     };
