@@ -1364,6 +1364,8 @@
     </Style>
     <Style Selector="StackPanel.sessionCell">
         <Setter Property="Margin" Value="0" />
+        <!-- Without a background, clicks between the tile and its caption fell through. -->
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Width" Value="76" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
