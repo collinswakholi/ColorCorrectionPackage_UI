@@ -8,10 +8,13 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    /// <summary>"1 chart", "2 charts".</summary>
+    internal static string ChartCount(int count) => count == 1 ? "1 chart" : $"{count} charts";
+
     public string ReferenceSummary => Workspace.Active is { ReferencesNeedAssignment: true }
         ? "Custom references need reassignment after detection."
         : Workspace.Active is { ReferenceAssignments.Count: > 0 } item
-            ? $"Custom references · {item.ReferenceAssignments.Count} chart(s)"
+            ? $"Custom references · {ChartCount(item.ReferenceAssignments.Count)}"
             : "Built-in chart references";
 
     public void AssignReference(SessionItemViewModel item, string chartId, ReferenceProfile? profile)

@@ -35,6 +35,8 @@ public partial class MainWindow : Window
         DragDrop.SetAllowDrop(this, true);
 
         ToastService.ToastRequested += OnToastRequested;
+        // Photos moved or deleted in another app show as missing (with Relink) on return.
+        Activated += (_, _) => (DataContext as MainWindowViewModel)?.RefreshMissingFiles();
         Closed += (_, _) =>
         {
             ToastService.ToastRequested -= OnToastRequested;
