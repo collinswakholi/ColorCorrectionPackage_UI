@@ -1,100 +1,110 @@
 # Install ColorCorrect Studio
 
-Windows, Ubuntu and Apple-silicon macOS downloads include the application
-runtime, engine, detector models and matching inference libraries. Python is optional. The installers do
-not replace system graphics drivers.
+Version **0.5.0**. The Windows, Linux and Apple-silicon macOS downloads contain
+the application runtime, engine, detection models and inference libraries.
+Python is optional, and the installers never replace system graphics drivers.
 
-Choose the package for your operating system and architecture. The downloads are
-not publisher-signed; Mac bundles use ad-hoc signing and are not notarized.
-ARM64 and WSL graphics workflows remain experimental.
-See [compatibility](../docs/compatibility.md) for platform requirements.
-
-Version **0.4.0** includes explicit CPU detection, Auto inference recovery and
-device-aware setup. Previous release assets remain unchanged. Use the SDK wheel
-from your chosen application package to keep its worker and API together.
+The downloads are not publisher-signed; Mac bundles are ad-hoc signed and not
+notarized. ARM64, macOS and WSL graphics workflows are experimental. See
+[compatibility](../docs/compatibility.md) for platform requirements.
 
 ## Windows
 
 Run the matching Setup installer, then open **ColorCorrect Studio**. Installation
-is per user. The optional Python SDK component copies a wheel and examples; it
+is per user. Setup offers **Recommended**, **CPU only** and **Custom**; CPU only
+leaves out the optional WebGPU files. Run Setup again with Custom to add omitted
+components. The optional Python SDK component copies the wheel and examples; it
 does not install Python.
 
-If Microsoft Visual C++ runtime files are missing, Setup offers the included
-Microsoft prerequisite installer. This step is optional and requests elevation.
-Declining it leaves the prerequisite unresolved; complete it before launching the
-app. Silent installation does not elevate or repair prerequisites automatically.
-Follow any restart instructions from the Microsoft installer.
+If the Microsoft Visual C++ runtime is missing, Setup offers the included
+Microsoft installer, which asks for elevation. If you decline, install the
+runtime before launching the app. Silent installation does not elevate or install
+prerequisites.
 
-For a portable installation, extract the complete ZIP and run
-`ColorCorrect-Studio.cmd`. Keep every file in the extracted folder. You can run
-`check-system.ps1` to inspect prerequisites; `-InstallPrerequisites` explicitly
-opts into their installation. `setup.ps1 -Diagnose -Verify` checks installed CPU/GPU
-engines; `setup.ps1 -Mode cpu -Install` applies CPU preferences after confirmation.
-Setup offers Recommended, CPU only, and Custom choices. CPU mode omits optional
-WebGPU files while retaining shared libraries needed to load CPU inference.
-Rerun the matching installer with Custom to add omitted acceleration components.
+For the portable version, extract the complete ZIP and run
+`ColorCorrect-Studio.cmd`. Keep every file in the extracted folder.
 
-## Ubuntu 24.04
+| Command | What it does |
+| --- | --- |
+| `check-system.ps1` | Lists missing prerequisites; add `-InstallPrerequisites` to install them |
+| `setup.ps1 -Diagnose -Verify` | Checks the installed CPU and GPU engines |
+| `setup.ps1 -Mode cpu -Install` | Switches to CPU operation after confirmation |
 
-Install the Debian package using its actual downloaded filename:
+## Ubuntu and Debian
+
+Ubuntu 24.04 and 22.04 and Debian 13 and 12, x64 or ARM64 (glibc 2.35 or newer).
+One package installs on all four:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.4.0_amd64.deb
+sudo apt install ./colorcorrect-studio_0.5.0_amd64.deb
 colorcorrect-studio
 ```
 
-Use the `_arm64.deb` file on ARM64. The package manager supplies required system
-libraries; offline installation needs those libraries already installed or cached.
+Use the `_arm64.deb` file on ARM64. The package declares its system libraries, so
+apt installs them; an offline install needs them already installed or cached.
 
-For a portable installation, extract the archive, run `./check-system`, then
-launch `./ColorCorrect-Studio`. To install missing Ubuntu libraries, inspect and
-run `./install-dependencies --install`. `./setup --diagnose --verify` checks device
-inventory and actual engine execution. `./setup --mode cpu --install` chooses CPU
-operation; `--mode custom --components webgpu` selects optional support. Setup
-previews changes and asks for confirmation; package maintainer scripts do not
-run interactive setup or nested apt commands. System-library installation is a separate,
-explicit action. Neither installation route changes graphics drivers.
+For the portable archive (`ColorCorrect-Studio-0.5.0-linux-x64.tar.gz` or
+`-linux-arm64.tar.gz`), extract it and run:
 
-## Python SDK
+```sh
+./check-system                     # lists every missing library and the install command
+./install-dependencies --install   # add --yes for unattended installs
+./ColorCorrect-Studio
+```
 
-The optional wheel is in the application's `python/` folder. On macOS this folder
-is inside `ColorCorrect Studio.app/Contents/Resources/runtime`. Install it into your Python
-environment, then select that native root with `root=...`. The wheel
-contains neither the native engine nor its models. See the [Python guide](../api/README.md)
-for installation and examples.
+`check-system` also finds libraries the app loads at runtime (X11, GTK, OpenGL,
+ICU, OpenSSL), which `ldd` cannot see. If a library is still missing at start-up,
+the app shows a readable message; after a launch from the desktop menu the report
+is in `~/.config/colorcorrect/startup-error.txt`.
 
-## Experimental WSL GPU setup
+| Command | What it does |
+| --- | --- |
+| `./setup --diagnose --verify` | Checks the device inventory and runs each engine |
+| `./setup --mode cpu --install` | Switches to CPU operation |
+| `./setup --mode custom --components webgpu` | Selects optional GPU support |
 
-Official Linux downloads do not include the Mesa Dozen add-on needed for GPU
-inference in the current WSL setup. A separately published add-on installer is
-not available. Enabling a setting alone cannot supply the missing files.
-
-The optional x64 add-on is built separately and starts disabled. When it is
-included in your application folder, `wsl-gpu-setup enable` activates it for worker
-processes; `wsl-gpu-setup disable` clears that preference. It does not change the
-GUI's graphics environment, a global graphics-driver setting or the selected GPU
-vendor. Use the Windows host's supported graphics driver, not a Linux kernel GPU
-driver inside WSL. CPU inference and CPU correction work without the add-on.
-
-For source preparation, see the [developer packaging instructions](../docs/development/README.md#packaging).
+Setup previews its changes and asks for confirmation. Package maintainer scripts
+never run interactive setup or nested apt commands, and neither route changes
+graphics drivers.
 
 ## Apple-silicon macOS
 
-Download the `osx-arm64` ZIP or tar archive, extract **ColorCorrect Studio.app**,
-and move the bundle to Applications. macOS 14+ and Apple silicon are required.
-The app includes its private dependencies and does not require Python or a .NET SDK.
+Download the `osx-arm64` ZIP or tar archive, extract **ColorCorrect Studio.app**
+and move it to Applications. macOS 14 or later on Apple silicon is required; the
+app needs no Python or .NET SDK. Intel Macs are not supported.
 
-Bundles use ad-hoc signing and are not Developer ID signed or notarized. Follow
-the [Mac installation guide](../docs/macos-install.md) for checksums, first-launch
-security prompts and optional SDK installation. [Source build instructions](../docs/building.md#apple-silicon-macos-source-build)
-remain available. Intel macOS is outside scope.
+The [Mac installation guide](../docs/macos-install.md) covers checksums, the
+first-launch security prompt and the optional SDK. To build the app yourself, see
+[building from source](../docs/building.md#apple-silicon-macos-source-build).
+
+## Python SDK
+
+The optional wheel is in the application's `python/` folder (on macOS, inside
+`ColorCorrect Studio.app/Contents/Resources/runtime`). Install it into your Python
+environment and pass that application folder as `root=...`. The wheel contains
+neither the native engine nor its models. See the [Python guide](../api/README.md).
+
+## Experimental WSL GPU setup
+
+GPU inference under WSL needs the Mesa Dozen add-on, which official Linux
+downloads do not include and which is not published separately. Enabling a
+setting cannot supply the missing files. CPU inference and correction work
+without it.
+
+The optional x64 add-on is built separately and starts disabled. When it is in
+your application folder, `wsl-gpu-setup enable` turns it on for the engine
+processes and `wsl-gpu-setup disable` turns it off. It does not change the GUI's
+graphics environment, a global driver setting or the GPU vendor. Use the Windows
+host's graphics driver, not a Linux kernel GPU driver inside WSL. To build the
+add-on, see the [developer packaging instructions](../docs/development/README.md#packaging).
 
 ## Checksums and notices
 
-Use the checksums supplied with your download to confirm its files. Each
-architecture also has a package manifest. Keep the runtime and model notices with
-the application; the project MIT license does not override their separate terms.
-See [third-party notices](../THIRD_PARTY_NOTICES.md) and [model provenance](../docs/model-provenance.md).
+Each release has `SHA256SUMS-<rid>.txt` and `package-manifest-<rid>.json` for
+every platform; use them to confirm your download. Keep the runtime and model
+notices with the application: the project's MIT license does not override their
+terms. See [third-party notices](../THIRD_PARTY_NOTICES.md) and
+[model provenance](../docs/model-provenance.md).
 
-Build and release procedures belong in the [developer guide](../docs/development/README.md)
-and [release guide](../docs/releasing.md).
+Build and release procedures are in the [developer guide](../docs/development/README.md)
+and the [release guide](../docs/releasing.md).

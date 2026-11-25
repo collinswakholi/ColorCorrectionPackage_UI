@@ -576,7 +576,7 @@ public partial class MainWindowViewModel
                 _detectFallback = ConciseProcessingError(reason.GetString() ?? "");
             RememberJobAccel(null, null, handshake.Device);
             var charts = Math.Max(1, result.ChartCount > 0 ? result.ChartCount : handshake.ChartCount);
-            var summary = $"{item.DetectLabel} · {charts} chart(s)";
+            var summary = $"{item.DetectLabel} · {ChartCount(charts)}";
             if (item == Workspace.Active)
             {
                 OnPropertyChanged(nameof(ReferenceSummary));

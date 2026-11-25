@@ -7,7 +7,8 @@
   Curves ease out. Only small chrome animates; the image stage is never animated per frame.
 -->
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:ColorCorrect.App.Controls">
 
     <!-- Buttons: colour cross-fades on hover, a 2 % press-in on click. -->
     <Style Selector="Button /template/ Border#PART_Border">
@@ -131,7 +132,11 @@
             </Transitions>
         </Setter>
     </Style>
-    <Style Selector="ProgressBar /template/ Border#Sheen">
+    <!-- The sheen loops only while the bar is visible (see Controls/VisibleMotion.cs). -->
+    <Style Selector="ProgressBar">
+        <Setter Property="controls:VisibleMotion.Enabled" Value="True" />
+    </Style>
+    <Style Selector="ProgressBar.motion /template/ Border#Sheen">
         <Setter Property="IsVisible" Value="True" />
         <!-- Keyframes need a concrete TranslateTransform; TransformOperations has no keyframe animator. -->
         <Setter Property="RenderTransform">

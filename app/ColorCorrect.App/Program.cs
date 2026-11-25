@@ -10,8 +10,18 @@ sealed class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static int Main(string[] args)
+    {
+        try
+        {
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception error) when (StartupFailure.MissingLibrary(error) is { } library)
+        {
+            // A missing X11/GTK/ICU library used to abort with a core dump.
+            return StartupFailure.Report(library);
+        }
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

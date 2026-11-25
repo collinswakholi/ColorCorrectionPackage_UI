@@ -141,7 +141,7 @@ def main() -> int:
     parser.add_argument("--wsl-addon", type=Path, help="reviewed experimental x64 WSL add-on directory; never enabled automatically")
     parser.add_argument("--dependency-notices", type=Path, help="precollected complete license inventory for this target")
     parser.add_argument("--fetch-notices", action="store_true", help="explicitly fetch missing upstream license texts at pinned source commits")
-    parser.add_argument("--deb", action="store_true", help="also build an Ubuntu 24.04 Debian package")
+    parser.add_argument("--deb", action="store_true", help="also build a Debian package (Ubuntu 24.04/22.04, Debian 13/12)")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--no-archive", action="store_true", help="Stage and hash the payload without compressing an archive")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -304,6 +304,9 @@ def main() -> int:
             destination = payload / name
             shutil.copy2(root / "installer/linux" / name, destination)
             destination.chmod(0o755)
+        # Data read by check-system, install-dependencies and package_deb.py.
+        shutil.copy2(root / "installer/linux/runtime-dependencies", payload / "runtime-dependencies")
+        (payload / "runtime-dependencies").chmod(0o644)
     instruction = root / "installer" / ("windows/INSTALL.txt" if expected[0] == "Windows" else "linux/INSTALL.txt")
     shutil.copy2(instruction, payload / "INSTALL.txt")
     from setup_components import component_manifest
@@ -325,7 +328,7 @@ def main() -> int:
         "schema": 1, "rid": args.rid, "version": version,
         "inference": "Auto GPU inference with explicit CPU recovery; CPU inference selectable", "correction_cpu_fallback": True,
         "wsl_addon": {"installed": bool(args.wsl_addon), "default_enabled": False, "status": "experimental; x64 only"},
-        "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 24.04",
+        "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 22.04 or Debian 12 (glibc 2.35)",
         "native_acceptance": "pending", "redistribution_review": model_manifest.get("redistribution_review", "pending")
     }, indent=2), encoding="utf-8")
     hashes = {}

@@ -1,20 +1,59 @@
 #!/bin/sh
+# Install the system libraries ColorCorrect Studio needs, using apt.
+#
+#   ./install-dependencies                   show what would be installed (changes nothing)
+#   ./install-dependencies --install         install them (apt asks before changing anything)
+#   ./install-dependencies --install --yes   install them without apt's confirmation prompt
+#
+# Supported: Ubuntu 24.04 and 22.04, Debian 13 and 12 (x64 and ARM64). The
+# package lists live in ./runtime-dependencies. No graphics driver and no
+# third-party repository is ever installed.
 set -eu
-install=0; mode=recommended
+install=0; assume_yes=0; mode=recommended
 while [ "$#" -gt 0 ]; do
-    case "$1" in --install) install=1 ;; --mode) mode=${2:?missing mode}; shift ;; *) echo 'Usage: install-dependencies [--install] [--mode recommended|cpu|custom]' >&2; exit 64 ;; esac
+    case "$1" in
+        --install) install=1 ;;
+        --yes|-y) assume_yes=1 ;;
+        --mode) mode=${2:?missing mode}; shift ;;
+        *) echo 'Usage: install-dependencies [--install [--yes]] [--mode recommended|cpu|custom]' >&2; exit 64 ;;
+    esac
     shift
 done
 case "$mode" in recommended|cpu|custom) ;; *) echo 'Unknown mode.' >&2; exit 64 ;; esac
-. /etc/os-release
-# Wider distro declarations require complete native dependency validation.
-[ "$ID" = ubuntu ] && [ "$VERSION_ID" = 24.04 ] || {
-    echo 'Automatic setup is currently validated for Ubuntu 24.04 only. Consult INSTALL.txt and your distribution package manager. Debian 13 validation is pending.' >&2
-    exit 1
-}
-# Vulkan/GL loaders may be linked even when no GPU is used; do not remove shared closure.
-packages='libc6 libgcc-s1 libstdc++6 libicu74 libssl3t64 libkrb5-3 zlib1g libfontconfig1 libx11-6 libice6 libsm6 libxrandr2 libxi6 libgl1 libvulkan1 libgtk-3-0t64'
-printf 'Required Ubuntu 24.04 system libraries: %s\n' "$packages"
+APP_DIR=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd -P)
+. "$APP_DIR/runtime-dependencies"
+os_release=${CCP_OS_RELEASE:-/etc/os-release}  # override for tests only
+
+[ -r "$os_release" ] || { echo 'Cannot identify this Linux distribution (os-release is missing).' >&2; exit 1; }
+distro=$(. "$os_release"; printf '%s_%s' "${ID:-}" "${VERSION_ID:-}" | tr '.-' '__')
+pretty=$(. "$os_release"; printf '%s' "${PRETTY_NAME:-$distro}")
+case " $CCP_SUPPORTED_DISTROS " in
+    *" $distro "*) ;;
+    *)
+        echo "Automatic installation supports Ubuntu 24.04 and 22.04 and Debian 13 and 12; this system is $pretty." >&2
+        echo 'Install the libraries that ./check-system lists with your package manager, then run ./check-system again.' >&2
+        exit 1 ;;
+esac
+eval "packages=\"\$CCP_PACKAGES_COMMON \$CCP_PACKAGES_$distro\""
+eval "name=\"\$CCP_DISTRO_NAME_$distro\""
+
+# Vulkan and GL loaders stay installed even in CPU mode: the app links them.
+echo "System libraries for ColorCorrect Studio on $name:"
+echo "  $packages"
 echo 'Private inference runtimes are bundled. No graphics driver or third-party repository is installed.'
-[ "$install" = 1 ] || { echo 'Preview only; --install explicitly requests the package manager action.'; exit 0; }
-if [ "$(id -u)" = 0 ]; then exec apt-get install $packages; else exec sudo apt-get install $packages; fi
+if [ "$install" = 0 ]; then
+    echo 'Nothing was changed. Run ./install-dependencies --install to install them.'
+    exit 0
+fi
+
+command -v apt-get >/dev/null 2>&1 || { echo 'apt-get was not found; install the packages above with your package manager.' >&2; exit 1; }
+if [ "$(id -u)" = 0 ]; then as_root=''; else
+    command -v sudo >/dev/null 2>&1 || { echo 'Run this as root or install sudo.' >&2; exit 1; }
+    as_root='sudo'
+fi
+yes_flag=''; [ "$assume_yes" = 0 ] || yes_flag='-y'
+# A fresh system can have an empty package index; refresh it first.
+$as_root apt-get update
+# shellcheck disable=SC2086
+$as_root apt-get install $yes_flag $packages
+echo 'Done. Run ./check-system to confirm.'

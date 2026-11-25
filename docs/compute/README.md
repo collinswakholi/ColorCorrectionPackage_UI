@@ -1,57 +1,62 @@
 # Processing and graphics
 
-Chart and white-plane detection run on a GPU or the CPU, and correction has its
-own device choice.
+Chart and white-plane detection run on a GPU or the CPU, and image correction has
+its own device choice.
 
-Choose **Auto**, **CPU** or **GPU** for image correction. The default Fast mode
-combines the enabled GC, WB and CC transforms in one **65³ LUT**. Spatial flat-field
-correction (FFC) runs separately.
+## Image correction
+
+The default **Fast** mode combines the enabled GC, WB and CC transforms in one
+**65³ LUT**. When FFC is enabled, it runs in the same pass as that LUT, on the
+GPU or the CPU. Choose the device under **Processing settings**:
 
 | Choice | Behavior |
 | --- | --- |
-| Auto | Uses CPU below 1,048,576 pixels and attempts GPU for larger images. |
-| CPU | Applies correction on the processor. Useful without a compatible correction GPU. |
-| GPU | Attempts graphics acceleration, with CPU recovery if application fails. |
+| Auto | Uses the CPU for images under about 1 MP (1,048,576 pixels). For larger images, the engine times the GPU against the CPU once, on its first large image, and uses whichever is faster. |
+| CPU | Runs correction on the processor. Useful without a compatible GPU. |
+| GPU | Uses the GPU, finishing on the CPU if the GPU pass fails. |
 
-Advanced **Detection engine** settings control chart and plane inference separately.
-Auto tries eligible GPU engines, then CPU inference when GPU initialization or
-execution fails. Windows prefers DirectML; Linux uses WebGPU/Vulkan and Apple
-silicon uses WebGPU/Metal. Explicit CPU detection bypasses GPU initialization.
-Forced GPU engines return an actionable error instead of changing engines.
+Leave **Auto** selected for everyday use. Because Auto measures, an integrated
+GPU that is slower than the CPU is not chosen. One GPU path serves NVIDIA, AMD,
+Intel and Apple GPUs through DirectX 12, Vulkan and Metal. Loading, fitting and
+image encoding also count toward the total time, so a faster correction pass can
+have a small effect when those dominate. JPEG export uses SIMD encoding where the
+CPU supports it.
 
-The existing device-details panel reports the backend actually used, including
-CPU recovery. A cached detection retains the backend that originally produced it.
-
-## Choosing a mode
-
-Leave **Auto** selected for everyday use. GPU work has initialization and data
-transfer costs, so a small image can finish sooner on CPU. Loading, fitting, FFC
-and image encoding also contribute to the total processing time. A faster GPU
-pass may have only a small effect when those stages dominate the total time.
-
-In **Advanced**, use the previous processing method to reproduce older results.
-It evaluates the stages separately and is not a higher-accuracy setting. Keep the default
+Under **Advanced**, the previous processing method evaluates the stages
+separately to reproduce older results. It is not more accurate; keep the default
 unless you need to match an older workflow. Inputs outside the combined LUT's
-domain use the established safe path automatically.
+domain use the separate-stage path automatically.
 
-Reports include the backend actually used and any CPU recovery. Device identity
-is included where the runtime can establish it. Diagnostic details
-are available when troubleshooting; the main controls use the simpler mode names.
+## Detection
+
+The advanced **Detection engine** setting controls chart and plane inference
+separately. Auto tries eligible GPU engines, then CPU inference when GPU
+initialization or execution fails. Windows prefers DirectML; Linux uses
+WebGPU/Vulkan and Apple silicon WebGPU/Metal. CPU detection skips GPU
+initialization entirely. A forced GPU engine returns an error instead of
+switching engines.
+
+## Reports
+
+The device-details panel and saved reports name the backend that actually ran,
+including any CPU fallback, and the device where the runtime can identify it. A
+cached detection keeps the backend that produced it. SDK and protocol replies
+report correction timings and the reason for the device choice in `execution`.
 
 ## Drivers and platforms
 
 Keep graphics drivers current through your operating system or GPU vendor. The
-application includes its private inference runtime, not a replacement system
-graphics driver. CPU inference can detect charts and white planes and fit a new calibration
-without GPU support. CPU correction can also apply existing saved models.
+app includes its private inference runtime, not a system graphics driver. CPU
+inference can detect charts and white planes and fit a new calibration without
+GPU support, and CPU correction can apply saved models.
 
-WSL GPU use is experimental and requires the separately built Mesa Dozen add-on
-in the current setup. Official Linux downloads do not include that add-on.
-See [WSL setup](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md#experimental-wsl-gpu-setup). Native Ubuntu
-uses its OS/vendor driver. ARM64 graphics and Apple-silicon desktop workflows
-remain experimental. Apple-silicon macOS has an [application bundle](../macos-install.md)
-as well as source-build instructions.
+WSL GPU use is experimental and needs the separately built Mesa Dozen add-on,
+which official Linux downloads do not include; see the
+[WSL setup](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/installer/README.md#experimental-wsl-gpu-setup).
+Native Linux uses the distribution or vendor driver. ARM64 graphics and
+Apple-silicon desktop workflows are experimental; the Mac app is described in the
+[Mac installation guide](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/macos-install.md).
 
-For numerical comparisons and hardware-specific results, see the
-[developer measurements](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/development/README.md#historical-compute-measurements).
-See [compatibility](../compatibility.md) for platform requirements and limitations.
+Measured timings are in the
+[developer guide](https://github.com/collinswakholi/ColorCorrectionPackage_UI/blob/main/docs/development/README.md#compute-measurements).
+See [compatibility](../compatibility.md) for platform requirements and limits.

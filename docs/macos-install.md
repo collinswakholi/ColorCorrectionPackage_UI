@@ -7,14 +7,14 @@ need to install .NET, Rust or Python to use the desktop app.
 
 ## Download and open
 
-1. Download `ColorCorrect-Studio-0.4.0-osx-arm64.zip` from the
-   [0.4.0 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.4.0).
-   A `.tar.gz` alternative contains the same application bundle.
+1. Download [`ColorCorrect-Studio-0.5.0-osx-arm64.zip`](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.zip)
+   from the [0.5.0 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.0).
+   The `.tar.gz` alternative contains the same application bundle.
 2. Compare the archive's SHA-256 with its entry in the release's
    `SHA256SUMS-osx-arm64.txt`. For example, in the download directory:
 
    ```sh
-   shasum -a 256 ColorCorrect-Studio-0.4.0-osx-arm64.zip
+   shasum -a 256 ColorCorrect-Studio-0.5.0-osx-arm64.zip
    ```
 
 3. Double-click the ZIP in Finder. Move **ColorCorrect Studio.app** to
@@ -33,19 +33,17 @@ system security protections enabled.
 
 ## Processing choices
 
-Leave detection on **Auto** to try WebGPU/Metal and recover to CPU inference when
-needed. Advanced detection settings also offer explicit CPU inference. Image
-correction has separate Auto/CPU/GPU choices and retains CPU recovery.
+Leave detection on **Auto**: it tries WebGPU/Metal and falls back to CPU
+inference when needed. The advanced detection settings also offer CPU inference,
+and image correction has its own Auto/CPU/GPU choice with CPU fallback.
 
-Graphics support comes with macOS; the app does not install a replacement system
-driver. Use **Check setup** in device details to check the bundled engines.
-Setup choices select optional acceleration components; **Install support** saves
-those preferences locally, without installing system packages. Choose **Apply
-engine change** afterward to restart the worker with the selected configuration.
+Graphics support comes with macOS; the app installs no system driver. Use
+**Check setup** in device details to test the bundled engines. **Install
+support** saves the selected acceleration components locally without installing
+system packages; choose **Apply engine change** afterward to restart the engine.
 
-Mac graphics and interactive desktop workflows remain experimental.
-Native build and CPU checks do not establish every GPU, monitor or display-scale
-configuration. See [compatibility](compatibility.md) for the current limits.
+Mac graphics and interactive desktop workflows are experimental. See
+[compatibility](compatibility.md) for the current limits.
 
 ## Optional Python API
 
@@ -55,7 +53,7 @@ tools in their own environment. Install the wheel included with this app:
 ```sh
 python3 -m venv "$HOME/.venvs/colorcorrect"
 . "$HOME/.venvs/colorcorrect/bin/activate"
-python -m pip install "/Applications/ColorCorrect Studio.app/Contents/Resources/runtime/python/colorcorrect_studio-2.3.0-py3-none-any.whl"
+python -m pip install "/Applications/ColorCorrect Studio.app/Contents/Resources/runtime/python/colorcorrect_studio-3.0.0-py3-none-any.whl"
 ```
 
 Use the bundle's **Contents/Resources/runtime** directory as the SDK root:

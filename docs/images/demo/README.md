@@ -1,69 +1,75 @@
-# ColorCorrect Studio in dark mode
+# ColorCorrect Studio 0.5.0 tour
 
-Watch the workflow in **25.32 seconds**: load a photograph, detect its chart,
-choose correction settings, compare the stages, and explore the expanded results.
+[Animated tour (lossless PNG)](studio.png) · [GIF version](studio.gif) · [Project README](../../../README.md)
 
-[Animated PNG](studio-dark.png) · [GIF alternative](studio-dark.gif) · [Project README](../../../README.md)
+The tour shows settled screens of the real 0.5.0 app on Windows, with the area that matters
+in each step spotlighted at the app's own pixels. It uses the public photos in
+[`test_images/`](../../../test_images). The animated PNG is lossless: every frame keeps the
+app's exact colors. The GIF version is limited to 256 colors per frame, so its colors are
+close but not exact. The screenshots below are full size.
 
-The animated PNG and still screenshots preserve the captured colors. The GIF
-uses a limited palette; choose the PNGs for a closer look at photographs and figures.
-The still gallery below shows the same workflow without animation. Open any
-screenshot at full size to read the controls and enlarged figures.
+## 1. Add photos and detect the chart
 
-## Still screenshot gallery
+The Classic 24 chart is found and its 24 patches are outlined.
 
-### A public chart photograph loaded
+![The chart detected, with its patch overlay](stills/01-detected.png)
 
-![A public chart photograph loaded](stills/01-photo.png)
+## 2. Processing settings
 
-### Detected chart and patch overlay
+Auto times the CPU and the GPU on the first large image and uses the faster one.
 
-![Detected chart and patch overlay](stills/02-detected.png)
+![The Processing settings popup](stills/02-processing-settings.png)
 
-### Simple correction device and detection-engine settings
+## 3. Color correction settings
 
-![Simple correction device and detection-engine settings](stills/03-processing-menu.png)
+The model, its degree and the color spaces.
 
-### Color-correction settings
+![The Color correction settings dialog](stills/03-cc-settings.png)
 
-![Color-correction settings](stills/03-cc-options.png)
+## 4. Flat-field correction
 
-### Actual correction in progress
+Blank.JPG, a photo of a blank white board, is the white reference that evens out the lighting.
 
-![Actual correction in progress](stills/04-processing.png)
+![FFC on with Blank.JPG as the white reference](stills/04-ffc-white.png)
 
-### Original photograph
+## 5. Fit + apply
 
-![Original photograph](stills/05-original.png)
+Mean ΔE on the chart drops from 7.10 to 1.42.
 
-### After flat-field correction
+![The corrected photo and its ΔE summary](stills/05-corrected.png)
 
-![After flat-field correction](stills/06-ffc.png)
+## 6. Inspect each stage
 
-### After tone-response correction
+Original, FFC, GC, WB and CC each show the photo after that stage. This is the FFC stage.
 
-![After tone-response correction](stills/07-gc.png)
+![The FFC stage](stills/06-stage-ffc.png)
 
-### After white balance
+## 7. Read and copy colors
 
-![After white balance](stills/08-wb.png)
+Hovering shows RGB, hex and Lab under the pointer. Right-click copies them.
 
-### Corrected result
+![The color readout under the pointer](stills/07-hover-readout.png)
 
-![Corrected result](stills/09-corrected.png)
+![The right-click Copy menu](stills/08-right-click-copy.png)
 
-### Expanded color-difference analysis
+## 8. Check the analysis
 
-![Expanded color-difference analysis](stills/10-deltae.png)
+Drag the divider up to enlarge the plots.
 
-### Expanded color analysis
+![ΔE by stage](stills/09-analysis-delta-e.png)
 
-![Expanded color analysis](stills/11-color-analysis.png)
+![Color analysis: scatter and residuals](stills/10-analysis-color.png)
 
-### Expanded chart rendition
+![Chart rendition: original and corrected against the reference](stills/11-analysis-rendition.png)
 
-![Expanded chart rendition](stills/12-rendition.png)
+## 9. Batch
 
-### Four-image batch with previews disabled
+Apply the model to every other photo in the session.
 
-![Four-image batch with previews disabled](stills/13-batch-options.png)
+![The Batch options](stills/12-batch-options.png)
+
+## 10. The Guide
+
+F1 opens the in-app Guide.
+
+![The Guide's Get started topic](stills/13-guide.png)
