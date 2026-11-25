@@ -119,9 +119,23 @@ public sealed class PointerInteractionTests
             .Where(p => p.Classes.Contains("thumbCell") && p.IsEffectivelyVisible)
             .First(p => p.Tag is CatalogItemViewModel item &&
                         !vm.Session.Any(s => string.Equals(s.Path, item.Path, StringComparison.OrdinalIgnoreCase)));
-        Click(window, Centre(next, window));
+        // The tile can sit below the catalog's scrolled viewport once the session section
+        // grows (taller fonts on macOS), where a click lands on whatever covers that point.
+        next.BringIntoView();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        var at = Centre(next, window);
+        var hit = window.InputHitTest(at) as Visual;
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Name == "CatalogScroll");
+        var view = new Rect(scroll.TranslatePoint(default, window) ?? default, scroll.Bounds.Size);
+        Assert.True(hit is not null && (hit == next || hit.GetVisualAncestors().Contains(next)),
+            $"tile centre {at} in catalog view {view} hits {hit?.GetType().Name} '{(hit as Control)?.Name}'");
+        Click(window, at);
         Pump(() => vm.Session.Count == 2);
-        Assert.Equal(2, vm.Session.Count);
+        Assert.True(vm.Session.Count == 2,
+            $"second catalog click on {(next.Tag as CatalogItemViewModel)?.Name} at {at} added nothing; session: " +
+            string.Join(", ", vm.Session.Select(item => item.Name)) + "; log: " +
+            string.Join(" | ", vm.LogEntries.TakeLast(6).Select(entry => entry.Message)));
 
         var sessionTiles = window.GetVisualDescendants().OfType<StackPanel>().Where(p => p.Classes.Contains("sessionCell") && p.IsEffectivelyVisible).ToList();
         Assert.Equal(2, sessionTiles.Count);
