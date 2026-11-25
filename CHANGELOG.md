@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — unreleased
 
 - Linux: `check-system` now finds every missing library, including the X11, GTK, OpenGL, ICU and OpenSSL libraries the app loads at runtime, which `ldd` cannot see. On a fresh Ubuntu 24.04 the 0.4.0 check passed, and the app then aborted because `libICE.so.6` was missing. The check names each missing library and prints the install command for your distribution.
 - Linux: Ubuntu 22.04 and Debian 12 are supported, alongside Ubuntu 24.04 and Debian 13. The Linux build moves to Ubuntu 22.04 (glibc 2.35), because the 0.4.0 engine needed glibc 2.39. Packaging now fails if a shipped binary needs a newer glibc than the declared minimum.
