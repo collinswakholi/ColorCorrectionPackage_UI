@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:ColorCorrect.App.Controls"
              x:Class="ColorCorrect.App.App"
              RequestedThemeVariant="Dark">
 
@@ -27,6 +28,10 @@
             <Setter Property="RenderTransform">
                 <RotateTransform Angle="0"/>
             </Setter>
+            <!-- Spin only while visible: hidden spinners kept the idle app at ~30 % of a core. -->
+            <Setter Property="controls:VisibleMotion.Enabled" Value="True"/>
+        </Style>
+        <Style Selector="Path.spinner.motion">
             <Style.Animations>
                 <Animation Duration="0:0:0.75" IterationCount="Infinite">
                     <KeyFrame Cue="100%">
