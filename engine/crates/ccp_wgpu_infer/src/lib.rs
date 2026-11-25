@@ -132,7 +132,8 @@ fn runtime() -> Result<Runtime, String> {
     .map_err(|e| e.to_string())?;
     let device = Device::wgpu_options()
         .setup(WgpuSetup {
-            instance,
+            // A handle to the same never-dropped instance.
+            instance: instance.clone(),
             adapter,
             device,
             queue,
