@@ -48,20 +48,45 @@ public sealed class PointerInteractionTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    // Avalonia hit-tests pointer input against the last rendered frame, not the current layout,
-    // so render a frame right before each simulated input, as a real screen would have shown.
-    // Nothing may run between the frame and the input, or a late thumbnail can move the layout.
-    private static void Render()
-    {
-        Dispatcher.UIThread.RunJobs();
-        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-    }
-
     private static Point Centre(Visual control, Visual window) =>
         control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)
         ?? throw new InvalidOperationException("control is not in the window");
 
-    private static void Drop(MainWindow window, Point at, params string[] paths)
+    private static bool Reaches(MainWindow window, Visual target, Point at) =>
+        window.InputHitTest(at) is Visual hit && (hit == target || hit.GetVisualAncestors().Contains(target));
+
+    private static string Describe(Visual? hit) =>
+        hit is null ? "nothing" : hit.GetType().Name + (hit is Control { Name: { Length: > 0 } name } ? "#" + name : "");
+
+    // Avalonia hit-tests input against the last frame it rendered, which can lag the layout on a
+    // busy machine (a new tile, a late thumbnail). Render until the target is under its centre,
+    // as a user only clicks what they can see, then send the input with nothing run in between.
+    private static Point Ready(MainWindow window, Visual target, Point? point = null)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            var at = point ?? Centre(target, window);
+            if (Reaches(window, target, at))
+            {
+                return at;
+            }
+
+            if (DateTime.UtcNow > deadline)
+            {
+                Assert.Fail($"{Describe(target)} at {at} never took pointer input; it hits {Describe(window.InputHitTest(at) as Visual)}");
+            }
+
+            Task.Delay(20).Wait();
+        }
+    }
+
+    private static void Drop(MainWindow window, Visual target, params string[] paths) =>
+        Drop(window, target, null, paths);
+
+    private static void Drop(MainWindow window, Visual target, Point? point, params string[] paths)
     {
         var data = new DataTransfer();
         foreach (var path in paths)
@@ -70,16 +95,16 @@ public sealed class PointerInteractionTests
                 ?? throw new InvalidOperationException($"storage provider cannot open {path}");
             data.Add(DataTransferItem.CreateFile(file));
         }
-        Render();
+        var at = Ready(window, target, point);
         window.DragDrop(at, RawDragEventType.DragEnter, data, DragDropEffects.Copy, RawInputModifiers.None);
         window.DragDrop(at, RawDragEventType.DragOver, data, DragDropEffects.Copy, RawInputModifiers.None);
         window.DragDrop(at, RawDragEventType.Drop, data, DragDropEffects.Copy, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static void Click(MainWindow window, Point at, RawInputModifiers modifiers = RawInputModifiers.None)
+    private static void Click(MainWindow window, Visual target, RawInputModifiers modifiers = RawInputModifiers.None)
     {
-        Render();
+        var at = Ready(window, target);
         window.MouseMove(at, modifiers);
         window.MouseDown(at, MouseButton.Left, modifiers);
         window.MouseUp(at, MouseButton.Left, modifiers);
@@ -90,7 +115,7 @@ public sealed class PointerInteractionTests
     public void DroppingFilesOnTheWindowAddsThemToTheSession()
     {
         var (window, vm) = Show();
-        Drop(window, new Point(900, 380), Image("ColorCard_Big.JPG"), Image("Blank.JPG"));
+        Drop(window, window, new Point(900, 380), Image("ColorCard_Big.JPG"), Image("Blank.JPG"));
         Pump(() => vm.Session.Count == 2);
         Assert.Equal(new[] { "Blank.JPG", "ColorCard_Big.JPG" }, vm.Session.Select(item => item.Name).OrderBy(n => n));
         window.Close();
@@ -104,7 +129,7 @@ public sealed class PointerInteractionTests
         Dispatcher.UIThread.RunJobs();
         var well = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "WhiteDrop");
         Assert.True(well.IsEffectivelyVisible, "the white well shows once FFC is on");
-        Drop(window, Centre(well, window), Image("Blank.JPG"));
+        Drop(window, well, Image("Blank.JPG"));
         Pump(() => vm.Workspace.HasWhiteRef);
         Assert.True(vm.Workspace.HasWhiteRef);
         Assert.Equal(Image("Blank.JPG"), vm.Settings.WhiteImagePath, ignoreCase: true);
@@ -120,16 +145,16 @@ public sealed class PointerInteractionTests
         Dispatcher.UIThread.RunJobs();
         var catalogTiles = window.GetVisualDescendants().OfType<StackPanel>().Where(p => p.Classes.Contains("thumbCell") && p.IsEffectivelyVisible).ToList();
         Assert.True(catalogTiles.Count >= 2, $"catalog tiles: {catalogTiles.Count}");
-        Click(window, Centre(catalogTiles[0], window));
+        Click(window, catalogTiles[0]);
         Pump(() => vm.Session.Count == 1);
-        Click(window, Centre(catalogTiles[1], window));
+        Click(window, catalogTiles[1]);
         Pump(() => vm.Session.Count == 2);
         Assert.Equal(2, vm.Session.Count);
 
         var sessionTiles = window.GetVisualDescendants().OfType<StackPanel>().Where(p => p.Classes.Contains("sessionCell") && p.IsEffectivelyVisible).ToList();
         Assert.Equal(2, sessionTiles.Count);
-        Click(window, Centre(sessionTiles[0], window));
-        Click(window, Centre(sessionTiles[1], window), RawInputModifiers.Control);
+        Click(window, sessionTiles[0]);
+        Click(window, sessionTiles[1], RawInputModifiers.Control);
         Pump(() => vm.Session.Count(item => item.IsSelected) == 2);
         Assert.True(vm.Session.Count(item => item.IsSelected) == 2,
             "selected: " + string.Join(", ", vm.Session.Where(item => item.IsSelected).Select(item => item.Name)));
@@ -144,25 +169,50 @@ public sealed class PointerInteractionTests
         // the cell (and always the caption and gaps) fell through to the list behind it.
         var (window, vm) = Show();
         vm.AddPaths([Image("ColorCard_Big.JPG"), Image("Sample_3572.JPG")], collapseLibrary: false);
-        Render();
+
+        // Rendering lags layout on a busy machine, so allow a few frames; dead points never heal.
+        string? problem = "no session tiles";
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (problem is not null && DateTime.UtcNow < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            problem = DeadPoints(window);
+            if (problem is not null) Task.Delay(20).Wait();
+        }
+
+        Assert.True(problem is null, problem);
+        window.Close();
+    }
+
+    private static string? DeadPoints(MainWindow window)
+    {
         var cells = window.GetVisualDescendants().OfType<StackPanel>().Where(p => p.Classes.Contains("sessionCell") && p.IsEffectivelyVisible).ToList();
-        Assert.Equal(2, cells.Count);
+        if (cells.Count != 2) return $"{cells.Count} session tiles";
         foreach (var cell in cells)
         {
             var misses = 0;
+            var instead = new System.Collections.Generic.HashSet<string>();
             for (var y = 1.0; y < cell.Bounds.Height - 1; y += 2)
             {
                 for (var x = 1.0; x < cell.Bounds.Width - 1; x += 2)
                 {
-                    var hit = window.InputHitTest(cell.TranslatePoint(new Point(x, y), window)!.Value) as Visual;
-                    if (hit is null || (hit != cell && !hit.GetVisualAncestors().Contains(cell))) misses++;
+                    var at = cell.TranslatePoint(new Point(x, y), window)!.Value;
+                    if (!Reaches(window, cell, at))
+                    {
+                        misses++;
+                        instead.Add(Describe(window.InputHitTest(at) as Visual));
+                    }
                 }
             }
 
-            Assert.True(misses == 0, $"{(cell.Tag as SessionItemViewModel)?.Name}: {misses} points of the {cell.Bounds.Size} tile do not reach it");
+            if (misses > 0)
+            {
+                return $"{(cell.Tag as SessionItemViewModel)?.Name}: {misses} points of the {cell.Bounds.Size} tile do not reach it; they hit {string.Join(", ", instead)}";
+            }
         }
 
-        window.Close();
+        return null;
     }
 
     [AvaloniaFact]
@@ -180,7 +230,7 @@ public sealed class PointerInteractionTests
         var last = stage.Scale;
         Pump(() => { stable = stage.Scale == last ? stable + 1 : 0; last = stage.Scale; return stable >= 15; }, 8000);
         var before = stage.Bounds.Size;
-        window.MouseMove(Centre(stage, window), RawInputModifiers.None);
+        window.MouseMove(Ready(window, stage), RawInputModifiers.None);
         Pump(() => vm.Picker.HasPick, 2000);
         Assert.Equal(before, stage.Bounds.Size);
         window.Close();
@@ -197,7 +247,7 @@ public sealed class PointerInteractionTests
         var stage = window.GetVisualDescendants().OfType<ZoomPanView>().First(z => z.IsEffectivelyVisible);
         Pump(() => stage.Bounds.Height > 0 && vm.Stage.Preview is not null, 8000);
         var menu = window.GetVisualDescendants().OfType<Grid>().Select(g => g.ContextMenu).First(m => m is not null)!;
-        var at = Centre(stage, window);
+        var at = Ready(window, stage);
         window.MouseMove(at, RawInputModifiers.None);
         window.MouseDown(at, MouseButton.Right, RawInputModifiers.None);
         window.MouseUp(at, MouseButton.Right, RawInputModifiers.None);
@@ -229,9 +279,9 @@ public sealed class PointerInteractionTests
         // the decoded preview is 2250x1500, so a fit measured earlier does not match a later one.
         Pump(() => stage.Bounds.Width > 0 && vm.Stage.Preview is not null, 8000);
         var fit = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StageFitBtn");
-        Click(window, Centre(fit, window));
+        Click(window, fit);
         var fitted = stage.Scale;
-        var centre = Centre(stage, window);
+        var centre = Ready(window, stage);
         window.MouseMove(centre, RawInputModifiers.None);
         window.MouseWheel(centre, new Vector(0, 3), RawInputModifiers.None);
         Pump(() => stage.Scale > fitted * 1.05);
@@ -239,7 +289,7 @@ public sealed class PointerInteractionTests
 
         // The Fit button returns to the fitted view. (Headless input gives both clicks of a
         // double-click the same timestamp, so the double-tap gesture is not recognised here.)
-        Click(window, Centre(fit, window));
+        Click(window, fit);
         Pump(() => Math.Abs(stage.Scale - fitted) < 1e-6);
         Assert.Equal(fitted, stage.Scale, 6);
         window.Close();

@@ -13,11 +13,31 @@ internal static class VisualRegression
 
     public static void Match(Window window, string snapshotName)
     {
-        using var frame = window.CaptureRenderedFrame();
+        // On a busy machine a capture can return the frame from before the latest layout change
+        // (a CI run compared the sidebar from before it scrolled), so capture until two frames
+        // in a row are identical.
+        var frame = window.CaptureRenderedFrame();
         Assert.NotNull(frame);
+        var actualPng = Encode(frame);
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var next = window.CaptureRenderedFrame();
+            Assert.NotNull(next);
+            var nextPng = Encode(next);
+            var same = actualPng.ToArray().AsSpan().SequenceEqual(nextPng.ToArray());
+            frame.Dispose();
+            actualPng.Dispose();
+            frame = next;
+            actualPng = nextPng;
+            if (same)
+            {
+                break;
+            }
+        }
 
-        using var actualPng = new MemoryStream();
-        frame.Save(actualPng);
+        using var _frame = frame;
+        using var _png = actualPng;
         actualPng.Position = 0;
         using var actual = SKBitmap.Decode(actualPng);
         Assert.NotNull(actual);
@@ -84,6 +104,13 @@ internal static class VisualRegression
             meanChannelError <= MaxMeanChannelError && differentFraction <= MaxDifferentPixelFraction,
             $"Visual regression for {fileName}: mean channel error {meanChannelError:0.###}, " +
             $"different pixels {differentFraction:P2}. Update only after reviewing the new frame.");
+    }
+
+    private static MemoryStream Encode(Avalonia.Media.Imaging.Bitmap frame)
+    {
+        var png = new MemoryStream();
+        frame.Save(png);
+        return png;
     }
 
     private static bool HasMeaningfulContent(SKBitmap bitmap)

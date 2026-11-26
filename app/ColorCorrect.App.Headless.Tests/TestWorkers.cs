@@ -39,7 +39,7 @@ internal static class TestWorkers
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 50)
             {
-                await Task.Delay(100);
+                await Task.Delay(100).ConfigureAwait(false);
             }
         }
     }
