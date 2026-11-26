@@ -359,6 +359,8 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
             target = folder / relative; target.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(path, target)
         elif relative in (*MODELS, *REFERENCES, *REQUIRED_NOTICES): raise FileNotFoundError(path)
     (folder / "python").mkdir(); shutil.copy2(wheel, folder / "python" / wheel.name)
+    from reproducible_wheel import normalize
+    normalize(folder / "python" / wheel.name)  # The same bytes on every platform for the same source.
     for path in (root / "api/examples").glob("*.py"):
         target = folder / "python/examples" / path.name; target.parent.mkdir(exist_ok=True); shutil.copy2(path, target)
     if notices is None:
@@ -402,7 +404,7 @@ def build(root: Path, source: Path, output: Path, wheel: Path, notices: Path | N
     (folder / "gpu-runtime-manifest.json").write_text(json.dumps(final_runtime, indent=2), encoding="utf-8")
     common = {"schema": 2, "rid": RID, "version": version, "source": source_identity(root), "distribution_policy": "application",
               "architecture": "arm64", "minimum_os": "macOS 14.0", "rust_target": "aarch64-apple-darwin", "media_scope": "still images",
-              "signing": {"kind": "ad-hoc", "notarized": False}, "native_validation": "pending", "worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference"],
+              "signing": {"kind": "ad-hoc", "notarized": False}, "native_validation": "build, install, component and CPU/Auto SDK checks for this architecture gate publication", "worker_features_declared": ["ort-plane", "wgpu-lut", "rust-inference"],
               "inference_policy": "Auto GPU then explicit CPU inference; forced GPU engines fail clearly", "notice_inventory": {"components": len(notice_report.get("components", [])), "unresolved": []}}
     runtime_hashes = {path.relative_to(folder).as_posix(): digest(path) for path in sorted(folder.rglob("*")) if path.is_file()}
     (folder / "package-manifest.json").write_text(json.dumps({**common, "hash_scope": "private runtime; launcher and bundle signatures covered by external distribution manifest", "sha256": runtime_hashes}, indent=2), encoding="utf-8")

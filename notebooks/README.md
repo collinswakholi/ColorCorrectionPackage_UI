@@ -14,7 +14,7 @@ application package available. The notebooks can run from any directory.
 ## Install the kernel environment
 
 Use Python 3.10+ and the wheel included in the installed/extracted app's `python/`
-folder. The SDK is versioned independently (3.0.0 in Studio 0.5.0); use the wheel from your application package.
+folder. The SDK is versioned independently (3.0.0 in Studio 0.5.1); use the wheel from your application package.
 
 ```sh
 python -m venv .venv

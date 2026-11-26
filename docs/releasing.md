@@ -35,7 +35,7 @@ alone. Version tags and manual runs always run the complete native workflow.
 
 ## Publish a version
 
-Publishing requires maintainer authorization. Application 0.5.0 includes SDK
+Publishing requires maintainer authorization. Application 0.5.1 includes SDK
 **3.0.0**, unchanged from 0.4.0. Each desktop package carries the SDK wheel for
 use with its own native worker.
 
@@ -54,8 +54,8 @@ use with its own native worker.
    ```sh
    git switch main
    git pull --ff-only
-   git tag -a v0.5.0 -m "ColorCorrect Studio 0.5.0"
-   git push origin v0.5.0
+   git tag -a v0.5.1 -m "ColorCorrect Studio 0.5.1"
+   git push origin v0.5.1
    ```
 
 4. The tag run repeats all five native jobs. The publishing job receives
@@ -79,7 +79,7 @@ investigation. A successfully verified existing release is left unchanged.
 
 ## Signing and platform status
 
-No publisher signing credentials have been supplied for 0.5.0. Windows/Linux
+No publisher signing credentials have been supplied for 0.5.1. Windows/Linux
 packages are unsigned. Mac bundles use ad-hoc signatures for native execution;
 they are **not Developer ID signed or notarized**. Follow the
 [Mac installation guide](macos-install.md) for the security prompt. Do not disable

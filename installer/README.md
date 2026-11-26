@@ -1,6 +1,6 @@
 # Install ColorCorrect Studio
 
-Version **0.5.0**. The Windows, Linux and Apple-silicon macOS downloads contain
+Version **0.5.1**. The Windows, Linux and Apple-silicon macOS downloads contain
 the application runtime, engine, detection models and inference libraries.
 Python is optional, and the installers never replace system graphics drivers.
 
@@ -36,14 +36,14 @@ Ubuntu 24.04 and 22.04 and Debian 13 and 12, x64 or ARM64 (glibc 2.35 or newer).
 One package installs on all four:
 
 ```sh
-sudo apt install ./colorcorrect-studio_0.5.0_amd64.deb
+sudo apt install ./colorcorrect-studio_0.5.1_amd64.deb
 colorcorrect-studio
 ```
 
 Use the `_arm64.deb` file on ARM64. The package declares its system libraries, so
 apt installs them; an offline install needs them already installed or cached.
 
-For the portable archive (`ColorCorrect-Studio-0.5.0-linux-x64.tar.gz` or
+For the portable archive (`ColorCorrect-Studio-0.5.1-linux-x64.tar.gz` or
 `-linux-arm64.tar.gz`), extract it and run:
 
 ```sh

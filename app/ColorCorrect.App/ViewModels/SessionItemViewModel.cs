@@ -10,6 +10,8 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class SessionItemViewModel : ViewModelBase, IDisposable
 {
+    // The creating thread's dispatcher; see MainWindowViewModel._ui.
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
     private int _loadGen;
 
     [ObservableProperty] private bool _isActive;
@@ -205,7 +207,7 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
 
         if (failure is not null)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => { if (gen == _loadGen) ThumbError = failure; });
+            await _ui.InvokeAsync(() => { if (gen == _loadGen) ThumbError = failure; });
             return;
         }
 
@@ -215,7 +217,7 @@ public partial class SessionItemViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await _ui.InvokeAsync(() =>
         {
             if (gen != _loadGen)
             {

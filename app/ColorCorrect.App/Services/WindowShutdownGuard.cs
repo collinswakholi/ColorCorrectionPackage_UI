@@ -60,7 +60,7 @@ internal sealed class WindowShutdownGuard
     private async Task CloseAfterCleanupAsync()
     {
         await Completion.ConfigureAwait(false);
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await _window.Dispatcher.InvokeAsync(() =>
         {
             _allowClose = true;
             _window.Close();

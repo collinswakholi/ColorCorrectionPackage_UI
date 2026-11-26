@@ -55,7 +55,7 @@ public static class SessionStore
         // Additive QA/portable profile override; the existing default is unchanged.
         var configured = Environment.GetEnvironmentVariable("COLORCORRECT_DATA_DIR");
         var dir = string.IsNullOrWhiteSpace(configured)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CCP-New")
+            ? Path.Combine(UserFolders.LocalData(), "CCP-New")
             : Path.GetFullPath(configured);
         Directory.CreateDirectory(dir);
         return dir;

@@ -10,7 +10,7 @@ public sealed class NativeWorkerFactAttribute : FactAttribute
     public NativeWorkerFactAttribute()
     {
         if (Environment.GetEnvironmentVariable("CCP_NATIVE_WORKER_TESTS") != "1")
-            Skip = "Native GPU acceptance requires CCP_NATIVE_WORKER_TESTS=1, CCP_ENGINE_EXE, CCP_NEW_UI_ROOT, and a validated inference GPU.";
+            Skip = "Native worker acceptance requires CCP_NATIVE_WORKER_TESTS=1, CCP_ENGINE_EXE and CCP_NEW_UI_ROOT. It runs on Auto, so it also passes without a GPU (CPU fallback).";
     }
 }
 

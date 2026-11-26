@@ -269,6 +269,8 @@ def main() -> int:
     wheels = list(wheel_dir.glob("*.whl"))
     if len(wheels) != 1:
         raise ValueError("Package must contain exactly one Python SDK wheel")
+    from reproducible_wheel import normalize
+    normalize(wheels[0])  # The same bytes on every platform for the same source.
     for source in sorted((root / "api/examples").glob("*.py")):
         examples = wheel_dir / "examples"
         examples.mkdir(exist_ok=True)
@@ -329,7 +331,7 @@ def main() -> int:
         "inference": "Auto GPU inference with explicit CPU recovery; CPU inference selectable", "correction_cpu_fallback": True,
         "wsl_addon": {"installed": bool(args.wsl_addon), "default_enabled": False, "status": "experimental; x64 only"},
         "minimum_os": "Windows 11" if expected[0] == "Windows" else "Ubuntu 22.04 or Debian 12 (glibc 2.35)",
-        "native_acceptance": "pending", "redistribution_review": model_manifest.get("redistribution_review", "pending")
+        "native_acceptance": "build, install, component and CPU/Auto SDK checks for this architecture gate publication; GPU and interactive UI checks are platform-specific", "redistribution_review": model_manifest.get("redistribution_review", "pending")
     }, indent=2), encoding="utf-8")
     hashes = {}
     for file in stage.rglob("*"):
@@ -340,12 +342,13 @@ def main() -> int:
                     hasher.update(block)
                 hashes[file.relative_to(stage).as_posix()] = hasher.hexdigest()
     manifest = {"schema": 2, "rid": args.rid, "version": version, "source": source_identity(root),
-                "rust_target": TARGETS[args.rid][2], "native_validation": "pending",
+                "rust_target": TARGETS[args.rid][2], "native_validation": "build, install, component and CPU/Auto SDK checks for this architecture gate publication",
                 "third_party_redistribution_review": "dependency notice collection complete; model training provenance and distribution obligations remain under review",
                 "worker_features_declared": features, "inference_policy": "Auto GPU then explicit CPU inference; forced GPU engines fail clearly",
                 "media_scope": "still images", "sha256": hashes,
                 "limitations": ["Architecture validation does not prove dynamic dependency closure.",
-                                "Native launch, workflow validation, signing and notarization remain outstanding."]}
+                                "Windows and Linux builds are not code-signed.",
+                                "GPU execution and interactive UI checks are platform-specific."]}
     (output / "package-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     # This manifest deliberately stays outside its own hash set.
     shutil.copy2(output / "package-manifest.json", payload / "package-manifest.json")

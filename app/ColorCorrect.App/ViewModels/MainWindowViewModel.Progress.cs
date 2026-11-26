@@ -28,7 +28,7 @@ public partial class MainWindowViewModel
     private void OnWorkerProgress(string message)
     {
         var generation = _batchProgressGeneration;
-        Dispatcher.UIThread.Post(() =>
+        _ui.Post(() =>
         {
             if (Job.IsBatching && generation != _batchProgressGeneration) return;
             ApplyEngineProgress(message);

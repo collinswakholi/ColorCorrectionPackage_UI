@@ -13,21 +13,21 @@ the same native engine.
 
 ## Download
 
-Version **0.5.0**. Each download contains the app, the correction engine and the
+Version **0.5.1**. Each download contains the app, the correction engine and the
 detection models; you do not need Python, .NET or Rust.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |
-| Windows 11 x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-x64.zip) |
-| Windows 11 ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-win-arm64.zip) |
-| Ubuntu 24.04/22.04, Debian 13/12 x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/colorcorrect-studio_0.5.0_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-linux-x64.tar.gz) |
-| Ubuntu 24.04/22.04, Debian 13/12 ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/colorcorrect-studio_0.5.0_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-linux-arm64.tar.gz) |
-| macOS 14+ (Apple silicon) | — | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.zip) · [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.tar.gz) |
+| Windows 11 x64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-win-x64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-win-x64.zip) |
+| Windows 11 ARM64 | [Setup.exe](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-win-arm64-Setup.exe) | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-win-arm64.zip) |
+| Ubuntu 24.04/22.04, Debian 13/12 x64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/colorcorrect-studio_0.5.1_amd64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-linux-x64.tar.gz) |
+| Ubuntu 24.04/22.04, Debian 13/12 ARM64 | [.deb](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/colorcorrect-studio_0.5.1_arm64.deb) | [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-linux-arm64.tar.gz) |
+| macOS 14+ (Apple silicon) | — | [ZIP](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-osx-arm64.zip) · [.tar.gz](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-osx-arm64.tar.gz) |
 
 Choose **x64** for Intel/AMD processors and **ARM64** for Arm. ARM64 and macOS
 builds are experimental; see [compatibility](docs/compatibility.md). Checksums and
 package manifests are on the
-[release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.0).
+[release page](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.1).
 
 > **The downloads are not signed with a publisher certificate.** The Mac app is
 > ad-hoc signed and not notarized, so macOS blocks its first launch; the
@@ -40,7 +40,7 @@ package manifests are on the
 - **Linux:** one `.deb` installs on Ubuntu 24.04 and 22.04 and Debian 13 and 12:
 
   ```sh
-  sudo apt install ./colorcorrect-studio_0.5.0_amd64.deb   # ARM64: _arm64.deb
+  sudo apt install ./colorcorrect-studio_0.5.1_amd64.deb   # ARM64: _arm64.deb
   colorcorrect-studio
   ```
 
@@ -72,6 +72,13 @@ the experimental WSL GPU setup.
 Press **F1** for the offline in-app guide. Start with sRGB images; the
 [user guide](docs/user-guide.md) explains custom references, batches, outputs and
 [color interpretation](docs/user-guide.md#color-interpretation-matters).
+
+## What's new in 0.5.1
+
+A bug-fix release. On Linux and macOS the app always keeps its data in the
+standard per-user folder; 0.5.0 could use, or fail on, the folder it was started
+from. The Python SDK wheel is identical in every download, and the Windows
+uninstaller removes every file.
 
 ## What's new in 0.5.0
 

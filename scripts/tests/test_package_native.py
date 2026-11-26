@@ -46,6 +46,18 @@ def universal_macho() -> bytes:
             struct.pack(">IIIII", 0x0100000C, 0, 80, len(second), 0) + first + second)
 
 
+
+def write_wheel(path):
+    """A minimal valid SDK wheel; packaging now normalizes it, so it must be a real zip."""
+    import zipfile
+    info = "colorcorrect_studio-2.2.1.dist-info"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("colorcorrect.py", "VALUE = 1\r\n")
+        archive.writestr(f"{info}/METADATA", "Metadata-Version: 2.4\nName: colorcorrect-studio\nVersion: 2.2.1\n")
+        archive.writestr(f"{info}/WHEEL", "Wheel-Version: 1.0\nTag: py3-none-any\n")
+        archive.writestr(f"{info}/RECORD", "")
+
+
 class NativePackageTests(unittest.TestCase):
     def test_all_supported_architectures_and_wrong_target_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -114,7 +126,7 @@ class NativePackageTests(unittest.TestCase):
         (runtime / "gpu-runtime-manifest.json").write_text(json.dumps({"rid": rid, "packages": [{"id": "test-runtime"}],
             "files": {name: hashlib.sha256((runtime / name).read_bytes()).hexdigest() for name in package.RUNTIMES[system]}}))
         wheel = root / "colorcorrect_studio-2.2.1-py3-none-any.whl"
-        wheel.write_bytes(b"synthetic wheel fixture")
+        write_wheel(wheel)
         (root / "engine").mkdir()
         (root / "engine/Cargo.lock").write_text("synthetic lock")
         dependency_notices = root / "dependency-notices"
@@ -189,7 +201,9 @@ class NativePackageTests(unittest.TestCase):
                 self.assertEqual(support["version"], manifest["version"])
                 suffix = ".zip" if system == "Windows" else ".tar.gz"
                 self.assertTrue((output / f"ColorCorrect-Studio-2.0.0-{rid}{suffix}").is_file())
-                self.assertEqual(manifest["native_validation"], "pending")
+                self.assertIn("gate publication", manifest["native_validation"])
+                self.assertNotIn("pending", json.dumps(manifest).lower())
+                self.assertNotIn("pending", support["native_acceptance"])
                 self.assertIn(launcher.relative_to(stage).as_posix(), manifest["sha256"])
                 self.assertFalse(any(Path(name).suffix.lower() == ".pdb" for name in manifest["sha256"]))
                 self.assertFalse(any(path.suffix.lower() == ".pdb" for path in (payload / "app").rglob("*")))
