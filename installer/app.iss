@@ -59,6 +59,11 @@ Source: "{#Dist}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recurs
 Name: "{group}\ColorCorrect Studio"; Filename: "{app}\ColorCorrect-Studio.cmd"; IconFilename: "{app}\app\ColorCorrect.App.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\ColorCorrect Studio"; Filename: "{app}\ColorCorrect-Studio.cmd"; IconFilename: "{app}\app\ColorCorrect.App.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
+[UninstallDelete]
+; setup.ps1 (and the app's "Install optional support") copies WebGPU support from
+; optional-payloads at run time, so Inno never recorded it and 0.5.0 left it behind.
+Type: files; Name: "{app}\onnxruntime_providers_webgpu.dll"
+
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Shortcuts:"; Flags: unchecked
 Name: "installvcruntime"; Description: "Install the included Microsoft Visual C++ runtime (administrator permission required)"; GroupDescription: "Missing prerequisite:"; Check: NeedsVCRuntime

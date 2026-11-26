@@ -1,6 +1,6 @@
 # Compatibility
 
-ColorCorrect Studio 0.5.0 ships Windows and Linux packages and an Apple-silicon
+ColorCorrect Studio 0.5.1 ships Windows and Linux packages and an Apple-silicon
 macOS app bundle. Each download contains its own runtime, models and libraries,
 so keep the application folder or bundle intact. Python is optional.
 

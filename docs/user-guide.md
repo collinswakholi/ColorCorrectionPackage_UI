@@ -1,6 +1,6 @@
 # ColorCorrect Studio guide
 
-This guide describes version 0.5.0.
+This guide describes version 0.5.1.
 
 Press **F1** or open **?** in the toolbar for the searchable in-app guide. It is
 bundled with the app and works offline; Escape closes it. Each topic starts from

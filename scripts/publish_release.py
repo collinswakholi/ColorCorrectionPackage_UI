@@ -307,7 +307,7 @@ def publish(github: GitHub, run_id: int, sha: str, tag: str, files: list[Path], 
         release = github.request(github.prefix + "/releases", method="POST", data={
             "tag_name": tag, "target_commitish": sha, "name": f"ColorCorrect Studio {tag[1:]}" + ("" if stable else " (preview)"),
             "draft": True, "prerelease": not stable, "make_latest": "false",
-            "body": marker + "\n" + policy_marker(stable, include_macos_arm64) + "\n\nWindows and Ubuntu 24.04 downloads for x64 and ARM64. "
+            "body": marker + "\n" + policy_marker(stable, include_macos_arm64) + "\n\nDownloads for Windows 11 and Linux (Ubuntu 24.04/22.04, Debian 13/12), x64 and ARM64. "
                     "Installers/packages and portable archives include the Python API wheel.\n\n"
                     "Native build, installation, component and CPU/Auto SDK workflows are checked per architecture. "
                     "Physical GPU and interactive UI coverage remain platform-specific. "

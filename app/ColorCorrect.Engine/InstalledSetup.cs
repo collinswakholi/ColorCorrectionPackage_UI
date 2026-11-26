@@ -6,7 +6,7 @@ namespace ColorCorrect.Engine;
 public static class InstalledSetup
 {
     public static string StatePath => Path.Combine(OperatingSystem.IsWindows()
-        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ColorCorrectStudio")
+        ? Path.Combine(UserFolders.LocalData(), "ColorCorrectStudio")
         : Path.Combine(Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"), "colorcorrect"), "setup-state.json");
 

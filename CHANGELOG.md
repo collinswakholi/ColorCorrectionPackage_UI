@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — unreleased
+
+- Linux and macOS: the app always keeps its settings, sessions and previews in the standard per-user folder (`~/.local/share/CCP-New` on Linux). On an account without `~/.local/share`, 0.5.0 and earlier used a `CCP-New` folder in whatever directory the app was started from, and aborted at start-up when that directory was not writable (for example `/`). If you find a stray `CCP-New` folder from 0.5.0, you can delete it.
+- The Python SDK wheel is now byte-identical in every platform's download. In 0.5.0 the same `colorcorrect_studio-3.0.0-py3-none-any.whl` had a different hash on each platform (line endings, timestamps and file modes from the build machine), which broke hash-pinned installs that move between machines. The SDK itself is unchanged.
+- Windows: uninstalling removes the optional WebGPU support file too. 0.5.0 left `onnxruntime_providers_webgpu.dll` in the app folder, because setup copies it after installation.
+- Release manifests (`package-manifest-*.json`, `runtime-support.json`) state which checks gate each release instead of "pending", and the release notes list all supported Linux distributions.
+
 ## 0.5.0 — 2026-11-25
 
 - Linux: `check-system` now finds every missing library, including the X11, GTK, OpenGL, ICU and OpenSSL libraries the app loads at runtime, which `ldd` cannot see. On a fresh Ubuntu 24.04 the 0.4.0 check passed, and the app then aborted because `libICE.so.6` was missing. The check names each missing library and prints the install command for your distribution.
@@ -13,6 +20,7 @@
 - A photo that was moved or deleted after loading says where it was and offers **Relink**; the check repeats whenever the window is focused.
 - Hovering the photo no longer shrinks the stage: the color readout is an overlay, so the fitted image stays the same size.
 - Right-click on the photo opens **Copy RGB / Lab / hex** again; a right-drag still pans without opening it.
+- Session tiles take a click anywhere on the tile, including the caption and the gap below the picture, and before the thumbnail has loaded. (This entry was added in 0.5.1; the fix shipped in 0.5.0.)
 - Error messages are in plain language: oversized images give their size and the limit, damaged files say so, and long temporary paths are shortened to file names.
 - Smaller fixes: an empty session no longer shows the last photo's size, chart counts use real plurals, the white-reference clear button appears only when there is one, the image file filter names TIFF, and the output folder box and analysis splitter have accessible names.
 - The idle app uses about 2% of one CPU core instead of about 30%: hidden spinners and progress-bar sheens no longer animate.

@@ -33,4 +33,4 @@ Pass the installed app folder as root= to Client. Examples are in python\example
 
 Uninstalling the app preserves user settings, sessions and saved models. Unsigned
 local candidates are not certified releases. Review package-manifest.json and
-runtime-support.json for hashes, limitations and outstanding validation gates.
+runtime-support.json for hashes, limitations and the checks that gate each release.

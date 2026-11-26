@@ -28,7 +28,7 @@ public static class RunPaths
             return Path.Combine(repoRoot, "assets", "runs");
         }
 
-        var local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ColorCorrect", "runs");
+        var local = Path.Combine(UserFolders.LocalData(), "ColorCorrect", "runs");
         Directory.CreateDirectory(local);
         return local;
     }

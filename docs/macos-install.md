@@ -7,14 +7,14 @@ need to install .NET, Rust or Python to use the desktop app.
 
 ## Download and open
 
-1. Download [`ColorCorrect-Studio-0.5.0-osx-arm64.zip`](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.0/ColorCorrect-Studio-0.5.0-osx-arm64.zip)
-   from the [0.5.0 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.0).
+1. Download [`ColorCorrect-Studio-0.5.1-osx-arm64.zip`](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/download/v0.5.1/ColorCorrect-Studio-0.5.1-osx-arm64.zip)
+   from the [0.5.1 release](https://github.com/collinswakholi/ColorCorrectionPackage_UI/releases/tag/v0.5.1).
    The `.tar.gz` alternative contains the same application bundle.
 2. Compare the archive's SHA-256 with its entry in the release's
    `SHA256SUMS-osx-arm64.txt`. For example, in the download directory:
 
    ```sh
-   shasum -a 256 ColorCorrect-Studio-0.5.0-osx-arm64.zip
+   shasum -a 256 ColorCorrect-Studio-0.5.1-osx-arm64.zip
    ```
 
 3. Double-click the ZIP in Finder. Move **ColorCorrect Studio.app** to
