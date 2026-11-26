@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.1 — unreleased
+## 0.5.1 — 2026-11-26
 
 - Linux and macOS: the app always keeps its settings, sessions and previews in the standard per-user folder (`~/.local/share/CCP-New` on Linux). On an account without `~/.local/share`, 0.5.0 and earlier used a `CCP-New` folder in whatever directory the app was started from, and aborted at start-up when that directory was not writable (for example `/`). If you find a stray `CCP-New` folder from 0.5.0, you can delete it.
 - The Python SDK wheel is now byte-identical in every platform's download. In 0.5.0 the same `colorcorrect_studio-3.0.0-py3-none-any.whl` had a different hash on each platform (line endings, timestamps and file modes from the build machine), which broke hash-pinned installs that move between machines. The SDK itself is unchanged.
