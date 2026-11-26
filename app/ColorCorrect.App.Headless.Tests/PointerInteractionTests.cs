@@ -48,6 +48,15 @@ public sealed class PointerInteractionTests
         Dispatcher.UIThread.RunJobs();
     }
 
+    // Avalonia hit-tests pointer input against the last rendered frame, not the current layout,
+    // so render a frame right before each simulated input, as a real screen would have shown.
+    // Nothing may run between the frame and the input, or a late thumbnail can move the layout.
+    private static void Render()
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
+
     private static Point Centre(Visual control, Visual window) =>
         control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)
         ?? throw new InvalidOperationException("control is not in the window");
@@ -61,6 +70,7 @@ public sealed class PointerInteractionTests
                 ?? throw new InvalidOperationException($"storage provider cannot open {path}");
             data.Add(DataTransferItem.CreateFile(file));
         }
+        Render();
         window.DragDrop(at, RawDragEventType.DragEnter, data, DragDropEffects.Copy, RawInputModifiers.None);
         window.DragDrop(at, RawDragEventType.DragOver, data, DragDropEffects.Copy, RawInputModifiers.None);
         window.DragDrop(at, RawDragEventType.Drop, data, DragDropEffects.Copy, RawInputModifiers.None);
@@ -69,6 +79,7 @@ public sealed class PointerInteractionTests
 
     private static void Click(MainWindow window, Point at, RawInputModifiers modifiers = RawInputModifiers.None)
     {
+        Render();
         window.MouseMove(at, modifiers);
         window.MouseDown(at, MouseButton.Left, modifiers);
         window.MouseUp(at, MouseButton.Left, modifiers);
@@ -120,8 +131,37 @@ public sealed class PointerInteractionTests
         Click(window, Centre(sessionTiles[0], window));
         Click(window, Centre(sessionTiles[1], window), RawInputModifiers.Control);
         Pump(() => vm.Session.Count(item => item.IsSelected) == 2);
-        Assert.Equal(2, vm.Session.Count(item => item.IsSelected));
+        Assert.True(vm.Session.Count(item => item.IsSelected) == 2,
+            "selected: " + string.Join(", ", vm.Session.Where(item => item.IsSelected).Select(item => item.Name)));
         Assert.True(vm.Workspace.HasSelected);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void EveryPointOfANewSessionTileIsClickable()
+    {
+        // 0.5.0 CI: session cells had no background, so until a thumbnail decoded the middle of
+        // the cell (and always the caption and gaps) fell through to the list behind it.
+        var (window, vm) = Show();
+        vm.AddPaths([Image("ColorCard_Big.JPG"), Image("Sample_3572.JPG")], collapseLibrary: false);
+        Render();
+        var cells = window.GetVisualDescendants().OfType<StackPanel>().Where(p => p.Classes.Contains("sessionCell") && p.IsEffectivelyVisible).ToList();
+        Assert.Equal(2, cells.Count);
+        foreach (var cell in cells)
+        {
+            var misses = 0;
+            for (var y = 1.0; y < cell.Bounds.Height - 1; y += 2)
+            {
+                for (var x = 1.0; x < cell.Bounds.Width - 1; x += 2)
+                {
+                    var hit = window.InputHitTest(cell.TranslatePoint(new Point(x, y), window)!.Value) as Visual;
+                    if (hit is null || (hit != cell && !hit.GetVisualAncestors().Contains(cell))) misses++;
+                }
+            }
+
+            Assert.True(misses == 0, $"{(cell.Tag as SessionItemViewModel)?.Name}: {misses} points of the {cell.Bounds.Size} tile do not reach it");
+        }
+
         window.Close();
     }
 
@@ -185,7 +225,9 @@ public sealed class PointerInteractionTests
         vm.AddPaths([Image("ColorCard_Big.JPG")]);
         Pump(() => vm.Workspace.HasImage);
         var stage = window.GetVisualDescendants().OfType<ZoomPanView>().First(z => z.IsEffectivelyVisible);
-        Pump(() => stage.Bounds.Width > 0);
+        // Until the preview decodes, the stage is sized from the file's pixel size (2560x1707);
+        // the decoded preview is 2250x1500, so a fit measured earlier does not match a later one.
+        Pump(() => stage.Bounds.Width > 0 && vm.Stage.Preview is not null, 8000);
         var fit = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StageFitBtn");
         Click(window, Centre(fit, window));
         var fitted = stage.Scale;

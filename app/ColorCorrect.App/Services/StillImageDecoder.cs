@@ -41,7 +41,9 @@ internal static class StillImageDecoder
     /// Limits concurrent thumbnail decodes so adding hundreds of large stills does not
     /// decode them all at once (each decode holds the file and a full-size pixel buffer).
     /// </summary>
-    public static readonly SemaphoreSlim ThumbnailGate = new(Math.Clamp(Environment.ProcessorCount / 2, 2, 4));
+    public static readonly int ThumbnailConcurrency = Math.Clamp(Environment.ProcessorCount / 2, 2, 4);
+
+    public static readonly SemaphoreSlim ThumbnailGate = new(ThumbnailConcurrency);
 
     /// <summary>Decode, downscale to <paramref name="maxWidth"/> display pixels, then apply EXIF orientation.</summary>
     public static Bitmap Decode(string path, int maxWidth)
