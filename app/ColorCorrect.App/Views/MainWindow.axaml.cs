@@ -193,12 +193,13 @@ public partial class MainWindow : Window
 
     private void OnToastRequested(ToastRequest request)
     {
-        Dispatcher.UIThread.Post(() =>
+        // Toasts can be requested from background threads; use this window's dispatcher.
+        Dispatcher.Post(() =>
         {
             var toast = new ToastNotification(request);
             ToastHost.Items.Add(toast);
             toast.Dismissed += (_, _) =>
-                Dispatcher.UIThread.Post(() => ToastHost.Items.Remove(toast));
+                Dispatcher.Post(() => ToastHost.Items.Remove(toast));
         });
     }
 

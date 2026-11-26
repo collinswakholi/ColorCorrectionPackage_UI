@@ -356,10 +356,16 @@ def main():
                 "--blame-hang", "--blame-hang-timeout", "5m", "--blame-hang-dump-type", "none",
                 "--logger", "trx;LogFileName=headless.trx", "--results-directory", evidence],
         }
+        # The headless tests write here when Avalonia's test loop dies; otherwise that
+        # shows up only as a crashed or hung test process with no cause.
+        loop_log = evidence / "headless-test-loop.log"
         for name, command in component_commands.items():
             try:
                 # VSTest's per-test timer starts after the build; bound startup as well.
-                run(command, timeout=900 if name == "dotnet_headless" else None)
+                if name == "dotnet_headless":
+                    run(command, timeout=900, env=dict(os.environ, CCP_TEST_LOOP_LOG=str(loop_log)))
+                else:
+                    run(command)
                 report["component_tests"][name] = "passed; inspect logs/TRX for explicit skips"
             except subprocess.TimeoutExpired as error:
                 report["component_tests"][name] = "timed out"
@@ -367,6 +373,8 @@ def main():
             except subprocess.CalledProcessError as error:
                 report["component_tests"][name] = "failed"
                 component_failures.append(f"{name}: {error.returncode}")
+        if loop_log.exists():
+            print(loop_log.read_text(encoding="utf-8", errors="replace"), flush=True)
         report["visual_baselines"] = "pending native screenshot/clipboard/high-DPI baselines; headless structural checks do not certify rendering"
         run([sys.executable, "-m", "venv", work / "venv"])
         python = work / ("venv/Scripts/python.exe" if os.name == "nt" else "venv/bin/python")

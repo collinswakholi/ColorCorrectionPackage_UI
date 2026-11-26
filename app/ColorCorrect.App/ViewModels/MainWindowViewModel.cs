@@ -27,6 +27,10 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
 {
     public const int MaxWorking = 80;
 
+    // The dispatcher of the thread that created this view model. Background work must
+    // come back through this one: Dispatcher.UIThread, read from a background thread
+    // while no UI dispatcher exists, creates one owned by that background thread.
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
     private readonly SpeedyWorker _worker = new();
     private readonly CorrectionClient _client;
     private readonly SemaphoreSlim _run = new(1, 1);
@@ -67,7 +71,7 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
     {
         _persistenceEnabled = persistenceEnabled;
         _settingsSaver = new SettingsSaveScheduler(SettingsSnapshot, OnUi, SessionStore.SaveSettings,
-            () => Dispatcher.UIThread.Post(() => Log("Settings",
+            () => _ui.Post(() => Log("Settings",
                 "Settings could not be saved. Changes apply to this session only; check that the settings folder is writable.",
                 LogLevel.Warning)));
         Settings.PropertyChanged += OnSettingChanged;
@@ -1505,9 +1509,9 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             return;
         }
 
-        if (!Dispatcher.UIThread.CheckAccess())
+        if (!_ui.CheckAccess())
         {
-            Dispatcher.UIThread.Post(() => DisposeIfUnused(candidate));
+            _ui.Post(() => DisposeIfUnused(candidate));
             return;
         }
         // Display properties and both caches share bitmap instances. Releasing a
@@ -2518,15 +2522,15 @@ public partial class MainWindowViewModel : ViewModelBase, IAsyncDisposable
             || string.Equals(item.Label, value, StringComparison.OrdinalIgnoreCase))
         ?? items[0];
 
-    private static Task OnUi(Action action)
+    private Task OnUi(Action action)
     {
-        if (Dispatcher.UIThread.CheckAccess())
+        if (_ui.CheckAccess())
         {
             action();
             return Task.CompletedTask;
         }
 
-        return Dispatcher.UIThread.InvokeAsync(action).GetTask();
+        return _ui.InvokeAsync(action).GetTask();
     }
 
     private void OnBusyChanged(bool value) => NotifyRunCommands();

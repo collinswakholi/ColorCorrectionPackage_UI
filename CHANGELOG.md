@@ -6,6 +6,7 @@
 - The Python SDK wheel is now byte-identical in every platform's download. In 0.5.0 the same `colorcorrect_studio-3.0.0-py3-none-any.whl` had a different hash on each platform (line endings, timestamps and file modes from the build machine), which broke hash-pinned installs that move between machines. The SDK itself is unchanged.
 - Windows: uninstalling removes the optional WebGPU support file too. 0.5.0 left `onnxruntime_providers_webgpu.dll` in the app folder, because setup copies it after installation.
 - Release manifests (`package-manifest-*.json`, `runtime-support.json`) state which checks gate each release instead of "pending", and the release notes list all supported Linux distributions.
+- Development: fixed the intermittent hang in the headless UI tests. Background work (thumbnails, worker progress, file checks) now returns to the UI through the dispatcher that created its view model; a late callback between two tests could otherwise take over the next test's UI thread and stop Avalonia's test loop. No change in the running app. If the test loop ever stops for another reason, the test process now ends with the cause instead of waiting for the hang timeout.
 
 ## 0.5.0 — 2026-11-25
 

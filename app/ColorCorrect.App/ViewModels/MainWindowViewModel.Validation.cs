@@ -84,7 +84,7 @@ public partial class MainWindowViewModel
         var modelPath = Output.LoadedModelPath;
         var white = Settings.DoFfc ? _loadedWhiteIdentity : null;
         var whitePath = Settings.WhiteImagePath;
-        _ = Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath)).ContinueWith(task => Dispatcher.UIThread.Post(() =>
+        _ = Task.Run(() => CheckLoadedFiles(model, modelPath, white, whitePath)).ContinueWith(task => _ui.Post(() =>
         {
             Volatile.Write(ref _fileCheckRunning, 0);
             if (task.IsCompletedSuccessfully && task.Result != _cachedFileState)

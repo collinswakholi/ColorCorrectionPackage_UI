@@ -10,6 +10,8 @@ namespace ColorCorrect.App.ViewModels;
 
 public partial class CatalogItemViewModel : ObservableObject, IDisposable
 {
+    // The creating thread's dispatcher; see MainWindowViewModel._ui.
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
     private int _loadGen;
 
     public CatalogItemViewModel(SampleEntry entry)
@@ -70,7 +72,7 @@ public partial class CatalogItemViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await _ui.InvokeAsync(() =>
         {
             if (gen != _loadGen)
             {
